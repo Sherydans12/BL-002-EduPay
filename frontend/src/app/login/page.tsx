@@ -1,23 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
-function LoginForm() {
+export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
+
+    console.log("[LoginPage] Submitting login...", { email });
 
     try {
       const res = await fetch(`${API_URL}/auth/login`, {
@@ -26,14 +26,20 @@ function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
 
+      console.log("[LoginPage] Response status:", res.status);
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || "Credenciales inválidas");
+        const msg = Array.isArray(body.message)
+          ? body.message.join(". ")
+          : body.message || "Credenciales inválidas";
+        throw new Error(msg);
       }
 
       const data = await res.json();
+      console.log("[LoginPage] Login response received");
 
-      // Desenvuelve TransformInterceptor si viene envuelto
+      // Desenvuelve TransformInterceptor si viene envuelto en { data }
       const payload = data?.data ?? data;
       const token = payload.access_token;
 
@@ -44,10 +50,14 @@ function LoginForm() {
       // Guardar JWT en cookie (path=/, 24h)
       document.cookie = `auth_token=${token}; path=/; max-age=86400; SameSite=Lax`;
 
-      // Redirigir al redirect param o a /
-      const redirect = searchParams.get("redirect") || "/";
+      // Leer redirect param directamente del URL (evita useSearchParams + Suspense)
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get("redirect") || "/";
+
+      console.log("[LoginPage] Redirecting to:", redirect);
       router.push(redirect);
     } catch (err: unknown) {
+      console.error("[LoginPage] Error:", err);
       setError(err instanceof Error ? err.message : "Error de autenticación");
     } finally {
       setLoading(false);
@@ -92,9 +102,12 @@ function LoginForm() {
             </div>
           )}
 
-          <form onSubmit={onSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+              <label
+                htmlFor="login-email"
+                className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2"
+              >
                 Correo electrónico
               </label>
               <input
@@ -110,7 +123,10 @@ function LoginForm() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+              <label
+                htmlFor="login-password"
+                className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2"
+              >
                 Contraseña
               </label>
               <input
@@ -148,19 +164,5 @@ function LoginForm() {
         </div>
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      }
-    >
-      <LoginForm />
-    </Suspense>
   );
 }
