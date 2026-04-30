@@ -1,7 +1,7 @@
 import RolesClientView from './RolesClientView';
 
 async function getRolesAndPermissions() {
-  const roles = []; 
+  const roles: { id: string; name: string; permissions: { id: string; action: string; module: string }[] }[] = []; 
   const permissions = [
     { id: '1', action: 'view:users', module: 'Usuarios' },
     { id: '2', action: 'create:payment', module: 'Pagos' },

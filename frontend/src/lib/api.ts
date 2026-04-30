@@ -1,23 +1,54 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
+// ─── Auth Token Helper ────────────────────────────────────────
 /**
- * Wrapper de fetch que:
- * 1. Inyecta Content-Type JSON salvo para FormData.
- * 2. Parsea errores del GlobalExceptionFilter: { statusCode, message }.
- * 3. Desenvuelve el envelope del TransformInterceptor: { data } → T.
+ * Extrae el JWT desde la cookie `auth_token`.
+ * Protegido contra SSR (typeof document check).
+ */
+function getAuthToken(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(^|;\s*)auth_token=([^;]*)/);
+  return match ? match[2] : null;
+}
+
+// ─── Request Wrapper ──────────────────────────────────────────
+/**
+ * Wrapper global de fetch que:
+ * 1. Inyecta `Authorization: Bearer <token>` automáticamente si existe cookie.
+ * 2. Inyecta `Content-Type: application/json` salvo para FormData.
+ * 3. Parsea errores del GlobalExceptionFilter: { statusCode, message }.
+ * 4. Desenvuelve el envelope del TransformInterceptor: { data } → T.
  */
 async function request<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
+  // Construir headers base
+  const headers: Record<string, string> = {};
+
+  // JWT automático
+  const token = getAuthToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  // Content-Type (no para FormData, el browser lo pone con boundary)
+  if (!(options?.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  // Merge con headers explícitos del caller (tienen prioridad)
+  const callerHeaders = options?.headers
+    ? Object.fromEntries(
+        options.headers instanceof Headers
+          ? options.headers.entries()
+          : Object.entries(options.headers as Record<string, string>)
+      )
+    : {};
+
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: {
-      ...(options?.headers || {}),
-      ...(options?.body instanceof FormData
-        ? {}
-        : { "Content-Type": "application/json" }),
-    },
+    headers: { ...headers, ...callerHeaders },
   });
 
   if (!res.ok) {
@@ -32,7 +63,6 @@ async function request<T>(
 
   // Desenvolver { data, meta? } del TransformInterceptor
   if (json && typeof json === "object" && "data" in json) {
-    // Si tiene meta (paginación), devolver el objeto completo
     if ("meta" in json) return json as T;
     return json.data as T;
   }
@@ -161,6 +191,7 @@ export const studentsApi = {
     request<Student>(`/students/${id}`, { method: "DELETE" }),
 };
 
+// ─── Payments ─────────────────────────────────────────────────
 export const paymentsApi = {
   getAll: (params?: Record<string, string>) => {
     const query = params
@@ -202,15 +233,7 @@ export const reportsApi = {
     if (startDate) params.set("startDate", startDate);
     if (endDate) params.set("endDate", endDate);
     if (courseId) params.set("courseId", courseId);
-    
-    // helper to get cookie token
-    const tokenMatch = typeof document !== 'undefined' ? document.cookie.match(/(^| )auth_token=([^;]+)/) : null;
-    const token = tokenMatch ? tokenMatch[2] : null;
-
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
     const query = params.toString() ? `?${params.toString()}` : "";
-    return request<ReportSummary>(`/reports/summary${query}`, { headers });
+    return request<ReportSummary>(`/reports/summary${query}`);
   },
 };
