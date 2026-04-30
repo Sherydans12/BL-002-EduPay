@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────
+enum PaymentMethod {
+  CASH
+  DEBIT
+  CREDIT
+  CHECK
+  TRANSFER
+}
+
+// ─── Models ──────────────────────────────────────────────────
+
+model Course {
+  id        Int       @id @default(autoincrement())
+  name      String
+  students  Student[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("courses")
+}
+
+model Guardian {
+  id        Int       @id @default(autoincrement())
+  rut       String    @unique
+  name      String
+  email     String?
+  phone     String?
+  students  Student[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("guardians")
+}
+
+model Student {
+  id         Int       @id @default(autoincrement())
+  rut        String    @unique
+  name       String
+  courseId    Int
+  guardianId Int
+  course     Course    @relation(fields: [courseId], references: [id])
+  guardian   Guardian  @relation(fields: [guardianId], references: [id])
+  payments   Payment[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("students")
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  amount        Int
+  method        PaymentMethod
+  paymentDate   DateTime
+  studentId     Int
+  student       Student       @relation(fields: [studentId], references: [id])
+
+  // Datos del pagador alternativo (null = pagó el apoderado)
+  payerName     String?
+  payerRut      String?
+
+  // Referencia y notas
+  referenceCode String?
+  notes         String?
+
+  // Comprobante / boleta
+  boletaFileUrl String?
+  boletaNumber  String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("payments")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  isActive  Boolean  @default(true)
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique // Ej: "ADMIN", "CONTADOR"
+  description String?
+  users       User[]
+  permissions Permission[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  action    String   @unique // Ej: "create:payment", "view:users"
+  roles     Role[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("permissions")
+}
