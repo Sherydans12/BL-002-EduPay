@@ -16,7 +16,6 @@ export async function middleware(request: NextRequest) {
 
   // ─── Sin token ──────────────────────────────────────────────
   if (!token) {
-    // Si intenta acceder a ruta protegida → redirigir a login
     if (!isPublicPath) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('redirect', pathname);
@@ -29,9 +28,9 @@ export async function middleware(request: NextRequest) {
   try {
     await jwtVerify(token, JWT_SECRET);
 
-    // Token válido + está en /login → redirigir al dashboard
+    // Token válido + en /login → redirigir al dashboard
     if (isPublicPath) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL('/', request.url));
     }
 
     return NextResponse.next();
@@ -44,16 +43,10 @@ export async function middleware(request: NextRequest) {
 }
 
 // ─── Matcher ──────────────────────────────────────────────────
-// Protege TODAS las rutas de la app excepto assets estáticos y API routes.
+// Negative lookahead: excluye _next, assets estáticos, favicon, api internas.
+// Solo intercepta rutas de páginas reales.
 export const config = {
   matcher: [
-    '/login',
-    '/dashboard/:path*',
-    '/pagos/:path*',
-    '/cursos/:path*',
-    '/alumnos/:path*',
-    '/apoderados/:path*',
-    '/reportes/:path*',
-    '/',
+    '/((?!_next/static|_next/image|favicon\\.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };

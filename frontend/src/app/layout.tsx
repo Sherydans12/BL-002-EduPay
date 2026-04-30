@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/sidebar";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -19,10 +18,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex bg-[var(--color-bg)]">
-        <Sidebar />
-        <main className="flex-1 ml-64 p-8 overflow-y-auto">{children}</main>
-      </body>
+      <body className="min-h-full bg-[var(--color-bg)]">{children}</body>
     </html>
   );
 }
