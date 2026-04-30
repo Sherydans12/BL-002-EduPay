@@ -1,55 +1,123 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { studentsApi, coursesApi, guardiansApi } from "@/lib/api";
 import type { Student, Course, Guardian } from "@/lib/api";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+
+const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
+function isValidRut(rut: string): boolean {
+  const clean = rut.replace(/\./g, "").replace("-", "");
+  if (clean.length < 8 || clean.length > 9) return false;
+  const body = clean.slice(0, -1);
+  const dv = clean.slice(-1).toUpperCase();
+  let sum = 0, mul = 2;
+  for (let i = body.length - 1; i >= 0; i--) {
+    sum += parseInt(body[i], 10) * mul;
+    mul = mul === 7 ? 2 : mul + 1;
+  }
+  const expected = 11 - (sum % 11);
+  const expectedDv = expected === 11 ? "0" : expected === 10 ? "K" : expected.toString();
+  return dv === expectedDv;
+}
+
+const studentSchema = z.object({
+  rut: z.string().refine((val) => rutRegex.test(val) && isValidRut(val), "RUT inválido (formato: 12.345.678-9)"),
+  name: z.string().min(1, "El nombre es requerido").max(200, "Máximo 200 caracteres"),
+  courseId: z.number({ required_error: "Seleccione un curso" }).min(1),
+  guardianId: z.number({ required_error: "Seleccione un apoderado" }).min(1),
+});
+
+type StudentFormData = z.infer<typeof studentSchema>;
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
-  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [filterCourse, setFilterCourse] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const [rut, setRut] = useState("");
-  const [name, setName] = useState("");
-  const [courseId, setCourseId] = useState("");
-  const [guardianId, setGuardianId] = useState("");
-  const [editId, setEditId] = useState<number | null>(null);
+  // Combobox states
+  const [courseOpen, setCourseOpen] = useState(false);
+  const [guardianOpen, setGuardianOpen] = useState(false);
 
-  async function load() {
+  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<StudentFormData>({
+    resolver: zodResolver(studentSchema),
+  });
+
+  const load = async () => {
     try {
       const [s, c, g] = await Promise.all([studentsApi.getAll(), coursesApi.getAll(), guardiansApi.getAll()]);
       setStudents(s); setCourses(c); setGuardians(g);
-    } catch {} finally { setLoading(false); }
-  }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al cargar datos");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => { load(); }, []);
 
-  function resetForm() { setRut(""); setName(""); setCourseId(""); setGuardianId(""); setEditId(null); setShowForm(false); }
+  const openCreateDialog = () => {
+    setEditingStudent(null);
+    reset({ rut: "", name: "", courseId: undefined, guardianId: undefined });
+    setIsDialogOpen(true);
+  };
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setError("");
-    const data = { rut, name, courseId: Number(courseId), guardianId: Number(guardianId) };
+  const openEditDialog = (s: Student) => {
+    setEditingStudent(s);
+    reset({ rut: s.rut, name: s.name, courseId: s.courseId, guardianId: s.guardianId });
+    setIsDialogOpen(true);
+  };
+
+  const onSubmit = async (data: StudentFormData) => {
+    setIsSubmitting(true);
     try {
-      if (editId) await studentsApi.update(editId, data);
-      else await studentsApi.create(data);
-      resetForm(); load();
-    } catch (err: unknown) { setError(err instanceof Error ? err.message : "Error"); }
-  }
+      if (editingStudent) {
+        await studentsApi.update(editingStudent.id, data);
+        toast.success("Alumno actualizado exitosamente");
+      } else {
+        await studentsApi.create(data);
+        toast.success("Alumno creado exitosamente");
+      }
+      setIsDialogOpen(false);
+      load();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-  function startEdit(s: Student) {
-    setEditId(s.id); setRut(s.rut); setName(s.name);
-    setCourseId(s.courseId.toString()); setGuardianId(s.guardianId.toString());
-    setShowForm(true);
-  }
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await studentsApi.delete(deleteId);
+      toast.success("Alumno eliminado exitosamente");
+      load();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar alumno");
+    } finally {
+      setDeleteId(null);
+    }
+  };
 
-  async function handleDelete(id: number) {
-    if (!confirm("¿Eliminar este alumno?")) return;
-    try { await studentsApi.delete(id); load(); } catch (err: unknown) { setError(err instanceof Error ? err.message : "Error"); }
-  }
-
-  const filtered = filterCourse ? students.filter(s => s.courseId === Number(filterCourse)) : students;
+  const filtered = students.filter(s => 
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    s.rut.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in">
@@ -58,60 +126,22 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold text-white">Alumnos</h1>
           <p className="text-[var(--color-text-secondary)] mt-1">Gestión de alumnos del colegio</p>
         </div>
-        <button onClick={() => { resetForm(); setShowForm(!showForm); }}
-          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm">
-          {showForm ? "Cancelar" : "+ Nuevo Alumno"}
+        <button
+          onClick={openCreateDialog}
+          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
+        >
+          + Nuevo Alumno
         </button>
       </div>
 
-      {error && <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</div>}
-
-      {showForm && (
-        <form onSubmit={handleSubmit} className="glass rounded-2xl p-6 space-y-5 animate-fade-in">
-          <h2 className="text-lg font-semibold text-white">{editId ? "Editar Alumno" : "Nuevo Alumno"}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT *</label>
-              <input type="text" value={rut} onChange={(e) => setRut(e.target.value)} required placeholder="12.345.678-9"
-                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Nombre *</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Nombre completo"
-                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Curso *</label>
-              <select value={courseId} onChange={(e) => setCourseId(e.target.value)} required
-                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all">
-                <option value="">Seleccionar</option>
-                {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Apoderado *</label>
-              <select value={guardianId} onChange={(e) => setGuardianId(e.target.value)} required
-                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] outline-none transition-all">
-                <option value="">Seleccionar</option>
-                {guardians.map(g => <option key={g.id} value={g.id}>{g.name} — {g.rut}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <button type="submit" className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]">
-              {editId ? "Actualizar" : "Guardar"}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Filter */}
       <div className="flex items-center gap-4">
-        <select value={filterCourse} onChange={(e) => setFilterCourse(e.target.value)}
-          className="px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all">
-          <option value="">Todos los cursos</option>
-          {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <input
+          type="text"
+          placeholder="Buscar alumno por nombre o RUT..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full md:w-1/2 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
+        />
         <span className="text-sm text-[var(--color-text-muted)]">{filtered.length} alumnos</span>
       </div>
 
@@ -119,7 +149,7 @@ export default function StudentsPage() {
         {loading ? (
           <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" /></div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-[var(--color-text-muted)]">No hay alumnos registrados</div>
+          <div className="text-center py-16 text-[var(--color-text-muted)]">No hay alumnos que coincidan con la búsqueda</div>
         ) : (
           <table className="w-full">
             <thead>
@@ -136,8 +166,8 @@ export default function StudentsPage() {
                   <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300">{s.course.name}</span></td>
                   <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{s.guardian.name}</td>
                   <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => startEdit(s)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
-                    <button onClick={() => handleDelete(s.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
+                    <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
+                    <button onClick={() => setDeleteId(s.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
                   </td>
                 </tr>
               ))}
@@ -145,6 +175,139 @@ export default function StudentsPage() {
           </table>
         )}
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">{editingStudent ? "Editar Alumno" : "Nuevo Alumno"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 overflow-visible">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="col-span-full md:col-span-1">
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT *</label>
+                <input {...register("rut")} placeholder="12.345.678-9" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
+                {errors.rut && <p className="text-red-400 text-xs mt-1">{errors.rut.message}</p>}
+              </div>
+              <div className="col-span-full md:col-span-1">
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Nombre *</label>
+                <input {...register("name")} placeholder="Nombre completo" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
+                {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
+              </div>
+              
+              <div className="col-span-full">
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Curso *</label>
+                <Controller
+                  name="courseId"
+                  control={control}
+                  render={({ field }) => (
+                    <Popover open={courseOpen} onOpenChange={setCourseOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex justify-between items-center"
+                        >
+                          {field.value ? courses.find(c => c.id === field.value)?.name : "Seleccionar curso..."}
+                          <span className="text-[var(--color-text-muted)] text-xs">▼</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[450px] p-0 bg-[var(--color-surface)] border-[var(--color-border)] text-white z-[60]">
+                        <Command className="bg-transparent">
+                          <CommandInput placeholder="Buscar curso..." className="border-none focus:ring-0" />
+                          <CommandList>
+                            <CommandEmpty>No se encontró el curso.</CommandEmpty>
+                            <CommandGroup>
+                              {courses.map(course => (
+                                <CommandItem
+                                  key={course.id}
+                                  onSelect={() => {
+                                    field.onChange(course.id);
+                                    setCourseOpen(false);
+                                  }}
+                                  className="cursor-pointer hover:bg-[var(--color-surface-hover)] data-[selected=true]:bg-[var(--color-surface-hover)]"
+                                >
+                                  {course.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                />
+                {errors.courseId && <p className="text-red-400 text-xs mt-1">{errors.courseId.message}</p>}
+              </div>
+
+              <div className="col-span-full">
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Apoderado *</label>
+                <Controller
+                  name="guardianId"
+                  control={control}
+                  render={({ field }) => (
+                    <Popover open={guardianOpen} onOpenChange={setGuardianOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex justify-between items-center"
+                        >
+                          {field.value ? guardians.find(g => g.id === field.value)?.name : "Seleccionar apoderado..."}
+                          <span className="text-[var(--color-text-muted)] text-xs">▼</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[450px] p-0 bg-[var(--color-surface)] border-[var(--color-border)] text-white z-[60]">
+                        <Command className="bg-transparent">
+                          <CommandInput placeholder="Buscar apoderado por nombre o RUT..." className="border-none focus:ring-0" />
+                          <CommandList>
+                            <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
+                            <CommandGroup>
+                              {guardians.map(g => (
+                                <CommandItem
+                                  key={g.id}
+                                  onSelect={() => {
+                                    field.onChange(g.id);
+                                    setGuardianOpen(false);
+                                  }}
+                                  className="cursor-pointer hover:bg-[var(--color-surface-hover)] data-[selected=true]:bg-[var(--color-surface-hover)]"
+                                >
+                                  <div className="flex flex-col">
+                                    <span>{g.name}</span>
+                                    <span className="text-xs text-[var(--color-text-muted)]">{g.rut}</span>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                />
+                {errors.guardianId && <p className="text-red-400 text-xs mt-1">{errors.guardianId.message}</p>}
+              </div>
+            </div>
+            
+            <DialogFooter className="mt-6 pt-4 border-t border-[var(--color-border)]">
+              <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors">Cancelar</button>
+              <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-50">
+                {isSubmitting ? "Guardando..." : "Guardar"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[var(--color-text-secondary)]">Esta acción no se puede deshacer. Se eliminará permanentemente este alumno y sus pagos asociados.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white border-0">Sí, eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
