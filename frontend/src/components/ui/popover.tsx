@@ -9,8 +9,30 @@ function Popover({ ...props }: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />
 }
 
-function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
+type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
+  asChild?: boolean
+}
+
+function PopoverTrigger({
+  asChild,
+  children,
+  ...props
+}: PopoverTriggerProps) {
+  if (asChild && React.isValidElement(children)) {
+    return (
+      <PopoverPrimitive.Trigger
+        data-slot="popover-trigger"
+        render={children}
+        {...props}
+      />
+    )
+  }
+
+  return (
+    <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props}>
+      {children}
+    </PopoverPrimitive.Trigger>
+  )
 }
 
 function PopoverContent({
