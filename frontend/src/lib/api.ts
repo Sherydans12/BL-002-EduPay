@@ -237,3 +237,47 @@ export const reportsApi = {
     return request<ReportSummary>(`/reports/summary${query}`);
   },
 };
+
+// ─── Roles & Permissions ──────────────────────────────────────
+export interface Permission {
+  id: number;
+  action: string;
+  module: string;
+}
+
+export interface Role {
+  id: number;
+  name: string;
+  permissions?: Permission[];
+}
+
+export const rolesApi = {
+  getAll: () => request<Role[]>("/roles"),
+  create: (data: { name: string; permissionIds: number[] }) =>
+    request<Role>("/roles", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getPermissions: () => request<Permission[]>("/permissions"),
+};
+
+// ─── Users ────────────────────────────────────────────────────
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  roleId: number;
+  role?: Role;
+  isActive: boolean;
+}
+
+export const usersApi = {
+  getAll: () => request<User[]>("/users"),
+  create: (data: { name: string; email: string; roleId: number }) =>
+    request<User>("/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  toggleActive: (id: number) =>
+    request<User>(`/users/${id}/toggle`, { method: "PATCH" }),
+};
