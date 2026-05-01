@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useMemo, useSyncExternalStore } from "react";
+
+type SessionUser = {
+  email?: string;
+  name?: string;
+  role?: string;
+};
 
 const nav = [
   {
@@ -89,6 +96,15 @@ const nav = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const token = useSyncExternalStore(subscribeToCookieStore, getAuthToken, () => undefined);
+  const sessionUser = useMemo(() => decodeSessionUser(token), [token]);
+
+  const handleLogout = () => {
+    document.cookie = "auth_token=; path=/; max-age=0; SameSite=Lax";
+    router.push("/login");
+    router.refresh();
+  };
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 glass flex flex-col z-50">
@@ -140,6 +156,24 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-[var(--color-border)]">
+        <div className="mb-3 px-4 py-3 rounded-xl bg-[var(--color-bg)]">
+          <p className="text-xs text-[var(--color-text-muted)]">Sesión activa</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white">
+            {sessionUser?.name || sessionUser?.email || "Usuario"}
+          </p>
+          {sessionUser?.role && (
+            <p className="mt-1 truncate text-xs text-[var(--color-text-muted)]">
+              {sessionUser.role}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mb-3 w-full rounded-xl border border-red-500/30 px-4 py-3 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/10 hover:text-white"
+        >
+          Cerrar Sesión
+        </button>
         <div className="px-4 py-3 rounded-xl bg-[var(--color-bg)] text-center">
           <p className="text-xs text-[var(--color-text-muted)]">BaseLogic</p>
           <p className="text-xs font-mono text-[var(--color-text-muted)]">BL-002 v1.0</p>
@@ -147,4 +181,34 @@ export function Sidebar() {
       </div>
     </aside>
   );
+}
+
+function base64UrlDecode(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+  const binary = window.atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+
+  return new TextDecoder().decode(bytes);
+}
+
+function decodeSessionUser(token?: string): SessionUser | null {
+  if (!token) return null;
+
+  try {
+    return JSON.parse(base64UrlDecode(token.split(".")[1])) as SessionUser;
+  } catch {
+    return null;
+  }
+}
+
+function getAuthToken() {
+  return document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("auth_token="))
+    ?.split("=")[1];
+}
+
+function subscribeToCookieStore() {
+  return () => undefined;
 }

@@ -3,13 +3,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { Prisma } from '@prisma/client';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   async create(dto: CreatePaymentDto, boletaFileUrl?: string) {
-    return this.prisma.payment.create({
+    const payment = await this.prisma.payment.create({
       data: {
         amount: dto.amount,
         method: dto.method,
@@ -26,6 +30,19 @@ export class PaymentsService {
         student: { include: { course: true, guardian: true } },
       },
     });
+
+    const guardianEmail = payment.student.guardian.email?.trim();
+    if (guardianEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guardianEmail)) {
+      await this.mailService.sendPaymentConfirmation({
+        to: guardianEmail,
+        studentName: payment.student.name,
+        amount: payment.amount,
+        paymentDate: payment.paymentDate,
+        boletaFileUrl: payment.boletaFileUrl,
+      });
+    }
+
+    return payment;
   }
 
   async findAll(filters: FilterPaymentsDto) {
