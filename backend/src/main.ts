@@ -31,48 +31,70 @@ async function bootstrap() {
   // Global transform interceptor
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  // CORS
+  // ─── CORS ───────────────────────────────────────────────────
+  const isProduction = config.get<string>('NODE_ENV') === 'production';
+  const frontendUrl = config.get<string>('FRONTEND_URL');
+
+  if (isProduction && !frontendUrl) {
+    console.error(
+      '[bootstrap] FATAL: FRONTEND_URL no está definido en producción. ' +
+        'CORS denegará todos los orígenes cross-origin.',
+    );
+  }
+
   app.enableCors({
-    origin: true,
+    origin: isProduction
+      ? frontendUrl ?? false
+      : [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          ...(frontendUrl ? [frontendUrl] : []),
+        ],
     credentials: true,
   });
 
-  // Servir archivos estáticos de /uploads
-  const uploadDir = config.get<string>('UPLOAD_DIR') || './uploads';
-  app.useStaticAssets(path.resolve(uploadDir), { prefix: '/uploads' });
+  // ─── Archivos estáticos (uploads) ────────────────────────────
+  // Ruta absoluta robusta para cPanel/Passenger: cwd puede diferir del dir del proyecto
+  const uploadDir = path.resolve(
+    process.cwd(),
+    config.get<string>('UPLOAD_DIR') || 'uploads',
+  );
+  app.useStaticAssets(uploadDir, { prefix: '/uploads' });
 
-  // ─── Swagger ────────────────────────────────────────────────
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('EduPay API')
-    .setDescription(
-      'API del sistema de registro manual de pagos para colegios. ' +
-      'Proyecto BaseLogic BL-002.',
-    )
-    .setVersion('1.0.0')
-    .addBearerAuth(
-      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-      'access-token',
-    )
-    .addTag('auth', 'Autenticación y login')
-    .addTag('users', 'Gestión de usuarios')
-    .addTag('roles', 'Gestión de roles y permisos')
-    .addTag('courses', 'Gestión de cursos')
-    .addTag('guardians', 'Gestión de apoderados / tutores')
-    .addTag('students', 'Gestión de alumnos')
-    .addTag('payments', 'Registro y consulta de pagos')
-    .addTag('reports', 'Reportes y resúmenes')
-    .build();
+  // ─── Swagger (solo fuera de producción) ──────────────────────
+  if (!isProduction) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('EduPay API')
+      .setDescription(
+        'API del sistema de registro manual de pagos para colegios. ' +
+          'Proyecto BaseLogic BL-002.',
+      )
+      .setVersion('1.0.0')
+      .addBearerAuth(
+        { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        'access-token',
+      )
+      .addTag('auth', 'Autenticación y login')
+      .addTag('users', 'Gestión de usuarios')
+      .addTag('roles', 'Gestión de roles y permisos')
+      .addTag('courses', 'Gestión de cursos')
+      .addTag('guardians', 'Gestión de apoderados / tutores')
+      .addTag('students', 'Gestión de alumnos')
+      .addTag('payments', 'Registro y consulta de pagos')
+      .addTag('reports', 'Reportes y resúmenes')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      docExpansion: 'none',
-      filter: true,
-      tagsSorter: 'alpha',
-    },
-    customSiteTitle: 'EduPay API Docs',
-  });
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        docExpansion: 'none',
+        filter: true,
+        tagsSorter: 'alpha',
+      },
+      customSiteTitle: 'EduPay API Docs',
+    });
+  }
 
   // Evita 404 en logs cuando el navegador pide el favicon contra el puerto de la API
   const expressApp = app.getHttpAdapter().getInstance();
@@ -83,7 +105,9 @@ async function bootstrap() {
   const port = config.get<number>('PORT') || 3001;
   await app.listen(port);
   console.log(`🚀 EduPay API running on http://localhost:${port}/api`);
-  console.log(`📚 Swagger docs at http://localhost:${port}/api/docs`);
+  if (!isProduction) {
+    console.log(`📚 Swagger docs at http://localhost:${port}/api/docs`);
+  }
 }
 
 bootstrap();

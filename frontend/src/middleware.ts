@@ -2,17 +2,33 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'super-secret-key',
-);
-
 // Rutas que no requieren autenticación
 const PUBLIC_PATHS = ['/login'];
+
+function resolveJwtSecret(): Uint8Array | null {
+  const raw = process.env.JWT_SECRET;
+  if (!raw) return null;
+  return new TextEncoder().encode(raw);
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('auth_token')?.value;
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+
+  // ─── JWT_SECRET obligatorio — sin fallback ──────────────────
+  const jwtSecret = resolveJwtSecret();
+  if (!jwtSecret) {
+    console.error(
+      '[middleware] FATAL: JWT_SECRET no está definido. ' +
+        'Acceso denegado a ruta protegida:',
+      pathname,
+    );
+    if (!isPublicPath) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    return NextResponse.next();
+  }
 
   // ─── Sin token ──────────────────────────────────────────────
   if (!token) {
@@ -26,7 +42,7 @@ export async function middleware(request: NextRequest) {
 
   // ─── Con token → validar ────────────────────────────────────
   try {
-    await jwtVerify(token, JWT_SECRET);
+    await jwtVerify(token, jwtSecret);
 
     // Token válido + en /login → redirigir al dashboard
     if (isPublicPath) {
