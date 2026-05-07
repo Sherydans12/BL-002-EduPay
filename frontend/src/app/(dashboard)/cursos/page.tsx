@@ -9,6 +9,7 @@ import * as z from "zod";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { TablePagination } from "@/components/ui/table-pagination";
 
 const courseSchema = z.object({
   name: z.string().min(1, "El nombre es requerido").max(100, "Máximo 100 caracteres"),
@@ -16,27 +17,30 @@ const courseSchema = z.object({
 
 type CourseFormData = z.infer<typeof courseSchema>;
 
+const LIMIT = 20;
+
 export default function CoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Dialog state
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Alert Dialog state
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CourseFormData>({
     resolver: zodResolver(courseSchema),
   });
 
-  const load = async () => {
+  const load = async (p: number) => {
+    setLoading(true);
     try {
-      const res = await coursesApi.getAll();
+      const res = await coursesApi.getAll(p, LIMIT);
       setCourses(res.data);
+      setMeta(res.meta);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar cursos");
     } finally {
@@ -44,7 +48,7 @@ export default function CoursesPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(page); }, [page]);
 
   const openCreateDialog = () => {
     setEditingCourse(null);
@@ -64,12 +68,14 @@ export default function CoursesPage() {
       if (editingCourse) {
         await coursesApi.update(editingCourse.id, data);
         toast.success("Curso actualizado exitosamente");
+        load(page);
       } else {
         await coursesApi.create(data);
         toast.success("Curso creado exitosamente");
+        setPage(1);
+        if (page === 1) load(1);
       }
       setIsDialogOpen(false);
-      load();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
@@ -82,7 +88,7 @@ export default function CoursesPage() {
     try {
       await coursesApi.delete(deleteId);
       toast.success("Curso eliminado exitosamente");
-      load();
+      load(page);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al eliminar. Puede tener alumnos asociados.");
     } finally {
@@ -115,7 +121,7 @@ export default function CoursesPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-1/2 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
         />
-        <span className="text-sm text-[var(--color-text-muted)]">{filtered.length} cursos</span>
+        <span className="text-sm text-[var(--color-text-muted)]">{meta.total} cursos en total</span>
       </div>
 
       <div className="glass rounded-2xl overflow-hidden">
@@ -128,42 +134,52 @@ export default function CoursesPage() {
             No hay cursos que coincidan con la búsqueda
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                <th className="px-6 py-4">ID</th>
-                <th className="px-6 py-4">Nombre</th>
-                <th className="px-6 py-4">Alumnos</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {filtered.map((c) => (
-                <tr key={c.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                  <td className="px-6 py-4 text-sm text-[var(--color-text-muted)]">#{c.id}</td>
-                  <td className="px-6 py-4">
-                    <span className="font-medium text-white">{c.name}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400">
-                      {c._count?.students ?? 0}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button
-                      onClick={() => openEditDialog(c)}
-                      className="text-sm text-[var(--color-primary)] hover:underline"
-                    >
-                      Editar
-                    </button>
-                    <button onClick={() => setDeleteId(c.id)} className="text-sm text-red-400 hover:underline">
-                      Eliminar
-                    </button>
-                  </td>
+          <>
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
+                  <th className="px-6 py-4">ID</th>
+                  <th className="px-6 py-4">Nombre</th>
+                  <th className="px-6 py-4">Alumnos</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {filtered.map((c) => (
+                  <tr key={c.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
+                    <td className="px-6 py-4 text-sm text-[var(--color-text-muted)]">#{c.id}</td>
+                    <td className="px-6 py-4">
+                      <span className="font-medium text-white">{c.name}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400">
+                        {c._count?.students ?? 0}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button
+                        onClick={() => openEditDialog(c)}
+                        className="text-sm text-[var(--color-primary)] hover:underline"
+                      >
+                        Editar
+                      </button>
+                      <button onClick={() => setDeleteId(c.id)} className="text-sm text-red-400 hover:underline">
+                        Eliminar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <TablePagination
+              page={meta.page}
+              totalPages={meta.lastPage}
+              total={meta.total}
+              limit={meta.limit}
+              onPrev={() => setPage((p) => p - 1)}
+              onNext={() => setPage((p) => p + 1)}
+            />
+          </>
         )}
       </div>
 

@@ -63,8 +63,8 @@ export default function NewPaymentPage() {
   const selectedStudent = students.find((s) => s.id === studentId);
 
   useEffect(() => {
-    coursesApi.getAll().then(setCourses).catch(() => {});
-    studentsApi.getAll().then(setStudents).catch(() => {});
+    coursesApi.getAll().then((res) => setCourses(res.data)).catch(() => {});
+    studentsApi.getAll().then((res) => setStudents(res.data)).catch(() => {});
   }, []);
 
   useEffect(() => {

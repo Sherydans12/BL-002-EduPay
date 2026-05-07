@@ -9,6 +9,7 @@ import * as z from "zod";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { TablePagination } from "@/components/ui/table-pagination";
 
 const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
 function isValidRut(rut: string): boolean {
@@ -35,11 +36,15 @@ const guardianSchema = z.object({
 
 type GuardianFormData = z.infer<typeof guardianSchema>;
 
+const LIMIT = 20;
+
 export default function GuardiansPage() {
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<Guardian | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,10 +55,12 @@ export default function GuardiansPage() {
     defaultValues: { rut: "", name: "", email: "", phone: "" }
   });
 
-  const load = async () => {
+  const load = async (p: number) => {
+    setLoading(true);
     try {
-      const res = await guardiansApi.getAll();
+      const res = await guardiansApi.getAll(p, LIMIT);
       setGuardians(res.data);
+      setMeta(res.meta);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar apoderados");
     } finally {
@@ -61,7 +68,7 @@ export default function GuardiansPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(page); }, [page]);
 
   const openCreateDialog = () => {
     setEditingGuardian(null);
@@ -82,12 +89,14 @@ export default function GuardiansPage() {
       if (editingGuardian) {
         await guardiansApi.update(editingGuardian.id, payload);
         toast.success("Apoderado actualizado exitosamente");
+        load(page);
       } else {
         await guardiansApi.create(payload);
         toast.success("Apoderado creado exitosamente");
+        setPage(1);
+        if (page === 1) load(1);
       }
       setIsDialogOpen(false);
-      load();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
@@ -100,7 +109,7 @@ export default function GuardiansPage() {
     try {
       await guardiansApi.delete(deleteId);
       toast.success("Apoderado eliminado exitosamente");
-      load();
+      load(page);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al eliminar. Puede tener alumnos asociados.");
     } finally {
@@ -108,8 +117,8 @@ export default function GuardiansPage() {
     }
   };
 
-  const filtered = guardians.filter(g => 
-    g.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filtered = guardians.filter(g =>
+    g.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     g.rut.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -136,7 +145,7 @@ export default function GuardiansPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-1/2 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
         />
-        <span className="text-sm text-[var(--color-text-muted)]">{filtered.length} resultados</span>
+        <span className="text-sm text-[var(--color-text-muted)]">{meta.total} apoderados en total</span>
       </div>
 
       <div className="glass rounded-2xl overflow-hidden">
@@ -147,29 +156,39 @@ export default function GuardiansPage() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-[var(--color-text-muted)]">No hay apoderados que coincidan con la búsqueda</div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                <th className="px-6 py-4">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Email</th>
-                <th className="px-6 py-4">Teléfono</th><th className="px-6 py-4">Alumnos</th><th className="px-6 py-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {filtered.map((g) => (
-                <tr key={g.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                  <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{g.rut}</td>
-                  <td className="px-6 py-4 font-medium text-white">{g.name}</td>
-                  <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.email || "—"}</td>
-                  <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.phone || "—"}</td>
-                  <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400">{g._count?.students ?? 0}</span></td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => openEditDialog(g)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
-                    <button onClick={() => setDeleteId(g.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
-                  </td>
+          <>
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
+                  <th className="px-6 py-4">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Email</th>
+                  <th className="px-6 py-4">Teléfono</th><th className="px-6 py-4">Alumnos</th><th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {filtered.map((g) => (
+                  <tr key={g.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
+                    <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{g.rut}</td>
+                    <td className="px-6 py-4 font-medium text-white">{g.name}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.email || "—"}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.phone || "—"}</td>
+                    <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400">{g._count?.students ?? 0}</span></td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button onClick={() => openEditDialog(g)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
+                      <button onClick={() => setDeleteId(g.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <TablePagination
+              page={meta.page}
+              totalPages={meta.lastPage}
+              total={meta.total}
+              limit={meta.limit}
+              onPrev={() => setPage((p) => p - 1)}
+              onNext={() => setPage((p) => p + 1)}
+            />
+          </>
         )}
       </div>
 

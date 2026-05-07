@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { TablePagination } from "@/components/ui/table-pagination";
 
 const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
 function isValidRut(rut: string): boolean {
@@ -37,13 +38,17 @@ const studentSchema = z.object({
 
 type StudentFormData = z.infer<typeof studentSchema>;
 
+const LIMIT = 20;
+
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  
+  const [page, setPage] = useState(1);
+  const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,18 +62,27 @@ export default function StudentsPage() {
     resolver: zodResolver(studentSchema),
   });
 
-  const load = async () => {
+  // Load dropdown data once (for the create/edit form)
+  useEffect(() => {
+    Promise.all([coursesApi.getAll(1, 200), guardiansApi.getAll(1, 200)])
+      .then(([cRes, gRes]) => { setCourses(cRes.data); setGuardians(gRes.data); })
+      .catch(() => {});
+  }, []);
+
+  const loadStudents = async (p: number) => {
+    setLoading(true);
     try {
-      const [sRes, cRes, gRes] = await Promise.all([studentsApi.getAll(), coursesApi.getAll(), guardiansApi.getAll()]);
-      setStudents(sRes.data); setCourses(cRes.data); setGuardians(gRes.data);
+      const res = await studentsApi.getAll(undefined, p, LIMIT);
+      setStudents(res.data);
+      setMeta(res.meta);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al cargar datos");
+      toast.error(err instanceof Error ? err.message : "Error al cargar alumnos");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadStudents(page); }, [page]);
 
   const openCreateDialog = () => {
     setEditingStudent(null);
@@ -88,12 +102,14 @@ export default function StudentsPage() {
       if (editingStudent) {
         await studentsApi.update(editingStudent.id, data);
         toast.success("Alumno actualizado exitosamente");
+        loadStudents(page);
       } else {
         await studentsApi.create(data);
         toast.success("Alumno creado exitosamente");
+        setPage(1);
+        if (page === 1) loadStudents(1);
       }
       setIsDialogOpen(false);
-      load();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
@@ -106,7 +122,7 @@ export default function StudentsPage() {
     try {
       await studentsApi.delete(deleteId);
       toast.success("Alumno eliminado exitosamente");
-      load();
+      loadStudents(page);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al eliminar alumno");
     } finally {
@@ -114,8 +130,8 @@ export default function StudentsPage() {
     }
   };
 
-  const filtered = students.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filtered = students.filter(s =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.rut.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -142,7 +158,7 @@ export default function StudentsPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-1/2 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
         />
-        <span className="text-sm text-[var(--color-text-muted)]">{filtered.length} alumnos</span>
+        <span className="text-sm text-[var(--color-text-muted)]">{meta.total} alumnos en total</span>
       </div>
 
       <div className="glass rounded-2xl overflow-hidden">
@@ -151,28 +167,38 @@ export default function StudentsPage() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-[var(--color-text-muted)]">No hay alumnos que coincidan con la búsqueda</div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                <th className="px-6 py-4">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Curso</th>
-                <th className="px-6 py-4">Apoderado</th><th className="px-6 py-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {filtered.map((s) => (
-                <tr key={s.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                  <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{s.rut}</td>
-                  <td className="px-6 py-4 font-medium text-white">{s.name}</td>
-                  <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300">{s.course.name}</span></td>
-                  <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{s.guardian.name}</td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
-                    <button onClick={() => setDeleteId(s.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
-                  </td>
+          <>
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
+                  <th className="px-6 py-4">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Curso</th>
+                  <th className="px-6 py-4">Apoderado</th><th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {filtered.map((s) => (
+                  <tr key={s.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
+                    <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{s.rut}</td>
+                    <td className="px-6 py-4 font-medium text-white">{s.name}</td>
+                    <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300">{s.course.name}</span></td>
+                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{s.guardian.name}</td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
+                      <button onClick={() => setDeleteId(s.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <TablePagination
+              page={meta.page}
+              totalPages={meta.lastPage}
+              total={meta.total}
+              limit={meta.limit}
+              onPrev={() => setPage((p) => p - 1)}
+              onNext={() => setPage((p) => p + 1)}
+            />
+          </>
         )}
       </div>
 
@@ -193,7 +219,7 @@ export default function StudentsPage() {
                 <input {...register("name")} placeholder="Nombre completo" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
                 {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
               </div>
-              
+
               <div className="col-span-full">
                 <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Curso *</label>
                 <Controller
@@ -285,7 +311,7 @@ export default function StudentsPage() {
                 {errors.guardianId && <p className="text-red-400 text-xs mt-1">{errors.guardianId.message}</p>}
               </div>
             </div>
-            
+
             <DialogFooter className="mt-6 pt-4 border-t border-[var(--color-border)]">
               <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors">Cancelar</button>
               <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-50">
