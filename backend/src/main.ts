@@ -54,7 +54,6 @@ async function bootstrap() {
   });
 
   // ─── Archivos estáticos (uploads) ────────────────────────────
-  // Ruta absoluta robusta para cPanel/Passenger: cwd puede diferir del dir del proyecto
   const uploadDir = path.resolve(
     process.cwd(),
     config.get<string>('UPLOAD_DIR') || 'uploads',

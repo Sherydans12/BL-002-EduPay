@@ -14,33 +14,50 @@ type PaymentConfirmationPayload = {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private transporter: nodemailer.Transporter;
+  private transporter: nodemailer.Transporter | null = null;
+  private readonly zeroCostMode: boolean;
 
   constructor(private readonly config: ConfigService) {
-    const port = Number(this.config.get<string>('SMTP_PORT') ?? 25);
+    this.zeroCostMode =
+      this.config.get<string>('ENABLE_EMAILS', 'false') !== 'true';
 
-    this.transporter = nodemailer.createTransport({
-      host: this.config.get<string>('SMTP_HOST', 'localhost'),
-      port,
-      secure: this.config.get<string>('SMTP_SECURE') === 'true' || port === 465,
-      auth: {
-        user: this.config.get<string>('SMTP_USER', ''),
-        pass: this.config.get<string>('SMTP_PASS', ''),
-      },
-      tls: {
-        rejectUnauthorized: false, // cPanel self-signed certs
-      },
-    });
+    if (!this.zeroCostMode) {
+      const port = Number(this.config.get<string>('SMTP_PORT') ?? 25);
+
+      this.transporter = nodemailer.createTransport({
+        host: this.config.get<string>('SMTP_HOST', 'localhost'),
+        port,
+        secure:
+          this.config.get<string>('SMTP_SECURE') === 'true' || port === 465,
+        auth: {
+          user: this.config.get<string>('SMTP_USER', ''),
+          pass: this.config.get<string>('SMTP_PASS', ''),
+        },
+        tls: {
+          rejectUnauthorized: false,
+        },
+      });
+    } else {
+      this.logger.warn(
+        '[MailService] Modo Zero-Cost activo. Los correos NO se enviarán (ENABLE_EMAILS != true).',
+      );
+    }
   }
 
   async sendMail(options: nodemailer.SendMailOptions): Promise<void> {
+    if (this.zeroCostMode) {
+      this.logger.log(
+        `[MailService] Modo Zero-Cost activo. Simulación de envío a: ${options.to}`,
+      );
+      return;
+    }
+
     try {
       const from = this.config.get<string>('SMTP_FROM', 'noreply@colegio.cl');
-      await this.transporter.sendMail({ from, ...options });
+      await this.transporter!.sendMail({ from, ...options });
       this.logger.log(`Email sent to ${options.to}: ${options.subject}`);
     } catch (error) {
       this.logger.error(`Failed to send email to ${options.to}`, error);
-      // No lanza excepción para no bloquear el flujo principal
     }
   }
 

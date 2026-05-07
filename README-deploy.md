@@ -1,119 +1,108 @@
-# EduPay – Guía de Despliegue (cPanel)
+# EduPay – Guía de Despliegue (Coolify + Docker)
 
 ## Requisitos
-- cPanel con Node.js App (Passenger)
-- PostgreSQL (puede ser local en el server o remoto)
-- Node.js >= 18
+- VPS con [Coolify](https://coolify.io/) instalado
+- Acceso al repositorio Git del proyecto
+- Node.js >= 20 (solo para desarrollo local; en producción lo provee Docker)
 
 ---
 
-## Backend (NestJS)
+## Arquitectura en Producción
 
-### 1. Build
-```bash
-cd backend
-npm install
-npx prisma generate
-npm run build
+```
+Coolify
+├── Recurso: PostgreSQL          ← base de datos gestionada
+├── Recurso: backend (Docker)    ← NestJS, subdirectorio /backend
+└── Recurso: frontend (Docker)   ← Next.js standalone, subdirectorio /frontend
 ```
 
-### 2. Migrar Base de Datos
+---
+
+## Paso 1 – Base de Datos PostgreSQL
+
+1. En el panel de Coolify, ve a **Resources → New Resource → PostgreSQL**.
+2. Asigna nombre (ej. `edupay-db`) y deja que Coolify genere la `DATABASE_URL`.
+3. Copia la `DATABASE_URL` para usarla en las variables de entorno del backend.
+
+---
+
+## Paso 2 – Backend (NestJS)
+
+### 2.1 Crear recurso Docker
+1. **New Resource → Docker / Dockerfile**.
+2. Apunta al repositorio y configura **Base Directory**: `backend`.
+3. Coolify detectará el `Dockerfile` automáticamente.
+
+### 2.2 Variables de entorno del backend
+```
+DATABASE_URL=postgresql://USER:PASS@HOST:5432/edupay?schema=public
+PORT=3001
+NODE_ENV=production
+JWT_SECRET=<cadena aleatoria ≥32 chars>
+FRONTEND_URL=https://tu-dominio.cl
+
+# Email — activar solo cuando SMTP esté configurado
+ENABLE_EMAILS=false
+SMTP_HOST=smtp.ejemplo.cl
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=noreply@colegio.cl
+
+UPLOAD_DIR=uploads
+```
+
+### 2.3 Volumen persistente
+En la pestaña **Storages** del recurso backend, añade:
+
+| Host path / Volume name | Container path          |
+|-------------------------|-------------------------|
+| `uploads`               | `/usr/src/app/uploads`  |
+
+### 2.4 Comando post-deploy (migraciones)
+En la pestaña **Advanced → Post-deployment Command**:
 ```bash
 npx prisma migrate deploy
 ```
 
-### 3. Configurar en cPanel
-- **Application Root**: `backend`
-- **Application Startup File**: `dist/main.js`
-- **Environment Variables**:
-  - `DATABASE_URL`: tu connection string de PostgreSQL
-  - `PORT`: el puerto asignado por cPanel (Passenger lo ignora, pero es buena práctica)
-  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: configuración del SMTP nativo
-  - `UPLOAD_DIR`: `./uploads`
-
-### 4. Carpeta de uploads
-Asegúrate de que la carpeta `uploads/` exista y tenga permisos de escritura.
-
 ---
 
-## Frontend (Next.js)
+## Paso 3 – Frontend (Next.js)
 
-### 1. Build
-```bash
-cd frontend
-npm install
-npm run build
+### 3.1 Crear recurso Docker
+1. **New Resource → Docker / Dockerfile**.
+2. Apunta al repositorio y configura **Base Directory**: `frontend`.
+3. Coolify detectará el `Dockerfile` automáticamente.
+
+### 3.2 Variables de entorno del frontend
+```
+NEXT_PUBLIC_API_URL=https://api.tu-dominio.cl/api
+NODE_ENV=production
 ```
 
-### 2. Configurar en cPanel
-- **Application Root**: `frontend`
-- **Application Startup File**: `node_modules/.bin/next` (o crear un `server.js` wrapper)
-- **Environment Variables**:
-  - `NEXT_PUBLIC_API_URL`: URL del backend (ej. `https://api.colegio.cl/api`)
-
-### Alternativa: Static Export
-Si cPanel no soporta un demonio SSR estable, se puede configurar Next.js para generar un export estático:
-1. En `next.config.ts`, agregar `output: 'export'`
-2. Ejecutar `npm run build`
-3. Servir la carpeta `out/` como sitio estático
-
----
-
-## Estructura de Archivos en Producción
-```
-/home/user/
-├── backend/
-│   ├── dist/main.js          ← Startup file
-│   ├── uploads/              ← PDFs de boletas
-│   ├── node_modules/
-│   └── .env
-├── frontend/
-│   ├── .next/                ← Build de Next.js
-│   ├── node_modules/
-│   └── .env.local
-```
+### 3.3 Puerto
+El contenedor expone el puerto `3000`. Configura el dominio/proxy de Coolify apuntando a ese puerto.
 
 ---
 
 ## Documentación de API (Swagger)
 
-### Acceso a Swagger UI
-Con el backend corriendo, la documentación interactiva está disponible en:
+Swagger solo se activa cuando `NODE_ENV != production`. Para acceder en desarrollo:
 ```
 http://localhost:3001/api/docs
 ```
-En producción será `https://tu-dominio.cl/api/docs`.
 
-### Exportar JSON de Swagger (OpenAPI 3.0)
-El documento OpenAPI en formato JSON se expone automáticamente en:
+Exportar OpenAPI JSON:
 ```
 http://localhost:3001/api/docs-json
 ```
 
 ### Importar en Postman
-1. Abre Postman → **Import** → **Link**
-2. Pega la URL: `http://localhost:3001/api/docs-json`
-3. Postman generará automáticamente una colección con todos los endpoints, ejemplos y schemas.
+1. **Import → Link** → pega `http://localhost:3001/api/docs-json`
 
 ### Importar en Bruno
-1. Abre Bruno → **Import Collection** → **OpenAPI V3 Spec**
-2. Apunta al archivo descargado o la URL directa:
-   ```bash
-   curl http://localhost:3001/api/docs-json -o edupay-openapi.json
-   ```
-3. Bruno creará los requests organizados por tags (courses, guardians, students, payments).
-
-### Exportar YAML (alternativa)
+```bash
+curl http://localhost:3001/api/docs-json -o edupay-openapi.json
 ```
-http://localhost:3001/api/docs-yaml
-```
-
-### Desactivar Swagger en Producción
-Si se desea desactivar Swagger en producción por seguridad, se puede condicionar en `main.ts`:
-```typescript
-if (process.env.NODE_ENV !== 'production') {
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
-}
-```
-
+Luego: **Import Collection → OpenAPI V3 Spec**.
