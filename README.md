@@ -21,6 +21,15 @@ EduPay permite al personal administrativo de un colegio:
 
 ---
 
+## Documentación para desarrollo y agentes
+
+| Recurso | Contenido |
+|---------|-----------|
+| [frontend/docs/UI-STYLES.md](frontend/docs/UI-STYLES.md) | Colores (`--color-*`), formularios, desplegables (`DropdownChevron`, `NativeSelectField`), glass, tablas |
+| [frontend/AGENTS.md](frontend/AGENTS.md) | Next.js en este repo + enlace a la guía UI |
+
+---
+
 ## Stack Tecnológico
 
 | Capa | Tecnología |

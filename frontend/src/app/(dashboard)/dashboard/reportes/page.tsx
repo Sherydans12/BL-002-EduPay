@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { reportsApi, coursesApi, Course, ReportSummary } from '@/lib/api';
+import { NativeSelectField } from '@/components/ui/dropdown-chevron';
 
 export default function ReportesPage() {
   const [summary, setSummary] = useState<ReportSummary | null>(null);
@@ -68,16 +69,18 @@ export default function ReportesPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Filtrar por Curso</label>
-            <select
-              value={courseId}
-              onChange={(e) => setCourseId(e.target.value)}
-              className="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos los cursos</option>
-              {courses.map(course => (
-                <option key={course.id} value={course.id}>{course.name}</option>
-              ))}
-            </select>
+            <NativeSelectField chevronClassName="text-gray-400 opacity-90">
+              <select
+                value={courseId}
+                onChange={(e) => setCourseId(e.target.value)}
+                className="w-full bg-black/30 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Todos los cursos</option>
+                {courses.map(course => (
+                  <option key={course.id} value={course.id}>{course.name}</option>
+                ))}
+              </select>
+            </NativeSelectField>
           </div>
         </div>
       </div>

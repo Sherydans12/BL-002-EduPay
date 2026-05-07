@@ -1,5 +1,10 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Documentación del proyecto
+
+- **Estilos UI (colores, desplegables, formularios):** [`docs/UI-STYLES.md`](./docs/UI-STYLES.md)
+- **Reglas para agentes / Cursor:** [`AGENTS.md`](./AGENTS.md)
+
 ## Getting Started
 
 First, run the development server:

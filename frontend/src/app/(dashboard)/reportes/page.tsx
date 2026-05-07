@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DownloadCloud, Search } from "lucide-react";
+import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: "Efectivo",
@@ -150,27 +151,31 @@ export default function ReportsPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">Curso</label>
-            <select
-              value={filters.courseId}
-              onChange={(e) => setFilters(f => ({ ...f, courseId: e.target.value, studentId: "" }))}
-              className="w-full px-3 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
-            >
-              <option value="">Todos</option>
-              {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <NativeSelectField>
+              <select
+                value={filters.courseId}
+                onChange={(e) => setFilters(f => ({ ...f, courseId: e.target.value, studentId: "" }))}
+                className="w-full px-3 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
+              >
+                <option value="">Todos</option>
+                {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </NativeSelectField>
           </div>
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">Alumno</label>
-            <select
-              value={filters.studentId}
-              onChange={(e) => setFilters(f => ({ ...f, studentId: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
-            >
-              <option value="">Todos</option>
-              {students.filter(s => !filters.courseId || s.courseId === Number(filters.courseId)).map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+            <NativeSelectField>
+              <select
+                value={filters.studentId}
+                onChange={(e) => setFilters(f => ({ ...f, studentId: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
+              >
+                <option value="">Todos</option>
+                {students.filter(s => !filters.courseId || s.courseId === Number(filters.courseId)).map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </NativeSelectField>
           </div>
         </div>
         <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--color-border)]">

@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { paymentsApi } from "@/lib/api";
-import type { Payment } from "@/lib/api";
+import { paymentsApi, studentsApi, coursesApi } from "@/lib/api";
+import type { Payment, Student, Course } from "@/lib/api";
 import { toast } from "sonner";
 import { Search, Download, FileText, Plus } from "lucide-react";
 import Link from "next/link";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DropdownChevron, NativeSelectField } from "@/components/ui/dropdown-chevron";
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: "Efectivo",
@@ -15,19 +18,49 @@ const METHOD_LABELS: Record<string, string> = {
   TRANSFER: "Transferencia",
 };
 
+const fieldClass =
+  "w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all";
+
 export default function PagosMasterPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Filters
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", search: "" });
-  const [appliedFilters, setAppliedFilters] = useState({ dateFrom: "", dateTo: "", search: "" });
-  
+
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
+  const [courseFilter, setCourseFilter] = useState("");
+  const [studentOpen, setStudentOpen] = useState(false);
+
+  // Filters (studentId se envía a la API; el texto libre no estaba soportado en backend)
+  const [filters, setFilters] = useState<{ dateFrom: string; dateTo: string; studentId?: number }>({
+    dateFrom: "",
+    dateTo: "",
+    studentId: undefined,
+  });
+  const [appliedFilters, setAppliedFilters] = useState<{ dateFrom: string; dateTo: string; studentId?: number }>({
+    dateFrom: "",
+    dateTo: "",
+    studentId: undefined,
+  });
+
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+  useEffect(() => {
+    coursesApi.getAll().then((res) => setCourses(res.data)).catch(() => {});
+    studentsApi.getAll().then((res) => setStudents(res.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (courseFilter) {
+      setFilteredStudents(students.filter((s) => s.courseId === Number(courseFilter)));
+    } else {
+      setFilteredStudents(students);
+    }
+  }, [courseFilter, students]);
 
   const fetchPayments = useCallback(async () => {
     setLoading(true);
@@ -35,7 +68,7 @@ export default function PagosMasterPage() {
       const params: Record<string, string> = { page: page.toString(), limit: "20" };
       if (appliedFilters.dateFrom) params.dateFrom = appliedFilters.dateFrom;
       if (appliedFilters.dateTo) params.dateTo = appliedFilters.dateTo;
-      if (appliedFilters.search) params.search = appliedFilters.search;
+      if (appliedFilters.studentId != null) params.studentId = String(appliedFilters.studentId);
 
       const res = await paymentsApi.getAll(params);
       setPayments(res.data);
@@ -58,11 +91,14 @@ export default function PagosMasterPage() {
   };
 
   const handleClearFilters = () => {
-    const empty = { dateFrom: "", dateTo: "", search: "" };
+    const empty = { dateFrom: "", dateTo: "", studentId: undefined as number | undefined };
     setFilters(empty);
     setAppliedFilters(empty);
+    setCourseFilter("");
     setPage(1);
   };
+
+  const selectedStudent = filters.studentId != null ? students.find((s) => s.id === filters.studentId) : undefined;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-10">
@@ -81,16 +117,77 @@ export default function PagosMasterPage() {
 
       <div className="glass rounded-2xl p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">Buscar</label>
-            <input
-              type="text"
-              placeholder="RUT o Nombre del alumno..."
-              value={filters.search}
-              onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
-              className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
-            />
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                Curso (filtro opcional)
+              </label>
+              <NativeSelectField>
+                <select
+                  value={courseFilter}
+                  onChange={(e) => {
+                    setCourseFilter(e.target.value);
+                    setFilters((f) => ({ ...f, studentId: undefined }));
+                  }}
+                  className={fieldClass}
+                >
+                  <option value="">Todos los cursos</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </NativeSelectField>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                Alumno
+              </label>
+              <Popover open={studentOpen} onOpenChange={setStudentOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={`${fieldClass} flex items-center gap-2 text-left`}
+                  >
+                    <span
+                      className={`min-w-0 flex-1 truncate ${selectedStudent ? "text-white" : "text-[var(--color-text-muted)]"}`}
+                    >
+                      {selectedStudent ? selectedStudent.name : "Buscar por nombre o RUT..."}
+                    </span>
+                    <DropdownChevron />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]" align="start">
+                  <Command className="bg-transparent">
+                    <CommandInput placeholder="Buscar por nombre o RUT..." className="border-none focus:ring-0" />
+                    <CommandList>
+                      <CommandEmpty>No se encontró el alumno.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredStudents.map((s) => (
+                          <CommandItem
+                            key={s.id}
+                            value={`${s.name} ${s.rut}`}
+                            onSelect={() => {
+                              setFilters((f) => ({ ...f, studentId: s.id }));
+                              setStudentOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <div className="flex flex-col">
+                              <span>{s.name}</span>
+                              <span className="text-xs text-[var(--color-text-muted)]">
+                                {s.rut} — {s.course.name}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">Fecha Inicio</label>
@@ -98,7 +195,7 @@ export default function PagosMasterPage() {
               type="date"
               value={filters.dateFrom}
               onChange={(e) => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-              className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
+              className={fieldClass}
             />
           </div>
           <div>
@@ -107,7 +204,8 @@ export default function PagosMasterPage() {
               type="date"
               value={filters.dateTo}
               onChange={(e) => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-              className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
+              className={fieldClass}
+              onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
             />
           </div>
         </div>

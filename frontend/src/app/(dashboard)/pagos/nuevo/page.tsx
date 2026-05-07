@@ -10,6 +10,7 @@ import type { Student, Course } from "@/lib/api";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DropdownChevron, NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud, FileText, X } from "lucide-react";
 
@@ -145,10 +146,12 @@ export default function NewPaymentPage() {
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                 Curso (filtro opcional)
               </label>
-              <select value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setValue("studentId", undefined as any); }} className={inputOk}>
-                <option value="">Todos los cursos</option>
-                {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <NativeSelectField>
+                <select value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setValue("studentId", undefined as any); }} className={inputOk}>
+                  <option value="">Todos los cursos</option>
+                  {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </NativeSelectField>
             </div>
             <div className="flex flex-col justify-end">
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
@@ -162,10 +165,12 @@ export default function NewPaymentPage() {
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className={`${errors.studentId ? inputErr : inputOk} text-left flex justify-between items-center`}
+                        className={`${errors.studentId ? inputErr : inputOk} flex items-center gap-2 text-left`}
                       >
-                        {field.value ? students.find(s => s.id === field.value)?.name : "Buscar alumno..."}
-                        <span className="text-[var(--color-text-muted)] text-xs">▼</span>
+                        <span className="min-w-0 flex-1 truncate">
+                          {field.value ? students.find(s => s.id === field.value)?.name : "Buscar alumno..."}
+                        </span>
+                        <DropdownChevron />
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0">
@@ -222,9 +227,11 @@ export default function NewPaymentPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Método de Pago *</label>
-              <select {...register("method")} className={errors.method ? inputErr : inputOk}>
-                {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
+              <NativeSelectField>
+                <select {...register("method")} className={errors.method ? inputErr : inputOk}>
+                  {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </NativeSelectField>
               <FieldError message={errors.method?.message} />
             </div>
             <div>

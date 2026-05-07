@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DropdownChevron } from "@/components/ui/dropdown-chevron";
 
 const userSchema = z.object({
   name: z.string().min(1, "El nombre es requerido").max(100),
@@ -173,10 +174,12 @@ export default function UsuariosPage() {
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex justify-between items-center"
+                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2"
                       >
-                        {field.value ? roles.find(r => r.id === field.value)?.name : "Seleccionar rol..."}
-                        <span className="text-[var(--color-text-muted)] text-xs">▼</span>
+                        <span className="min-w-0 flex-1 truncate">
+                          {field.value ? roles.find(r => r.id === field.value)?.name : "Seleccionar rol..."}
+                        </span>
+                        <DropdownChevron />
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0 z-[60]">

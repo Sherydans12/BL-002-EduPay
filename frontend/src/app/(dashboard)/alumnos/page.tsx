@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DropdownChevron } from "@/components/ui/dropdown-chevron";
 import { TablePagination } from "@/components/ui/table-pagination";
 
 const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
@@ -230,10 +231,12 @@ export default function StudentsPage() {
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex justify-between items-center"
+                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2"
                         >
-                          {field.value ? courses.find(c => c.id === field.value)?.name : "Seleccionar curso..."}
-                          <span className="text-[var(--color-text-muted)] text-xs">▼</span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {field.value ? courses.find(c => c.id === field.value)?.name : "Seleccionar curso..."}
+                          </span>
+                          <DropdownChevron />
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[450px] p-0 z-[60]">
@@ -274,10 +277,12 @@ export default function StudentsPage() {
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex justify-between items-center"
+                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2"
                         >
-                          {field.value ? guardians.find(g => g.id === field.value)?.name : "Seleccionar apoderado..."}
-                          <span className="text-[var(--color-text-muted)] text-xs">▼</span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {field.value ? guardians.find(g => g.id === field.value)?.name : "Seleccionar apoderado..."}
+                          </span>
+                          <DropdownChevron />
                         </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[450px] p-0 z-[60]">
