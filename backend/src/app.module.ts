@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { RolesModule } from './roles/roles.module';
 import { ReportsModule } from './reports/reports.module';
+import { PaymentConceptsModule } from './payment-concepts/payment-concepts.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AppController } from './app.controller';
 
@@ -27,6 +28,7 @@ import { AppController } from './app.controller';
     GuardiansModule,
     StudentsModule,
     PaymentsModule,
+    PaymentConceptsModule,
     MailModule,
   ],
   providers: [

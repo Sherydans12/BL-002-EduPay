@@ -83,4 +83,12 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   boletaNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'ID del concepto de pago (ej. Mensualidad, Matrícula)',
+    example: 1,
+  })
+  @IsOptional()
+  @IsInt()
+  conceptId?: number;
 }

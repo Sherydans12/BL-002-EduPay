@@ -96,6 +96,12 @@ export class PaymentsController {
           example: 'BOL-00587',
           description: 'Número de boleta SII',
         },
+        conceptId: {
+          type: 'integer',
+          nullable: true,
+          example: 1,
+          description: 'ID del concepto de pago (Mensualidad, Matrícula, etc.)',
+        },
         boleta: {
           type: 'string',
           format: 'binary',

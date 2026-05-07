@@ -19,6 +19,7 @@ export class PaymentsService {
         method: dto.method,
         paymentDate: new Date(dto.paymentDate),
         studentId: dto.studentId,
+        conceptId: dto.conceptId || null,
         payerName: dto.payerName || null,
         payerRut: dto.payerRut || null,
         referenceCode: dto.referenceCode || null,
@@ -28,6 +29,7 @@ export class PaymentsService {
       },
       include: {
         student: { include: { course: true, guardian: true } },
+        concept: true,
       },
     });
 
@@ -79,6 +81,7 @@ export class PaymentsService {
         take: limit,
         include: {
           student: { include: { course: true, guardian: true } },
+          concept: true,
         },
       }),
       this.prisma.payment.count({ where }),
@@ -100,6 +103,7 @@ export class PaymentsService {
       where: { id },
       include: {
         student: { include: { course: true, guardian: true } },
+        concept: true,
       },
     });
     if (!payment) throw new NotFoundException(`Payment #${id} not found`);

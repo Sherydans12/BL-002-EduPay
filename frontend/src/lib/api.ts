@@ -96,6 +96,16 @@ export interface Student {
   guardian: Guardian;
 }
 
+export interface PaymentConcept {
+  id: number;
+  name: string;
+  defaultAmount: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
 export interface Payment {
   id: number;
   amount: number;
@@ -103,6 +113,8 @@ export interface Payment {
   paymentDate: string;
   studentId: number;
   student: Student;
+  conceptId?: number | null;
+  concept?: PaymentConcept | null;
   payerName?: string;
   payerRut?: string;
   referenceCode?: string;
@@ -230,6 +242,24 @@ export const paymentsApi = {
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<CourseSummary[]>(`/payments/summary/by-course${query}`);
   },
+};
+
+// ─── Payment Concepts ─────────────────────────────────────────
+export const conceptsApi = {
+  getAll: () => request<PaymentConcept[]>('/payment-concepts'),
+  getOne: (id: number) => request<PaymentConcept>(`/payment-concepts/${id}`),
+  create: (data: { name: string; defaultAmount: number; isActive?: boolean }) =>
+    request<PaymentConcept>('/payment-concepts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: number, data: Partial<{ name: string; defaultAmount: number; isActive: boolean }>) =>
+    request<PaymentConcept>(`/payment-concepts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: number) =>
+    request<PaymentConcept>(`/payment-concepts/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Reports ──────────────────────────────────────────────────

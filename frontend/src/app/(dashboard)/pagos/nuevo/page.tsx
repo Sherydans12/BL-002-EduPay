@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { paymentSchema, type PaymentFormData } from "@/lib/schemas/payment.schema";
-import { studentsApi, coursesApi, paymentsApi } from "@/lib/api";
-import type { Student, Course } from "@/lib/api";
+import { studentsApi, coursesApi, paymentsApi, conceptsApi } from "@/lib/api";
+import type { Student, Course, PaymentConcept } from "@/lib/api";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -36,14 +36,17 @@ export default function NewPaymentPage() {
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [concepts, setConcepts] = useState<PaymentConcept[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
   const [courseFilter, setCourseFilter] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [studentOpen, setStudentOpen] = useState(false);
+  const [conceptOpen, setConceptOpen] = useState(false);
 
   const { register, control, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<PaymentFormData>({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
+      conceptId: undefined,
       amount: undefined,
       method: "CASH",
       paymentDate: new Date().toISOString().split("T")[0],
@@ -60,12 +63,20 @@ export default function NewPaymentPage() {
 
   const useAltPayer = watch("useAltPayer");
   const studentId = watch("studentId");
+  const conceptId = watch("conceptId");
   const boletaFile = watch("boleta");
   const selectedStudent = students.find((s) => s.id === studentId);
+  const selectedConcept = concepts.find((c) => c.id === conceptId);
 
   useEffect(() => {
-    coursesApi.getAll().then((res) => setCourses(res.data)).catch(() => {});
-    studentsApi.getAll().then((res) => setStudents(res.data)).catch(() => {});
+    Promise.all([
+      coursesApi.getAll().then((res) => setCourses(res.data)),
+      studentsApi.getAll().then((res) => setStudents(res.data)),
+      conceptsApi.getAll().then((data) => {
+        const active = data.filter((c) => c.isActive);
+        setConcepts(active);
+      }),
+    ]).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -75,6 +86,16 @@ export default function NewPaymentPage() {
       setFilteredStudents(students);
     }
   }, [courseFilter, students]);
+
+  // Auto-fill amount when concept changes
+  const handleConceptSelect = useCallback(
+    (concept: PaymentConcept) => {
+      setValue("conceptId", concept.id, { shouldValidate: true });
+      setValue("amount", concept.defaultAmount, { shouldValidate: true });
+      setConceptOpen(false);
+    },
+    [setValue]
+  );
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -106,6 +127,7 @@ export default function NewPaymentPage() {
       fd.append("method", data.method);
       fd.append("paymentDate", data.paymentDate);
       fd.append("studentId", data.studentId.toString());
+      fd.append("conceptId", data.conceptId.toString());
 
       if (data.useAltPayer && data.payerName) fd.append("payerName", data.payerName);
       if (data.useAltPayer && data.payerRut) fd.append("payerRut", data.payerRut);
@@ -147,7 +169,11 @@ export default function NewPaymentPage() {
                 Curso (filtro opcional)
               </label>
               <NativeSelectField>
-                <select value={courseFilter} onChange={(e) => { setCourseFilter(e.target.value); setValue("studentId", undefined as any); }} className={inputOk}>
+                <select
+                  value={courseFilter}
+                  onChange={(e) => { setCourseFilter(e.target.value); setValue("studentId", undefined as unknown as number); }}
+                  className={inputOk}
+                >
                   <option value="">Todos los cursos</option>
                   {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -213,16 +239,86 @@ export default function NewPaymentPage() {
           )}
         </div>
 
-        {/* ── Paso 2: Datos del Pago ─────────────────────── */}
+        {/* ── Paso 2: Concepto + Datos del Pago ─────────── */}
         <div className="glass rounded-2xl p-6 space-y-5">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <span className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white text-sm font-bold">2</span>
             Datos del Pago
           </h2>
+
+          {/* Concepto de Pago — fila completa */}
+          <div>
+            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+              Concepto de Pago *
+            </label>
+            <Controller
+              control={control}
+              name="conceptId"
+              render={({ field }) => (
+                <Popover open={conceptOpen} onOpenChange={setConceptOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={`${errors.conceptId ? inputErr : inputOk} flex items-center gap-2 text-left`}
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {field.value
+                          ? concepts.find((c) => c.id === field.value)?.name
+                          : "Seleccionar concepto..."}
+                      </span>
+                      {selectedConcept && (
+                        <span className="shrink-0 text-xs text-[var(--color-text-muted)] font-mono">
+                          ${selectedConcept.defaultAmount.toLocaleString("es-CL")}
+                        </span>
+                      )}
+                      <DropdownChevron />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[480px] p-0">
+                    <Command className="bg-transparent">
+                      <CommandInput placeholder="Buscar concepto..." className="border-none focus:ring-0" />
+                      <CommandList>
+                        <CommandEmpty>No se encontró el concepto.</CommandEmpty>
+                        <CommandGroup>
+                          {concepts.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              onSelect={() => handleConceptSelect(c)}
+                              className="cursor-pointer"
+                            >
+                              <div className="flex justify-between w-full items-center">
+                                <span>{c.name}</span>
+                                <span className="text-xs text-[var(--color-text-muted)] font-mono tabular-nums">
+                                  ${c.defaultAmount.toLocaleString("es-CL")}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+            />
+            <FieldError message={errors.conceptId?.message} />
+            {selectedConcept && (
+              <p className="text-xs text-emerald-400 mt-1.5 animate-fade-in">
+                Monto autocompletado con el valor por defecto del concepto. Puedes modificarlo si es necesario.
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Monto ($) *</label>
-              <input type="number" min="1" placeholder="0" {...register("amount", { valueAsNumber: true })} className={`${errors.amount ? inputErr : inputOk} text-lg font-semibold`} />
+              <input
+                type="number"
+                min="1"
+                placeholder="0"
+                {...register("amount", { valueAsNumber: true })}
+                className={`${errors.amount ? inputErr : inputOk} text-lg font-semibold`}
+              />
               <FieldError message={errors.amount?.message} />
             </div>
             <div>

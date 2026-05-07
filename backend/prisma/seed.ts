@@ -74,6 +74,18 @@ async function main() {
       },
     });
     console.log(`Usuario inicial creado/actualizado: ${adminUser.email}`);
+
+    // 4. Crear concepto de pago por defecto
+    await prisma.paymentConcept.upsert({
+      where: { name: 'Mensualidad General' },
+      update: {},
+      create: {
+        name: 'Mensualidad General',
+        defaultAmount: 75000,
+        isActive: true,
+      },
+    });
+    console.log('Concepto de pago por defecto asegurado: Mensualidad General');
   } catch (error) {
     console.error('Error durante el seed:', error);
   } finally {

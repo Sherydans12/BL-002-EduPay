@@ -39,6 +39,12 @@ export const paymentSchema = z
       .int()
       .positive("Debe seleccionar un alumno"),
 
+    // Concepto de pago
+    conceptId: z
+      .number({ error: "Debe seleccionar un concepto de pago" })
+      .int()
+      .positive("Debe seleccionar un concepto de pago"),
+
     // Paso 2: Datos del pago
     amount: z
       .number({ error: "El monto es requerido" })

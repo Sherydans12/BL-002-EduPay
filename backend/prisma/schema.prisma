@@ -61,13 +61,30 @@ model Student {
   @@map("students")
 }
 
+model PaymentConcept {
+  id            Int       @id @default(autoincrement())
+  name          String    @unique
+  defaultAmount Int
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  payments      Payment[]
+
+  @@map("payment_concepts")
+}
+
 model Payment {
-  id            Int           @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   amount        Int
   method        PaymentMethod
   paymentDate   DateTime
   studentId     Int
-  student       Student       @relation(fields: [studentId], references: [id])
+  student       Student          @relation(fields: [studentId], references: [id])
+
+  // Concepto de pago (opcional para compatibilidad con registros anteriores)
+  conceptId     Int?
+  concept       PaymentConcept?  @relation(fields: [conceptId], references: [id])
 
   // Datos del pagador alternativo (null = pagó el apoderado)
   payerName     String?
@@ -81,8 +98,8 @@ model Payment {
   boletaFileUrl String?
   boletaNumber  String?
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   @@map("payments")
 }
