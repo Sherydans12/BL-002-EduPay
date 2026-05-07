@@ -59,7 +59,11 @@ export default function ReportsPage() {
       ]);
 
       setPayments(payRes.data);
-      setTotalMeta(payRes.meta);
+      setTotalMeta({
+        total: payRes.meta.total,
+        page: payRes.meta.page,
+        totalPages: payRes.meta.totalPages ?? payRes.meta.lastPage ?? 1,
+      });
       setCourseSummary(sumRes);
       setGlobalSummary(globRes);
     } catch (err: unknown) {

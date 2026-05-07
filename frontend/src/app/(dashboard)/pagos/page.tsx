@@ -73,7 +73,7 @@ export default function PagosMasterPage() {
 
       const res = await paymentsApi.getAll(params);
       setPayments(res.data);
-      setTotalPages(res.meta.totalPages);
+      setTotalPages(res.meta.totalPages ?? res.meta.lastPage ?? 1);
       setTotalCount(res.meta.total);
     } catch (err: unknown) {
       toast.error("Error al cargar historial de pagos");

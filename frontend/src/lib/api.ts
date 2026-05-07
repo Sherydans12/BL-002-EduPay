@@ -136,6 +136,18 @@ export interface Guardian {
   _count?: { students: number };
 }
 
+/** Respuesta de GET /courses/:id (incluye alumnos activos con apoderado) */
+export interface CourseWithStudents extends Course {
+  students: Array<{
+    id: number;
+    rut: string;
+    name: string;
+    courseId: number;
+    guardianId: number;
+    guardian: Guardian;
+  }>;
+}
+
 export interface Student {
   id: number;
   rut: string;
@@ -180,7 +192,10 @@ export interface PaginatedResponse<T> {
     total: number;
     page: number;
     limit: number;
-    totalPages: number;
+    /** Listados de cursos, alumnos, apoderados */
+    lastPage?: number;
+    /** Pagos u otros listados */
+    totalPages?: number;
   };
 }
 
@@ -200,7 +215,7 @@ export const coursesApi = {
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<PaginatedResponse<Course>>(`/courses${query}`);
   },
-  getOne: (id: number) => request<Course>(`/courses/${id}`),
+  getOne: (id: number) => request<CourseWithStudents>(`/courses/${id}`),
   create: (data: { name: string }) =>
     request<Course>("/courses", {
       method: "POST",

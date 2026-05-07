@@ -3,42 +3,11 @@
 import { useEffect, useState } from "react";
 import { studentsApi, coursesApi, guardiansApi, downloadBlob } from "@/lib/api";
 import type { Student, Course, Guardian } from "@/lib/api";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { toast } from "sonner";
 import { FileSpreadsheet } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { StudentFormDialog } from "@/components/student-form-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { DropdownChevron } from "@/components/ui/dropdown-chevron";
 import { TablePagination } from "@/components/ui/table-pagination";
-
-const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
-function isValidRut(rut: string): boolean {
-  const clean = rut.replace(/\./g, "").replace("-", "");
-  if (clean.length < 8 || clean.length > 9) return false;
-  const body = clean.slice(0, -1);
-  const dv = clean.slice(-1).toUpperCase();
-  let sum = 0, mul = 2;
-  for (let i = body.length - 1; i >= 0; i--) {
-    sum += parseInt(body[i], 10) * mul;
-    mul = mul === 7 ? 2 : mul + 1;
-  }
-  const expected = 11 - (sum % 11);
-  const expectedDv = expected === 11 ? "0" : expected === 10 ? "K" : expected.toString();
-  return dv === expectedDv;
-}
-
-const studentSchema = z.object({
-  rut: z.string().refine((val) => rutRegex.test(val) && isValidRut(val), "RUT inválido (formato: 12.345.678-9)"),
-  name: z.string().min(1, "El nombre es requerido").max(200, "Máximo 200 caracteres"),
-  courseId: z.number().min(1, "Seleccione un curso"),
-  guardianId: z.number().min(1, "Seleccione un apoderado"),
-});
-
-type StudentFormData = z.infer<typeof studentSchema>;
 
 const LIMIT = 20;
 
@@ -53,22 +22,15 @@ export default function StudentsPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Combobox states
-  const [courseOpen, setCourseOpen] = useState(false);
-  const [guardianOpen, setGuardianOpen] = useState(false);
-
-  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<StudentFormData>({
-    resolver: zodResolver(studentSchema),
-  });
-
-  // Load dropdown data once (for the create/edit form)
   useEffect(() => {
     Promise.all([coursesApi.getAll(1, 200), guardiansApi.getAll(1, 200)])
-      .then(([cRes, gRes]) => { setCourses(cRes.data); setGuardians(gRes.data); })
+      .then(([cRes, gRes]) => {
+        setCourses(cRes.data);
+        setGuardians(gRes.data);
+      })
       .catch(() => {});
   }, []);
 
@@ -77,7 +39,12 @@ export default function StudentsPage() {
     try {
       const res = await studentsApi.getAll(undefined, p, LIMIT);
       setStudents(res.data);
-      setMeta(res.meta);
+      setMeta({
+        total: res.meta.total,
+        page: res.meta.page,
+        limit: res.meta.limit,
+        lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
+      });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar alumnos");
     } finally {
@@ -85,38 +52,31 @@ export default function StudentsPage() {
     }
   };
 
-  useEffect(() => { loadStudents(page); }, [page]);
+  useEffect(() => {
+    loadStudents(page);
+  }, [page]);
 
   const openCreateDialog = () => {
     setEditingStudent(null);
-    reset({ rut: "", name: "", courseId: undefined, guardianId: undefined });
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (s: Student) => {
     setEditingStudent(s);
-    reset({ rut: s.rut, name: s.name, courseId: s.courseId, guardianId: s.guardianId });
     setIsDialogOpen(true);
   };
 
-  const onSubmit = async (data: StudentFormData) => {
-    setIsSubmitting(true);
-    try {
-      if (editingStudent) {
-        await studentsApi.update(editingStudent.id, data);
-        toast.success("Alumno actualizado exitosamente");
-        loadStudents(page);
-      } else {
-        await studentsApi.create(data);
-        toast.success("Alumno creado exitosamente");
-        setPage(1);
-        if (page === 1) loadStudents(1);
-      }
-      setIsDialogOpen(false);
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar");
-    } finally {
-      setIsSubmitting(false);
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) setEditingStudent(null);
+  };
+
+  const handleStudentSaved = async () => {
+    if (editingStudent) {
+      await loadStudents(page);
+    } else {
+      setPage(1);
+      if (page === 1) await loadStudents(1);
     }
   };
 
@@ -133,9 +93,10 @@ export default function StudentsPage() {
     }
   };
 
-  const filtered = students.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.rut.toLowerCase().includes(searchTerm.toLowerCase())
+  const filtered = students.filter(
+    (s) =>
+      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.rut.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleExportExcel = async () => {
@@ -190,7 +151,9 @@ export default function StudentsPage() {
 
       <div className="glass rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" /></div>
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+          </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-[var(--color-text-muted)]">No hay alumnos que coincidan con la búsqueda</div>
         ) : (
@@ -198,8 +161,11 @@ export default function StudentsPage() {
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                  <th className="px-6 py-4">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Curso</th>
-                  <th className="px-6 py-4">Apoderado</th><th className="px-6 py-4 text-right">Acciones</th>
+                  <th className="px-6 py-4">RUT</th>
+                  <th className="px-6 py-4">Nombre</th>
+                  <th className="px-6 py-4">Curso</th>
+                  <th className="px-6 py-4">Apoderado</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
@@ -207,11 +173,17 @@ export default function StudentsPage() {
                   <tr key={s.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
                     <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{s.rut}</td>
                     <td className="px-6 py-4 font-medium text-white">{s.name}</td>
-                    <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300">{s.course.name}</span></td>
+                    <td className="px-6 py-4">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300">{s.course.name}</span>
+                    </td>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{s.guardian.name}</td>
                     <td className="px-6 py-4 text-right space-x-2">
-                      <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
-                      <button onClick={() => setDeleteId(s.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
+                      <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">
+                        Editar
+                      </button>
+                      <button onClick={() => setDeleteId(s.id)} className="text-sm text-red-400 hover:underline">
+                        Eliminar
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -229,139 +201,30 @@ export default function StudentsPage() {
         )}
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">{editingStudent ? "Editar Alumno" : "Nuevo Alumno"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 overflow-visible">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT *</label>
-                <input {...register("rut")} placeholder="12.345.678-9" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
-                {errors.rut && <p className="text-red-400 text-xs mt-1">{errors.rut.message}</p>}
-              </div>
-              <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Nombre *</label>
-                <input {...register("name")} placeholder="Nombre completo" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
-                {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
-              </div>
-
-              <div className="col-span-full">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Curso *</label>
-                <Controller
-                  name="courseId"
-                  control={control}
-                  render={({ field }) => (
-                    <Popover open={courseOpen} onOpenChange={setCourseOpen}>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2"
-                        >
-                          <span className="min-w-0 flex-1 truncate">
-                            {field.value ? courses.find(c => c.id === field.value)?.name : "Seleccionar curso..."}
-                          </span>
-                          <DropdownChevron />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[450px] p-0 z-[60]">
-                        <Command className="bg-transparent">
-                          <CommandInput placeholder="Buscar curso..." className="border-none focus:ring-0" />
-                          <CommandList>
-                            <CommandEmpty>No se encontró el curso.</CommandEmpty>
-                            <CommandGroup>
-                              {courses.map(course => (
-                                <CommandItem
-                                  key={course.id}
-                                  onSelect={() => {
-                                    field.onChange(course.id);
-                                    setCourseOpen(false);
-                                  }}
-                                  className="cursor-pointer"
-                                >
-                                  {course.name}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                />
-                {errors.courseId && <p className="text-red-400 text-xs mt-1">{errors.courseId.message}</p>}
-              </div>
-
-              <div className="col-span-full">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Apoderado *</label>
-                <Controller
-                  name="guardianId"
-                  control={control}
-                  render={({ field }) => (
-                    <Popover open={guardianOpen} onOpenChange={setGuardianOpen}>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2"
-                        >
-                          <span className="min-w-0 flex-1 truncate">
-                            {field.value ? guardians.find(g => g.id === field.value)?.name : "Seleccionar apoderado..."}
-                          </span>
-                          <DropdownChevron />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[450px] p-0 z-[60]">
-                        <Command className="bg-transparent">
-                          <CommandInput placeholder="Buscar apoderado por nombre o RUT..." className="border-none focus:ring-0" />
-                          <CommandList>
-                            <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
-                            <CommandGroup>
-                              {guardians.map(g => (
-                                <CommandItem
-                                  key={g.id}
-                                  onSelect={() => {
-                                    field.onChange(g.id);
-                                    setGuardianOpen(false);
-                                  }}
-                                  className="cursor-pointer"
-                                >
-                                  <div className="flex flex-col">
-                                    <span>{g.name}</span>
-                                    <span className="text-xs text-[var(--color-text-muted)]">{g.rut}</span>
-                                  </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                />
-                {errors.guardianId && <p className="text-red-400 text-xs mt-1">{errors.guardianId.message}</p>}
-              </div>
-            </div>
-
-            <DialogFooter className="mt-6 pt-4">
-              <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors">Cancelar</button>
-              <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-50">
-                {isSubmitting ? "Guardando..." : "Guardar"}
-              </button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <StudentFormDialog
+        open={isDialogOpen}
+        onOpenChange={handleDialogOpenChange}
+        courses={courses}
+        guardians={guardians}
+        editingStudent={editingStudent}
+        onSaved={handleStudentSaved}
+      />
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
-            <AlertDialogDescription className="text-[var(--color-text-secondary)]">Esta acción no se puede deshacer. Se eliminará permanentemente este alumno y sus pagos asociados.</AlertDialogDescription>
+            <AlertDialogDescription className="text-[var(--color-text-secondary)]">
+              Esta acción no se puede deshacer. Se eliminará permanentemente este alumno y sus pagos asociados.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white border-0">Sí, eliminar</AlertDialogAction>
+            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white border-0">
+              Sí, eliminar
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -19,7 +19,7 @@ export class CoursesService {
     const [data, total] = await Promise.all([
       this.prisma.course.findMany({
         where,
-        orderBy: { name: 'asc' },
+        orderBy: { id: 'asc' },
         include: { _count: { select: { students: true } } },
         skip,
         take: limit,
@@ -39,9 +39,15 @@ export class CoursesService {
   }
 
   async findOne(id: number) {
-    const course = await this.prisma.course.findUnique({
-      where: { id },
-      include: { students: { include: { guardian: true } } },
+    const course = await this.prisma.course.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        students: {
+          where: { deletedAt: null },
+          orderBy: { name: 'asc' },
+          include: { guardian: true },
+        },
+      },
     });
     if (!course) throw new NotFoundException(`Course #${id} not found`);
     return course;
@@ -63,7 +69,7 @@ export class CoursesService {
   async exportToXlsx(): Promise<Buffer> {
     const data = await this.prisma.course.findMany({
       where: { deletedAt: null },
-      orderBy: { name: 'asc' },
+      orderBy: { id: 'asc' },
       include: { _count: { select: { students: true } } },
     });
 

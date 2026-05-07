@@ -62,7 +62,12 @@ export default function GuardiansPage() {
     try {
       const res = await guardiansApi.getAll(p, LIMIT);
       setGuardians(res.data);
-      setMeta(res.meta);
+      setMeta({
+        total: res.meta.total,
+        page: res.meta.page,
+        limit: res.meta.limit,
+        lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
+      });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar apoderados");
     } finally {

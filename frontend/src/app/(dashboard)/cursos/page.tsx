@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { coursesApi, downloadBlob } from "@/lib/api";
 import type { Course } from "@/lib/api";
 import { useForm } from "react-hook-form";
@@ -42,7 +43,12 @@ export default function CoursesPage() {
     try {
       const res = await coursesApi.getAll(p, LIMIT);
       setCourses(res.data);
-      setMeta(res.meta);
+      setMeta({
+        total: res.meta.total,
+        page: res.meta.page,
+        limit: res.meta.limit,
+        lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
+      });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar cursos");
     } finally {
@@ -183,6 +189,12 @@ export default function CoursesPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
+                      <Link
+                        href={`/cursos/${c.id}`}
+                        className="text-sm text-[var(--color-primary)] hover:underline"
+                      >
+                        Ver
+                      </Link>
                       <button
                         onClick={() => openEditDialog(c)}
                         className="text-sm text-[var(--color-primary)] hover:underline"
