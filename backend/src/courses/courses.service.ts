@@ -2,7 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
-import { buildWorkbook } from '../common/excel/excel.helper';
+import {
+  buildMultiSheetWorkbook,
+  sanitizeExcelSheetName,
+  type ExcelColumn,
+} from '../common/excel/excel.helper';
 
 @Injectable()
 export class CoursesService {
@@ -67,22 +71,42 @@ export class CoursesService {
   }
 
   async exportToXlsx(): Promise<Buffer> {
-    const data = await this.prisma.course.findMany({
+    const columns: ExcelColumn[] = [
+      { header: 'ID', key: 'id', width: 8 },
+      { header: 'RUT', key: 'rut', width: 14 },
+      { header: 'Nombre completo', key: 'nombre', width: 40 },
+      { header: 'Apoderado', key: 'apoderado', width: 35 },
+      { header: 'RUT apoderado', key: 'rutApoderado', width: 18 },
+      { header: 'Email apoderado', key: 'emailApoderado', width: 32 },
+      { header: 'Teléfono apoderado', key: 'telefonoApoderado', width: 18 },
+    ];
+
+    const courses = await this.prisma.course.findMany({
       where: { deletedAt: null },
       orderBy: { id: 'asc' },
-      include: { _count: { select: { students: true } } },
+      include: {
+        students: {
+          where: { deletedAt: null },
+          orderBy: { name: 'asc' },
+          include: { guardian: true },
+        },
+      },
     });
 
-    const rows = data.map((c) => ({
-      id: c.id,
-      nombre: c.name,
-      alumnos: c._count.students,
+    const sheets = courses.map((c) => ({
+      name: sanitizeExcelSheetName(c.name, `Curso ${c.id}`),
+      columns,
+      rows: c.students.map((s) => ({
+        id: s.id,
+        rut: s.rut,
+        nombre: s.name,
+        apoderado: s.guardian.name,
+        rutApoderado: s.guardian.rut,
+        emailApoderado: s.guardian.email ?? '',
+        telefonoApoderado: s.guardian.phone ?? '',
+      })),
     }));
 
-    return buildWorkbook('Cursos', [
-      { header: 'ID', key: 'id', width: 8 },
-      { header: 'Nombre', key: 'nombre', width: 40 },
-      { header: 'N° Alumnos', key: 'alumnos', width: 14 },
-    ], rows);
+    return buildMultiSheetWorkbook(sheets);
   }
 }

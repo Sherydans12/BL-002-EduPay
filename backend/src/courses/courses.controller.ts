@@ -44,7 +44,10 @@ export class CoursesController {
 
   @Get('export')
   @RequirePermissions('view:courses')
-  @ApiOperation({ summary: 'Exportar cursos a XLSX' })
+  @ApiOperation({
+    summary:
+      'Exportar todos los cursos a XLSX (una hoja por curso con alumnos y datos de apoderado)',
+  })
   @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
   async exportXlsx(@Res() res: Response) {
     const buffer = await this.coursesService.exportToXlsx();
