@@ -18,6 +18,8 @@ async function main() {
     const permissions = [
       'manage:users',
       'manage:roles',
+      'view:users',
+      'view:roles',
       'create:payment',
       'view:payments',
       'view:reports',

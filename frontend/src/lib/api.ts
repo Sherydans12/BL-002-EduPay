@@ -258,7 +258,7 @@ export const rolesApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  getPermissions: () => request<Permission[]>("/permissions"),
+  getPermissions: () => request<Permission[]>("/roles/permissions"),
 };
 
 // ─── Users ────────────────────────────────────────────────────

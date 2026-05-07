@@ -74,6 +74,12 @@ async function bootstrap() {
     customSiteTitle: 'EduPay API Docs',
   });
 
+  // Evita 404 en logs cuando el navegador pide el favicon contra el puerto de la API
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.get('/favicon.ico', (_req: unknown, res: { status: (n: number) => { end: () => void } }) =>
+    res.status(204).end(),
+  );
+
   const port = config.get<number>('PORT') || 3001;
   await app.listen(port);
   console.log(`🚀 EduPay API running on http://localhost:${port}/api`);
