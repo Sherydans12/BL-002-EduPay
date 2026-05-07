@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { paymentSchema, type PaymentFormData } from "@/lib/schemas/payment.schema";
-import { studentsApi, coursesApi, paymentsApi, conceptsApi } from "@/lib/api";
+import { paymentsApi, conceptsApi } from "@/lib/api";
+import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
 import type { Student, Course, PaymentConcept } from "@/lib/api";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownChevron, NativeSelectField } from "@/components/ui/dropdown-chevron";
+import { cmdkCourseFilter, cmdkPersonFilter } from "@/lib/flexible-search";
 import { useDropzone } from "react-dropzone";
 import { UploadCloud, FileText, X } from "lucide-react";
 
@@ -70,8 +72,8 @@ export default function NewPaymentPage() {
 
   useEffect(() => {
     Promise.all([
-      coursesApi.getAll().then((res) => setCourses(res.data)),
-      studentsApi.getAll().then((res) => setStudents(res.data)),
+      fetchAllCourses().then((data) => setCourses(data)),
+      fetchAllStudents().then((data) => setStudents(data)),
       conceptsApi.getAll().then((data) => {
         const active = data.filter((c) => c.isActive);
         setConcepts(active);
@@ -200,7 +202,7 @@ export default function NewPaymentPage() {
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0">
-                      <Command className="bg-transparent">
+                      <Command filter={cmdkPersonFilter} className="bg-transparent">
                         <CommandInput placeholder="Buscar por nombre o RUT..." className="border-none focus:ring-0" />
                         <CommandList>
                           <CommandEmpty>No se encontró el alumno.</CommandEmpty>
@@ -208,6 +210,7 @@ export default function NewPaymentPage() {
                             {filteredStudents.map((s) => (
                               <CommandItem
                                 key={s.id}
+                                value={`${s.name}\t${s.rut}`}
                                 onSelect={() => { field.onChange(s.id); setStudentOpen(false); }}
                                 className="cursor-pointer"
                               >
@@ -275,7 +278,7 @@ export default function NewPaymentPage() {
                     </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[480px] p-0">
-                    <Command className="bg-transparent">
+                    <Command filter={cmdkCourseFilter} className="bg-transparent">
                       <CommandInput placeholder="Buscar concepto..." className="border-none focus:ring-0" />
                       <CommandList>
                         <CommandEmpty>No se encontró el concepto.</CommandEmpty>
@@ -283,6 +286,7 @@ export default function NewPaymentPage() {
                           {concepts.map((c) => (
                             <CommandItem
                               key={c.id}
+                              value={c.name}
                               onSelect={() => handleConceptSelect(c)}
                               className="cursor-pointer"
                             >

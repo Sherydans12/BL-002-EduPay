@@ -61,14 +61,22 @@ export class GuardiansController {
   @Get()
   @RequirePermissions('view:guardians')
   @ApiOperation({ summary: 'Listar todos los apoderados (paginado)' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Buscar por nombre o RUT (orden de palabras flexible)',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
   @ApiResponse({ status: 200, description: 'Lista paginada de apoderados con conteo de alumnos' })
   findAll(
+    @Query('search') search: string | undefined,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    return this.guardiansService.findAll(page, limit);
+    const trimmed = search?.trim();
+    return this.guardiansService.findAll(page, limit, trimmed || undefined);
   }
 
   @Get(':id')

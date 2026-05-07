@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { paymentsApi, studentsApi, coursesApi, downloadBlob } from "@/lib/api";
+import { paymentsApi, downloadBlob } from "@/lib/api";
+import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
 import type { Payment, Student, Course } from "@/lib/api";
+import { cmdkPersonFilter } from "@/lib/flexible-search";
 import { toast } from "sonner";
 import { Search, Download, FileText, Plus, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
@@ -51,8 +53,8 @@ export default function PagosMasterPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
   useEffect(() => {
-    coursesApi.getAll().then((res) => setCourses(res.data)).catch(() => {});
-    studentsApi.getAll().then((res) => setStudents(res.data)).catch(() => {});
+    fetchAllCourses().then((data) => setCourses(data)).catch(() => {});
+    fetchAllStudents().then((data) => setStudents(data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -188,7 +190,7 @@ export default function PagosMasterPage() {
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]" align="start">
-                  <Command className="bg-transparent">
+                  <Command filter={cmdkPersonFilter} className="bg-transparent">
                     <CommandInput placeholder="Buscar por nombre o RUT..." className="border-none focus:ring-0" />
                     <CommandList>
                       <CommandEmpty>No se encontró el alumno.</CommandEmpty>
@@ -196,7 +198,7 @@ export default function PagosMasterPage() {
                         {filteredStudents.map((s) => (
                           <CommandItem
                             key={s.id}
-                            value={`${s.name} ${s.rut}`}
+                            value={`${s.name}\t${s.rut}`}
                             onSelect={() => {
                               setFilters((f) => ({ ...f, studentId: s.id }));
                               setStudentOpen(false);

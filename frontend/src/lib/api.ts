@@ -208,10 +208,11 @@ export interface CourseSummary {
 
 // ─── Courses ──────────────────────────────────────────────────
 export const coursesApi = {
-  getAll: (page?: number, limit?: number) => {
+  getAll: (page?: number, limit?: number, search?: string) => {
     const params = new URLSearchParams();
     if (page) params.set("page", page.toString());
     if (limit) params.set("limit", limit.toString());
+    if (search?.trim()) params.set("search", search.trim());
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<PaginatedResponse<Course>>(`/courses${query}`);
   },
@@ -233,10 +234,11 @@ export const coursesApi = {
 
 // ─── Guardians ────────────────────────────────────────────────
 export const guardiansApi = {
-  getAll: (page?: number, limit?: number) => {
+  getAll: (page?: number, limit?: number, search?: string) => {
     const params = new URLSearchParams();
     if (page) params.set("page", page.toString());
     if (limit) params.set("limit", limit.toString());
+    if (search?.trim()) params.set("search", search.trim());
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<PaginatedResponse<Guardian>>(`/guardians${query}`);
   },
@@ -258,11 +260,12 @@ export const guardiansApi = {
 
 // ─── Students ─────────────────────────────────────────────────
 export const studentsApi = {
-  getAll: (courseId?: number, page?: number, limit?: number) => {
+  getAll: (courseId?: number, page?: number, limit?: number, search?: string) => {
     const params = new URLSearchParams();
     if (courseId) params.set("courseId", courseId.toString());
     if (page) params.set("page", page.toString());
     if (limit) params.set("limit", limit.toString());
+    if (search?.trim()) params.set("search", search.trim());
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<PaginatedResponse<Student>>(`/students${query}`);
   },

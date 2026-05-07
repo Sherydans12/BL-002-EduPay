@@ -8,6 +8,7 @@ import { CreateGuardianDto } from './dto/create-guardian.dto';
 import { UpdateGuardianDto } from './dto/update-guardian.dto';
 import { Prisma } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
+import { buildGuardianSearchWhere } from '../common/search/flexible-search';
 
 @Injectable()
 export class GuardiansService {
@@ -27,9 +28,12 @@ export class GuardiansService {
     }
   }
 
-  async findAll(page = 1, limit = 50) {
+  async findAll(page = 1, limit = 50, search?: string) {
     const skip = (page - 1) * limit;
-    const where = { deletedAt: null };
+    const where: Prisma.GuardianWhereInput = {
+      deletedAt: null,
+      ...(buildGuardianSearchWhere(search) ?? {}),
+    };
 
     const [data, total] = await Promise.all([
       this.prisma.guardian.findMany({

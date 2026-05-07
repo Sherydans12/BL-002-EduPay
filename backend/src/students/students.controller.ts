@@ -67,16 +67,29 @@ export class StudentsController {
   @RequirePermissions('view:students')
   @ApiOperation({ summary: 'Listar alumnos paginados (filtro opcional por curso)' })
   @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Buscar por nombre o RUT (coincidencia parcial)',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
   @ApiResponse({ status: 200, description: 'Lista paginada de alumnos con curso y apoderado' })
   findAll(
     @Query('courseId') courseId?: string,
+    @Query('search') search?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
   ) {
     const parsedCourseId = courseId ? Number(courseId) : undefined;
-    return this.studentsService.findAll(parsedCourseId, page, limit);
+    const trimmed = search?.trim();
+    return this.studentsService.findAll(
+      parsedCourseId,
+      page,
+      limit,
+      trimmed || undefined,
+    );
   }
 
   @Get(':id')

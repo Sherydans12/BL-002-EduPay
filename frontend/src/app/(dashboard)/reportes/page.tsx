@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { paymentsApi, coursesApi, studentsApi, reportsApi, downloadBlob } from "@/lib/api";
+import { paymentsApi, reportsApi, downloadBlob } from "@/lib/api";
+import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
 import type { Payment, Course, Student, CourseSummary, ReportSummary } from "@/lib/api";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -39,8 +40,8 @@ export default function ReportsPage() {
   const [tab, setTab] = useState<"table" | "summary">("table");
 
   useEffect(() => {
-    coursesApi.getAll().then((res) => setCourses(res.data)).catch(() => {});
-    studentsApi.getAll().then((res) => setStudents(res.data)).catch(() => {});
+    fetchAllCourses().then((data) => setCourses(data)).catch(() => {});
+    fetchAllStudents().then((data) => setStudents(data)).catch(() => {});
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -257,7 +258,7 @@ export default function ReportsPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                      <th className="px-6 py-4">Fecha</th><th className="px-6 py-4">Alumno</th><th className="px-6 py-4">Curso</th>
+                      <th className="px-6 py-4">Fecha</th><th className="px-6 py-4">Alumno</th><th className="px-6 py-4 whitespace-nowrap">Curso</th>
                       <th className="px-6 py-4">Monto</th><th className="px-6 py-4">Método</th><th className="px-6 py-4">Pagador</th><th className="px-6 py-4">Boleta</th>
                     </tr>
                   </thead>
@@ -266,7 +267,7 @@ export default function ReportsPage() {
                       <tr key={p.id} className="hover:bg-[var(--color-surface-hover)] transition-colors animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
                         <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{new Date(p.paymentDate).toLocaleDateString("es-CL")}</td>
                         <td className="px-6 py-4"><p className="font-medium text-white text-sm">{p.student.name}</p><p className="text-xs text-[var(--color-text-muted)]">{p.student.rut}</p></td>
-                        <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{p.student.course.name}</td>
+                        <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)] whitespace-nowrap">{p.student.course.name}</td>
                         <td className="px-6 py-4 font-semibold text-emerald-400">${p.amount.toLocaleString("es-CL")}</td>
                         <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-[var(--color-primary-light)] text-blue-300">{METHOD_LABELS[p.method] || p.method}</span></td>
                         <td className="px-6 py-4 text-sm">{p.payerName ? (<div><p className="text-white">{p.payerName}</p>{p.payerRut && <p className="text-xs text-[var(--color-text-muted)]">{p.payerRut}</p>}</div>) : <span className="text-[var(--color-text-muted)] italic">Apoderado</span>}</td>

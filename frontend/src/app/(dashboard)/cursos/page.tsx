@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { coursesApi, downloadBlob } from "@/lib/api";
 import type { Course } from "@/lib/api";
@@ -25,7 +25,9 @@ export default function CoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const prevDebouncedSearch = useRef<string | null>(null);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -38,10 +40,54 @@ export default function CoursesPage() {
     resolver: zodResolver(courseSchema),
   });
 
-  const load = async (p: number) => {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const searchChanged =
+      prevDebouncedSearch.current !== null &&
+      prevDebouncedSearch.current !== debouncedSearch;
+
+    if (searchChanged && page !== 1) {
+      setPage(1);
+      return;
+    }
+
+    prevDebouncedSearch.current = debouncedSearch;
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await coursesApi.getAll(page, LIMIT, debouncedSearch || undefined);
+        if (cancelled) return;
+        setCourses(res.data);
+        setMeta({
+          total: res.meta.total,
+          page: res.meta.page,
+          limit: res.meta.limit,
+          lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
+        });
+      } catch (err: unknown) {
+        if (!cancelled) {
+          toast.error(err instanceof Error ? err.message : "Error al cargar cursos");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedSearch]);
+
+  const reloadCurrent = async () => {
     setLoading(true);
     try {
-      const res = await coursesApi.getAll(p, LIMIT);
+      const res = await coursesApi.getAll(page, LIMIT, debouncedSearch || undefined);
       setCourses(res.data);
       setMeta({
         total: res.meta.total,
@@ -55,8 +101,6 @@ export default function CoursesPage() {
       setLoading(false);
     }
   };
-
-  useEffect(() => { load(page); }, [page]);
 
   const openCreateDialog = () => {
     setEditingCourse(null);
@@ -76,12 +120,12 @@ export default function CoursesPage() {
       if (editingCourse) {
         await coursesApi.update(editingCourse.id, data);
         toast.success("Curso actualizado exitosamente");
-        load(page);
+        await reloadCurrent();
       } else {
         await coursesApi.create(data);
         toast.success("Curso creado exitosamente");
         setPage(1);
-        if (page === 1) load(1);
+        if (page === 1) await reloadCurrent();
       }
       setIsDialogOpen(false);
     } catch (err: unknown) {
@@ -96,15 +140,13 @@ export default function CoursesPage() {
     try {
       await coursesApi.delete(deleteId);
       toast.success("Curso eliminado exitosamente");
-      load(page);
+      await reloadCurrent();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al eliminar. Puede tener alumnos asociados.");
     } finally {
       setDeleteId(null);
     }
   };
-
-  const filtered = courses.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -161,7 +203,7 @@ export default function CoursesPage() {
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : courses.length === 0 ? (
           <div className="text-center py-16 text-[var(--color-text-muted)]">
             No hay cursos que coincidan con la búsqueda
           </div>
@@ -171,17 +213,17 @@ export default function CoursesPage() {
               <thead>
                 <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
                   <th className="px-6 py-4">ID</th>
-                  <th className="px-6 py-4">Nombre</th>
+                  <th className="px-6 py-4 whitespace-nowrap">Curso</th>
                   <th className="px-6 py-4">Alumnos</th>
                   <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {filtered.map((c) => (
+                {courses.map((c) => (
                   <tr key={c.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
                     <td className="px-6 py-4 text-sm text-[var(--color-text-muted)]">#{c.id}</td>
-                    <td className="px-6 py-4">
-                      <span className="font-medium text-white">{c.name}</span>
+                    <td className="px-6 py-4 whitespace-nowrap align-middle">
+                      <span className="inline-flex font-medium text-white whitespace-nowrap">{c.name}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400">

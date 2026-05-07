@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { guardiansApi, downloadBlob } from "@/lib/api";
 import type { Guardian } from "@/lib/api";
 import { useForm } from "react-hook-form";
@@ -43,7 +43,9 @@ export default function GuardiansPage() {
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const prevDebouncedSearch = useRef<string | null>(null);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -57,10 +59,54 @@ export default function GuardiansPage() {
     defaultValues: { rut: "", name: "", email: "", phone: "" }
   });
 
-  const load = async (p: number) => {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const searchChanged =
+      prevDebouncedSearch.current !== null &&
+      prevDebouncedSearch.current !== debouncedSearch;
+
+    if (searchChanged && page !== 1) {
+      setPage(1);
+      return;
+    }
+
+    prevDebouncedSearch.current = debouncedSearch;
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await guardiansApi.getAll(page, LIMIT, debouncedSearch || undefined);
+        if (cancelled) return;
+        setGuardians(res.data);
+        setMeta({
+          total: res.meta.total,
+          page: res.meta.page,
+          limit: res.meta.limit,
+          lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
+        });
+      } catch (err: unknown) {
+        if (!cancelled) {
+          toast.error(err instanceof Error ? err.message : "Error al cargar apoderados");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedSearch]);
+
+  const reloadCurrent = async () => {
     setLoading(true);
     try {
-      const res = await guardiansApi.getAll(p, LIMIT);
+      const res = await guardiansApi.getAll(page, LIMIT, debouncedSearch || undefined);
       setGuardians(res.data);
       setMeta({
         total: res.meta.total,
@@ -74,8 +120,6 @@ export default function GuardiansPage() {
       setLoading(false);
     }
   };
-
-  useEffect(() => { load(page); }, [page]);
 
   const openCreateDialog = () => {
     setEditingGuardian(null);
@@ -96,12 +140,12 @@ export default function GuardiansPage() {
       if (editingGuardian) {
         await guardiansApi.update(editingGuardian.id, payload);
         toast.success("Apoderado actualizado exitosamente");
-        load(page);
+        await reloadCurrent();
       } else {
         await guardiansApi.create(payload);
         toast.success("Apoderado creado exitosamente");
         setPage(1);
-        if (page === 1) load(1);
+        if (page === 1) await reloadCurrent();
       }
       setIsDialogOpen(false);
     } catch (err: unknown) {
@@ -116,18 +160,13 @@ export default function GuardiansPage() {
     try {
       await guardiansApi.delete(deleteId);
       toast.success("Apoderado eliminado exitosamente");
-      load(page);
+      await reloadCurrent();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al eliminar. Puede tener alumnos asociados.");
     } finally {
       setDeleteId(null);
     }
   };
-
-  const filtered = guardians.filter(g =>
-    g.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    g.rut.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -184,7 +223,7 @@ export default function GuardiansPage() {
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : guardians.length === 0 ? (
           <div className="text-center py-16 text-[var(--color-text-muted)]">No hay apoderados que coincidan con la búsqueda</div>
         ) : (
           <>
@@ -196,7 +235,7 @@ export default function GuardiansPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {filtered.map((g) => (
+                {guardians.map((g) => (
                   <tr key={g.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
                     <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{g.rut}</td>
                     <td className="px-6 py-4 font-medium text-white">{g.name}</td>

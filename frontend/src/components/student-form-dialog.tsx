@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownChevron } from "@/components/ui/dropdown-chevron";
+import { cmdkCourseFilter, cmdkPersonFilter } from "@/lib/flexible-search";
 
 const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
 
@@ -152,7 +153,7 @@ export function StudentFormDialog({
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[450px] p-0 z-[60]">
-                      <Command className="bg-transparent">
+                      <Command filter={cmdkCourseFilter} className="bg-transparent">
                         <CommandInput placeholder="Buscar curso..." className="border-none focus:ring-0" />
                         <CommandList>
                           <CommandEmpty>No se encontró el curso.</CommandEmpty>
@@ -160,6 +161,7 @@ export function StudentFormDialog({
                             {courses.map((c) => (
                               <CommandItem
                                 key={c.id}
+                                value={c.name}
                                 onSelect={() => {
                                   field.onChange(c.id);
                                   setCourseOpen(false);
@@ -198,7 +200,7 @@ export function StudentFormDialog({
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[450px] p-0 z-[60]">
-                      <Command className="bg-transparent">
+                      <Command filter={cmdkPersonFilter} className="bg-transparent">
                         <CommandInput placeholder="Buscar apoderado por nombre o RUT..." className="border-none focus:ring-0" />
                         <CommandList>
                           <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
@@ -206,6 +208,7 @@ export function StudentFormDialog({
                             {guardians.map((g) => (
                               <CommandItem
                                 key={g.id}
+                                value={`${g.name}\t${g.rut}`}
                                 onSelect={() => {
                                   field.onChange(g.id);
                                   setGuardianOpen(false);

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { studentsApi, coursesApi, guardiansApi, downloadBlob } from "@/lib/api";
+import { useEffect, useState, useRef } from "react";
+import { studentsApi, downloadBlob } from "@/lib/api";
+import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
 import type { Student, Course, Guardian } from "@/lib/api";
 import { toast } from "sonner";
 import { FileSpreadsheet } from "lucide-react";
@@ -17,7 +18,9 @@ export default function StudentsPage() {
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const prevDebouncedSearch = useRef<string | null>(null);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -26,18 +29,62 @@ export default function StudentsPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
-    Promise.all([coursesApi.getAll(1, 200), guardiansApi.getAll(1, 200)])
+    Promise.all([fetchAllCourses(), fetchAllGuardians()])
       .then(([cRes, gRes]) => {
-        setCourses(cRes.data);
-        setGuardians(gRes.data);
+        setCourses(cRes);
+        setGuardians(gRes);
       })
       .catch(() => {});
   }, []);
 
-  const loadStudents = async (p: number) => {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const searchChanged =
+      prevDebouncedSearch.current !== null &&
+      prevDebouncedSearch.current !== debouncedSearch;
+
+    if (searchChanged && page !== 1) {
+      setPage(1);
+      return;
+    }
+
+    prevDebouncedSearch.current = debouncedSearch;
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await studentsApi.getAll(undefined, page, LIMIT, debouncedSearch || undefined);
+        if (cancelled) return;
+        setStudents(res.data);
+        setMeta({
+          total: res.meta.total,
+          page: res.meta.page,
+          limit: res.meta.limit,
+          lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
+        });
+      } catch (err: unknown) {
+        if (!cancelled) {
+          toast.error(err instanceof Error ? err.message : "Error al cargar alumnos");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedSearch]);
+
+  const reloadCurrentStudents = async () => {
     setLoading(true);
     try {
-      const res = await studentsApi.getAll(undefined, p, LIMIT);
+      const res = await studentsApi.getAll(undefined, page, LIMIT, debouncedSearch || undefined);
       setStudents(res.data);
       setMeta({
         total: res.meta.total,
@@ -51,10 +98,6 @@ export default function StudentsPage() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadStudents(page);
-  }, [page]);
 
   const openCreateDialog = () => {
     setEditingStudent(null);
@@ -73,10 +116,10 @@ export default function StudentsPage() {
 
   const handleStudentSaved = async () => {
     if (editingStudent) {
-      await loadStudents(page);
+      await reloadCurrentStudents();
     } else {
       setPage(1);
-      if (page === 1) await loadStudents(1);
+      if (page === 1) await reloadCurrentStudents();
     }
   };
 
@@ -85,19 +128,13 @@ export default function StudentsPage() {
     try {
       await studentsApi.delete(deleteId);
       toast.success("Alumno eliminado exitosamente");
-      loadStudents(page);
+      await reloadCurrentStudents();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al eliminar alumno");
     } finally {
       setDeleteId(null);
     }
   };
-
-  const filtered = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.rut.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -154,7 +191,7 @@ export default function StudentsPage() {
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : students.length === 0 ? (
           <div className="text-center py-16 text-[var(--color-text-muted)]">No hay alumnos que coincidan con la búsqueda</div>
         ) : (
           <>
@@ -169,12 +206,14 @@ export default function StudentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {filtered.map((s) => (
+                {students.map((s) => (
                   <tr key={s.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
                     <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{s.rut}</td>
                     <td className="px-6 py-4 font-medium text-white">{s.name}</td>
-                    <td className="px-6 py-4">
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300">{s.course.name}</span>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300 whitespace-nowrap">
+                        {s.course.name}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{s.guardian.name}</td>
                     <td className="px-6 py-4 text-right space-x-2">

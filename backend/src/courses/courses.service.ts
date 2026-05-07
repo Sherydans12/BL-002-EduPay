@@ -7,6 +7,8 @@ import {
   sanitizeExcelSheetName,
   type ExcelColumn,
 } from '../common/excel/excel.helper';
+import { Prisma } from '@prisma/client';
+import { buildCourseSearchWhere } from '../common/search/flexible-search';
 
 @Injectable()
 export class CoursesService {
@@ -16,9 +18,12 @@ export class CoursesService {
     return this.prisma.course.create({ data: dto });
   }
 
-  async findAll(page = 1, limit = 50) {
+  async findAll(page = 1, limit = 50, search?: string) {
     const skip = (page - 1) * limit;
-    const where = { deletedAt: null };
+    const where: Prisma.CourseWhereInput = {
+      deletedAt: null,
+      ...(buildCourseSearchWhere(search) ?? {}),
+    };
 
     const [data, total] = await Promise.all([
       this.prisma.course.findMany({

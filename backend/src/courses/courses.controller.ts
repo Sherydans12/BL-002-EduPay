@@ -63,14 +63,22 @@ export class CoursesController {
   @Get()
   @RequirePermissions('view:courses')
   @ApiOperation({ summary: 'Listar todos los cursos (paginado)' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Buscar por nombre de curso (orden de palabras flexible)',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
   @ApiResponse({ status: 200, description: 'Lista paginada de cursos con conteo de alumnos' })
   findAll(
+    @Query('search') search: string | undefined,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
-    return this.coursesService.findAll(page, limit);
+    const trimmed = search?.trim();
+    return this.coursesService.findAll(page, limit, trimmed || undefined);
   }
 
   @Get(':id')

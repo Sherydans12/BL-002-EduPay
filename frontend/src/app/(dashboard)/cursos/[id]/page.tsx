@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { coursesApi, guardiansApi } from "@/lib/api";
+import { coursesApi } from "@/lib/api";
+import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
 import type { Course, CourseWithStudents, Guardian, Student } from "@/lib/api";
 import { StudentFormDialog } from "@/components/student-form-dialog";
+import { matchesStudentRow } from "@/lib/flexible-search";
 
 function rowToStudent(row: CourseWithStudents["students"][number], courseName: string): Student {
   return {
@@ -75,24 +77,19 @@ export default function CourseStudentsPage() {
   }, [courseId]);
 
   useEffect(() => {
-    Promise.all([coursesApi.getAll(1, 200), guardiansApi.getAll(1, 200)])
+    Promise.all([fetchAllCourses(), fetchAllGuardians()])
       .then(([cRes, gRes]) => {
-        setCourses(cRes.data);
-        setGuardians(gRes.data);
+        setCourses(cRes);
+        setGuardians(gRes);
       })
       .catch(() => {});
   }, []);
 
   const filtered = useMemo(() => {
     if (!course?.students) return [];
-    const q = searchTerm.toLowerCase().trim();
+    const q = searchTerm.trim();
     if (!q) return course.students;
-    return course.students.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.rut.toLowerCase().includes(q) ||
-        s.guardian.name.toLowerCase().includes(q)
-    );
+    return course.students.filter((s) => matchesStudentRow(s, q));
   }, [course, searchTerm]);
 
   const handleDialogOpenChange = (open: boolean) => {

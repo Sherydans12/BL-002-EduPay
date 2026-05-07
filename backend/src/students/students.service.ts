@@ -8,6 +8,7 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { Prisma } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
+import { buildStudentSearchWhere } from '../common/search/flexible-search';
 
 @Injectable()
 export class StudentsService {
@@ -30,10 +31,13 @@ export class StudentsService {
     }
   }
 
-  async findAll(courseId?: number, page = 1, limit = 50) {
+  async findAll(courseId?: number, page = 1, limit = 50, search?: string) {
     const skip = (page - 1) * limit;
-    const where: Prisma.StudentWhereInput = { deletedAt: null };
-    if (courseId) where.courseId = courseId;
+    const where: Prisma.StudentWhereInput = {
+      deletedAt: null,
+      ...(courseId ? { courseId } : {}),
+      ...(buildStudentSearchWhere(search) ?? {}),
+    };
 
     const [data, total] = await Promise.all([
       this.prisma.student.findMany({

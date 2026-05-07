@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { reportsApi, coursesApi, Course, ReportSummary } from '@/lib/api';
+import { reportsApi, Course, ReportSummary } from '@/lib/api';
+import { fetchAllCourses } from '@/lib/fetch-all-pages';
 import { NativeSelectField } from '@/components/ui/dropdown-chevron';
 
 export default function ReportesPage() {
@@ -16,8 +17,8 @@ export default function ReportesPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    coursesApi.getAll()
-      .then((res) => setCourses(res.data))
+    fetchAllCourses()
+      .then(setCourses)
       .catch(console.error);
   }, []);
 
