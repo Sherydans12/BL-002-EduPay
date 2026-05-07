@@ -148,7 +148,7 @@ export default function UsuariosPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Invitar Nuevo Usuario</DialogTitle>
           </DialogHeader>
@@ -179,7 +179,7 @@ export default function UsuariosPage() {
                         <span className="text-[var(--color-text-muted)] text-xs">▼</span>
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0 bg-[var(--color-surface)] border-[var(--color-border)] text-white z-[60]">
+                    <PopoverContent className="w-[400px] p-0 z-[60]">
                       <Command className="bg-transparent">
                         <CommandInput placeholder="Buscar rol..." className="border-none focus:ring-0" />
                         <CommandList>
@@ -192,7 +192,7 @@ export default function UsuariosPage() {
                                   field.onChange(role.id);
                                   setRoleOpen(false);
                                 }}
-                                className="cursor-pointer hover:bg-[var(--color-surface-hover)] data-[selected=true]:bg-[var(--color-surface-hover)]"
+                                className="cursor-pointer"
                               >
                                 {role.name}
                               </CommandItem>
@@ -206,7 +206,7 @@ export default function UsuariosPage() {
               />
               {errors.roleId && <p className="text-red-400 text-xs mt-1">{errors.roleId.message}</p>}
             </div>
-            <DialogFooter className="mt-6 pt-4 border-t border-[var(--color-border)]">
+            <DialogFooter className="mt-6 pt-4">
               <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors">Cancelar</button>
               <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg transition-all disabled:opacity-50">
                 {isSubmitting ? "Enviando..." : "Invitar"}
@@ -217,7 +217,7 @@ export default function UsuariosPage() {
       </Dialog>
 
       <AlertDialog open={!!toggleUser} onOpenChange={(open) => !open && setToggleUser(null)}>
-        <AlertDialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Acción</AlertDialogTitle>
             <AlertDialogDescription className="text-[var(--color-text-secondary)]">

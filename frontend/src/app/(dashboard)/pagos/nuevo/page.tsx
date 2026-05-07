@@ -168,7 +168,7 @@ export default function NewPaymentPage() {
                         <span className="text-[var(--color-text-muted)] text-xs">▼</span>
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0 bg-[var(--color-surface)] border-[var(--color-border)] text-white">
+                    <PopoverContent className="w-[400px] p-0">
                       <Command className="bg-transparent">
                         <CommandInput placeholder="Buscar por nombre o RUT..." className="border-none focus:ring-0" />
                         <CommandList>
@@ -178,7 +178,7 @@ export default function NewPaymentPage() {
                               <CommandItem
                                 key={s.id}
                                 onSelect={() => { field.onChange(s.id); setStudentOpen(false); }}
-                                className="cursor-pointer hover:bg-[var(--color-surface-hover)] data-[selected=true]:bg-[var(--color-surface-hover)]"
+                                className="cursor-pointer"
                               >
                                 <div className="flex flex-col">
                                   <span>{s.name}</span>

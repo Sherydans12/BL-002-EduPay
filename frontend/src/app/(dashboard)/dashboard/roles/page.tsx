@@ -124,7 +124,7 @@ export default function RolesPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Crear Nuevo Rol</DialogTitle>
           </DialogHeader>
@@ -167,7 +167,7 @@ export default function RolesPage() {
               </div>
             </div>
 
-            <DialogFooter className="pt-4 border-t border-[var(--color-border)]">
+            <DialogFooter className="pt-4">
               <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors">Cancelar</button>
               <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg transition-all disabled:opacity-50">
                 {isSubmitting ? "Guardando..." : "Guardar Rol"}

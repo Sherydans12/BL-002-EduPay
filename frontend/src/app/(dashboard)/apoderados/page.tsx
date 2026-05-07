@@ -193,7 +193,7 @@ export default function GuardiansPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">{editingGuardian ? "Editar Apoderado" : "Nuevo Apoderado"}</DialogTitle>
           </DialogHeader>
@@ -231,7 +231,7 @@ export default function GuardiansPage() {
       </Dialog>
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
             <AlertDialogDescription className="text-[var(--color-text-secondary)]">Esta acción no se puede deshacer. Se eliminará permanentemente este apoderado.</AlertDialogDescription>

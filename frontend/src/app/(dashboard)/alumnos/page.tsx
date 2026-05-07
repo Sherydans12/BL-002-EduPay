@@ -203,7 +203,7 @@ export default function StudentsPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">{editingStudent ? "Editar Alumno" : "Nuevo Alumno"}</DialogTitle>
           </DialogHeader>
@@ -236,7 +236,7 @@ export default function StudentsPage() {
                           <span className="text-[var(--color-text-muted)] text-xs">▼</span>
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[450px] p-0 bg-[var(--color-surface)] border-[var(--color-border)] text-white z-[60]">
+                      <PopoverContent className="w-[450px] p-0 z-[60]">
                         <Command className="bg-transparent">
                           <CommandInput placeholder="Buscar curso..." className="border-none focus:ring-0" />
                           <CommandList>
@@ -249,7 +249,7 @@ export default function StudentsPage() {
                                     field.onChange(course.id);
                                     setCourseOpen(false);
                                   }}
-                                  className="cursor-pointer hover:bg-[var(--color-surface-hover)] data-[selected=true]:bg-[var(--color-surface-hover)]"
+                                  className="cursor-pointer"
                                 >
                                   {course.name}
                                 </CommandItem>
@@ -280,7 +280,7 @@ export default function StudentsPage() {
                           <span className="text-[var(--color-text-muted)] text-xs">▼</span>
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[450px] p-0 bg-[var(--color-surface)] border-[var(--color-border)] text-white z-[60]">
+                      <PopoverContent className="w-[450px] p-0 z-[60]">
                         <Command className="bg-transparent">
                           <CommandInput placeholder="Buscar apoderado por nombre o RUT..." className="border-none focus:ring-0" />
                           <CommandList>
@@ -293,7 +293,7 @@ export default function StudentsPage() {
                                     field.onChange(g.id);
                                     setGuardianOpen(false);
                                   }}
-                                  className="cursor-pointer hover:bg-[var(--color-surface-hover)] data-[selected=true]:bg-[var(--color-surface-hover)]"
+                                  className="cursor-pointer"
                                 >
                                   <div className="flex flex-col">
                                     <span>{g.name}</span>
@@ -312,7 +312,7 @@ export default function StudentsPage() {
               </div>
             </div>
 
-            <DialogFooter className="mt-6 pt-4 border-t border-[var(--color-border)]">
+            <DialogFooter className="mt-6 pt-4">
               <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors">Cancelar</button>
               <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-50">
                 {isSubmitting ? "Guardando..." : "Guardar"}
@@ -323,7 +323,7 @@ export default function StudentsPage() {
       </Dialog>
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
             <AlertDialogDescription className="text-[var(--color-text-secondary)]">Esta acción no se puede deshacer. Se eliminará permanentemente este alumno y sus pagos asociados.</AlertDialogDescription>

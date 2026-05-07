@@ -184,7 +184,7 @@ export default function CoursesPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">{editingCourse ? "Editar Curso" : "Nuevo Curso"}</DialogTitle>
           </DialogHeader>
@@ -219,7 +219,7 @@ export default function CoursesPage() {
       </Dialog>
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent className="bg-[var(--color-bg)] border-[var(--color-border)] text-white">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
             <AlertDialogDescription className="text-[var(--color-text-secondary)]">
