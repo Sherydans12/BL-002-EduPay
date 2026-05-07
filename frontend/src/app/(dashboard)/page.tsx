@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { coursesApi, studentsApi, paymentsApi } from "@/lib/api";
-import type { Course, Student, PaginatedResponse, Payment } from "@/lib/api";
+import type { Payment } from "@/lib/api";
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
+  const [courseCount, setCourseCount] = useState(0);
+  const [studentCount, setStudentCount] = useState(0);
   const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
   const [totalAmount, setTotalAmount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -15,13 +15,13 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [c, s, p] = await Promise.all([
+        const [cRes, sRes, p] = await Promise.all([
           coursesApi.getAll(),
           studentsApi.getAll(),
           paymentsApi.getAll({ limit: "5" }),
         ]);
-        setCourses(c);
-        setStudents(s);
+        setCourseCount(cRes.meta.total);
+        setStudentCount(sRes.meta.total);
         setRecentPayments(p.data);
         setTotalAmount(p.data.reduce((acc, pay) => acc + pay.amount, 0));
       } catch {
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const stats = [
     {
       label: "Cursos",
-      value: courses.length,
+      value: courseCount,
       gradient: "from-blue-500 to-cyan-400",
       icon: (
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -46,7 +46,7 @@ export default function DashboardPage() {
     },
     {
       label: "Alumnos",
-      value: students.length,
+      value: studentCount,
       gradient: "from-emerald-500 to-green-400",
       icon: (
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
