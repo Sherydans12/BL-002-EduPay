@@ -1,12 +1,16 @@
 /**
  * ============================================================
- *  CLI — Importación Masiva desde Excel
+ *  CLI — Importación Masiva desde Excel (Datos Sucios)
  *  Uso: npm run db:import  (desde la carpeta backend/)
  *
  *  Coloca tu archivo Excel en:
  *    backend/uploads/importacion.xlsx
  *
- *  Ajusta el bloque COLUMN MAP más abajo antes de ejecutar.
+ *  El script detecta automáticamente:
+ *   • El nombre del curso desde la Fila 1 de cada hoja
+ *   • El formato de columnas desde la Fila 2 (cabeceras)
+ *   • Los datos desde la Fila 3 en adelante
+ *   • Procesa TODAS las hojas del archivo
  * ============================================================
  */
 
@@ -17,39 +21,14 @@ import * as ExcelJS from 'exceljs';
 import * as path from 'path';
 import * as fs from 'fs';
 
-// ─── COLUMN MAP ──────────────────────────────────────────────────────────────
-// Ajusta los números de columna según tu Excel (1 = columna A, 2 = B, etc.)
-// Si tu Excel tiene encabezados en la fila 1, el script los saltará automáticamente.
-
-const COLUMN_MAP = {
-  /** Nombre del curso (ej. "1° Básico A") */
-  CURSO: 1,
-
-  /** RUT del alumno (ej. "12.345.678-9") */
-  RUT_ALUMNO: 2,
-
-  /** Nombre completo del alumno */
-  NOMBRE_ALUMNO: 3,
-
-  /** RUT del apoderado */
-  RUT_APODERADO: 4,
-
-  /** Nombre completo del apoderado */
-  NOMBRE_APODERADO: 5,
-
-  /** Email del apoderado (puede estar vacío) */
-  EMAIL_APODERADO: 6,
-
-  /** Teléfono del apoderado (puede estar vacío) */
-  TELEFONO_APODERADO: 7,
-};
-
-/** Número de la fila de encabezados (se omite). Por defecto: 1 */
-const HEADER_ROW = 1;
-
 /** Ruta al archivo Excel, relativa a la raíz del backend */
 const EXCEL_FILE_PATH = path.resolve(__dirname, '..', 'uploads', 'importacion.xlsx');
-// ─────────────────────────────────────────────────────────────────────────────
+
+/** Fila de cabeceras (siempre la 2 según el formato del colegio) */
+const HEADER_ROW_INDEX = 2;
+
+/** Los datos empiezan en la fila 3 */
+const DATA_START_ROW = 3;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -61,183 +40,306 @@ function cellText(row: ExcelJS.Row, colIndex: number): string {
 }
 
 /**
- * Normaliza un RUT chileno eliminando puntos y guión.
- * "12.345.678-9"  →  "123456789"
- * Ya normalizado: "123456789"  →  "123456789"
+ * Limpieza AGRESIVA de RUT: elimina absolutamente todo excepto dígitos y la letra K.
+ * Maneja errores comunes de tipeo como: "27,.206.121-1", "12 345 678-9", "12.345.678K"
+ * "27,.206.121-1"  →  "272061211"
+ * "12.345.678-K"   →  "12345678K"
  */
 function normalizeRut(rut: string): string {
-  return rut.replace(/\./g, '').replace(/-/g, '').trim().toUpperCase();
+  return rut.replace(/[^0-9kK]/gi, '').toUpperCase();
+}
+
+/** Valida que el RUT normalizado tenga una longitud mínima razonable */
+function isValidNormalizedRut(rut: string): boolean {
+  return /^[0-9]{6,8}[0-9K]$/.test(rut);
+}
+
+/** Detecta si un string parece un email válido */
+function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+// ─── Detección dinámica de columnas ──────────────────────────────────────────
+
+interface ColumnMap {
+  /** Índice de la columna con el RUT del alumno */
+  rut: number;
+  /** Índice de la columna con el nombre (o primer nombre en Formato B) */
+  nombre: number;
+  /** Solo en Formato B: apellido paterno */
+  apellidoPaterno?: number;
+  /** Solo en Formato B: apellido materno */
+  apellidoMaterno?: number;
+  /** Columna de correo electrónico (del apoderado) */
+  correo?: number;
+  /** Columna de teléfono */
+  telefono?: number;
+  /**
+   * A = nombre completo en una sola columna
+   * B = nombre + apellido paterno + apellido materno en columnas separadas
+   */
+  formatType: 'A' | 'B';
+}
+
+/**
+ * Escanea la fila de cabeceras (fila 2) y construye un mapa dinámico de columnas.
+ * Detecta el formato basándose en si existen columnas de apellidos separados.
+ */
+function detectColumns(headerRow: ExcelJS.Row): ColumnMap {
+  const headers: Array<{ col: number; text: string }> = [];
+
+  headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+    const text = (cell.text ?? String(cell.value ?? '')).trim().toUpperCase();
+    if (text) headers.push({ col: colNumber, text });
+  });
+
+  /** Retorna el índice de la primera columna cuyo header incluye alguna keyword */
+  const find = (...keywords: string[]): number | undefined => {
+    for (const kw of keywords) {
+      const match = headers.find((h) => h.text.includes(kw));
+      if (match) return match.col;
+    }
+    return undefined;
+  };
+
+  const rutCol = find('RUT') ?? 1;
+  const apellidoPaternoCol = find('PATERNO', 'AP. PATERNO', 'A. PATERNO', 'APE PATERNO');
+  const apellidoMaternoCol = find('MATERNO', 'AP. MATERNO', 'A. MATERNO', 'APE MATERNO');
+  const nombreCol = find('NOMBRE', 'ALUMNO', 'NOMBRE COMPLETO', 'NOMBRE ALUMNO') ?? 2;
+  const correoCol = find('CORREO', 'EMAIL', 'E-MAIL', 'MAIL');
+  const telefonoCol = find('TELÉFONO', 'TELEFONO', 'FONO', 'CELULAR', 'FONOS');
+
+  // Formato B si existen columnas de apellidos separados
+  const formatType: 'A' | 'B' = apellidoPaternoCol !== undefined ? 'B' : 'A';
+
+  return {
+    rut: rutCol,
+    nombre: nombreCol,
+    apellidoPaterno: apellidoPaternoCol,
+    apellidoMaterno: apellidoMaternoCol,
+    correo: correoCol,
+    telefono: telefonoCol,
+    formatType,
+  };
+}
+
+/**
+ * Extrae y construye el nombre completo del alumno según el formato detectado.
+ *
+ * Formato A: la columna de nombre ya contiene el nombre completo.
+ * Formato B: concatena nombre + apellido paterno + apellido materno.
+ */
+function extractStudentName(row: ExcelJS.Row, cols: ColumnMap): string {
+  if (cols.formatType === 'A') {
+    return cellText(row, cols.nombre);
+  }
+
+  const nombre = cellText(row, cols.nombre);
+  const apPaterno = cols.apellidoPaterno ? cellText(row, cols.apellidoPaterno) : '';
+  const apMaterno = cols.apellidoMaterno ? cellText(row, cols.apellidoMaterno) : '';
+
+  return [nombre, apPaterno, apMaterno]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
   console.log('');
-  console.log('═══════════════════════════════════════════════════');
+  console.log('═══════════════════════════════════════════════════════');
   console.log('  Importación Masiva — Cursos, Apoderados, Alumnos');
-  console.log('═══════════════════════════════════════════════════');
+  console.log('  Modo: detección dinámica + sanitización de datos sucios');
+  console.log('═══════════════════════════════════════════════════════');
   console.log(`  Archivo: ${EXCEL_FILE_PATH}`);
   console.log('');
 
-  // Validar que el archivo Excel exista antes de levantar el contexto de Nest
   if (!fs.existsSync(EXCEL_FILE_PATH)) {
     console.error(`ERROR: No se encontró el archivo Excel en:\n  ${EXCEL_FILE_PATH}`);
     console.error('Asegúrate de copiar tu Excel como: backend/uploads/importacion.xlsx');
     process.exit(1);
   }
 
-  // Levantar contexto NestJS para acceder a PrismaService correctamente configurado
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn'],
   });
   const prisma = app.get(PrismaService);
 
-  // Cargar el workbook
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(EXCEL_FILE_PATH);
 
-  // Usar la primera hoja
-  const worksheet = workbook.worksheets[0];
-  if (!worksheet) {
-    console.error('ERROR: No se encontró ninguna hoja en el archivo Excel.');
-    await app.close();
-    process.exit(1);
-  }
-  console.log(`  Hoja activa: "${worksheet.name}"`);
-  console.log(`  Total de filas (incluye cabecera): ${worksheet.rowCount}`);
-  console.log('');
+  console.log(`  Total de hojas encontradas: ${workbook.worksheets.length}`);
 
-  let studentsCreated = 0;
-  let studentsUpdated = 0;
-  let guardiansCreated = 0;
-  let coursesCreated = 0;
-  let errorsCount = 0;
+  let totalStudentsCreated = 0;
+  let totalStudentsUpdated = 0;
+  let totalGuardiansCreated = 0;
+  let totalCoursesCreated = 0;
+  let totalErrors = 0;
 
-  // Caché en memoria para evitar consultas repetidas por curso (name → id)
-  const courseCache = new Map<string, number>();
+  // ── Iterar sobre todas las hojas del libro ──────────────────────────────────
+  for (const worksheet of workbook.worksheets) {
+    console.log(`\n── Hoja: "${worksheet.name}" (${worksheet.rowCount} filas) ──────────────────`);
 
-  for (let rowNumber = HEADER_ROW + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
-    const row = worksheet.getRow(rowNumber);
+    // ── Paso 1: Extraer el nombre del curso desde la Fila 1 ─────────────────
+    // Buscamos la primera celda no vacía de la fila 1 (puede ser A1, B1, C1, etc.)
+    const titleRow = worksheet.getRow(1);
+    let nombreCurso = '';
+    titleRow.eachCell({ includeEmpty: false }, (cell) => {
+      if (!nombreCurso) {
+        const text = (cell.text ?? String(cell.value ?? '')).trim();
+        if (text) nombreCurso = text;
+      }
+    });
 
-    // Ignorar filas completamente vacías
-    const rawRutAlumno = cellText(row, COLUMN_MAP.RUT_ALUMNO);
-    if (!rawRutAlumno) continue;
+    if (!nombreCurso) {
+      console.warn(`  Sin nombre de curso en Fila 1 — hoja omitida.`);
+      continue;
+    }
+    console.log(`  Curso detectado (Fila 1): "${nombreCurso}"`);
 
-    try {
-      // ── Extracción y limpieza ──────────────────────────────────────────────
-      const nombreAlumno = cellText(row, COLUMN_MAP.NOMBRE_ALUMNO);
-      const rutAlumno = normalizeRut(rawRutAlumno);
+    // ── Paso 2: Upsert del Curso ─────────────────────────────────────────────
+    let courseId: number;
+    const existingCourse = await prisma.course.findFirst({
+      where: { name: nombreCurso },
+      select: { id: true },
+    });
+    if (existingCourse) {
+      courseId = existingCourse.id;
+    } else {
+      const newCourse = await prisma.course.create({
+        data: { name: nombreCurso },
+        select: { id: true },
+      });
+      courseId = newCourse.id;
+      totalCoursesCreated++;
+      console.log(`  Curso creado en BD: "${nombreCurso}" (id=${courseId})`);
+    }
 
-      const rawRutApoderado = cellText(row, COLUMN_MAP.RUT_APODERADO);
-      const rutApoderado = normalizeRut(rawRutApoderado);
-      const nombreApoderado = cellText(row, COLUMN_MAP.NOMBRE_APODERADO);
-      const emailApoderado = cellText(row, COLUMN_MAP.EMAIL_APODERADO) || null;
-      const telefonoApoderado = cellText(row, COLUMN_MAP.TELEFONO_APODERADO) || null;
+    // ── Paso 3: Detectar formato desde la Fila 2 (cabeceras) ─────────────────
+    const headerRow = worksheet.getRow(HEADER_ROW_INDEX);
+    const cols = detectColumns(headerRow);
+    console.log(
+      `  Formato ${cols.formatType} detectado — ` +
+        `RUT=col${cols.rut} | Nombre=col${cols.nombre}` +
+        (cols.apellidoPaterno ? ` | Ap.Paterno=col${cols.apellidoPaterno}` : '') +
+        (cols.apellidoMaterno ? ` | Ap.Materno=col${cols.apellidoMaterno}` : '') +
+        (cols.correo ? ` | Correo=col${cols.correo}` : ' | Correo=N/A'),
+    );
 
-      const nombreCurso = cellText(row, COLUMN_MAP.CURSO);
+    let sheetCreated = 0;
+    let sheetUpdated = 0;
 
-      if (!rutAlumno || !nombreAlumno || !rutApoderado || !nombreApoderado || !nombreCurso) {
-        console.warn(
-          `  [FILA ${rowNumber}] Datos incompletos — omitida. ` +
-          `(RUT alumno="${rawRutAlumno}", Nombre="${nombreAlumno}", Curso="${nombreCurso}")`,
-        );
-        errorsCount++;
+    // ── Paso 4: Procesar filas de datos (Fila 3 en adelante) ─────────────────
+    for (let rowNumber = DATA_START_ROW; rowNumber <= worksheet.rowCount; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+      const rawRut = cellText(row, cols.rut);
+
+      // Saltar filas completamente vacías
+      if (!rawRut) continue;
+
+      const rutAlumno = normalizeRut(rawRut);
+
+      if (!isValidNormalizedRut(rutAlumno)) {
+        console.warn(`  [FILA ${rowNumber}] RUT inválido tras sanitizar: "${rawRut}" → "${rutAlumno}" — omitida.`);
+        totalErrors++;
         continue;
       }
 
-      // ── 1. Buscar o crear Curso ───────────────────────────────────────────
-      // Course.name no tiene @unique en el esquema, se usa findFirst + create
-      // con caché en memoria para evitar duplicados dentro de la misma ejecución.
-      let courseId = courseCache.get(nombreCurso);
-      if (courseId === undefined) {
-        const existingCourse = await prisma.course.findFirst({
-          where: { name: nombreCurso },
+      try {
+        const nombreAlumno = extractStudentName(row, cols);
+
+        if (!nombreAlumno) {
+          console.warn(`  [FILA ${rowNumber}] Nombre vacío para RUT "${rutAlumno}" — omitida.`);
+          totalErrors++;
+          continue;
+        }
+
+        // ── Apoderado Placeholder ─────────────────────────────────────────────
+        // Se usa el correo de la fila como identificador del apoderado.
+        // Si no hay correo válido, se genera un placeholder único basado en el RUT del alumno.
+        const rawEmail = cols.correo ? cellText(row, cols.correo) : '';
+        const emailApoderado = looksLikeEmail(rawEmail)
+          ? rawEmail.toLowerCase()
+          : `sin-correo-${rutAlumno}@placeholder.com`;
+
+        const rawTelefono = cols.telefono ? cellText(row, cols.telefono) : '';
+        const telefonoApoderado = rawTelefono || null;
+
+        // RUT placeholder temporal para superar la validación de unicidad.
+        // Formato: "RUT-<rutAlumno>" — debe actualizarse con datos reales luego.
+        const rutApoderadoPlaceholder = `RUT-${rutAlumno}`;
+        const nombreApoderado = `Apoderado de ${nombreAlumno}`;
+
+        const guardianBefore = await prisma.guardian.findUnique({
+          where: { rut: rutApoderadoPlaceholder },
           select: { id: true },
         });
-        if (existingCourse) {
-          courseId = existingCourse.id;
-        } else {
-          const newCourse = await prisma.course.create({
-            data: { name: nombreCurso },
-            select: { id: true },
-          });
-          courseId = newCourse.id;
-          coursesCreated++;
-          console.log(`  [FILA ${rowNumber}] Curso nuevo creado: "${nombreCurso}" (id=${courseId})`);
-        }
-        courseCache.set(nombreCurso, courseId);
-      }
 
-      // ── 2. Upsert Apoderado ───────────────────────────────────────────────
-      const guardianBefore = await prisma.guardian.findUnique({
-        where: { rut: rutApoderado },
-        select: { id: true },
-      });
-      const guardianResult = await prisma.guardian.upsert({
-        where: { rut: rutApoderado },
-        update: {
-          name: nombreApoderado,
-          ...(emailApoderado && { email: emailApoderado }),
-          ...(telefonoApoderado && { phone: telefonoApoderado }),
-        },
-        create: {
-          rut: rutApoderado,
-          name: nombreApoderado,
-          email: emailApoderado,
-          phone: telefonoApoderado,
-        },
-        select: { id: true },
-      });
-      if (!guardianBefore) guardiansCreated++;
+        const guardian = await prisma.guardian.upsert({
+          where: { rut: rutApoderadoPlaceholder },
+          update: {
+            email: emailApoderado,
+            ...(telefonoApoderado && { phone: telefonoApoderado }),
+          },
+          create: {
+            rut: rutApoderadoPlaceholder,
+            name: nombreApoderado,
+            email: emailApoderado,
+            phone: telefonoApoderado,
+          },
+          select: { id: true },
+        });
 
-      // ── 3. Upsert Alumno ──────────────────────────────────────────────────
-      const existingStudent = await prisma.student.findUnique({
-        where: { rut: rutAlumno },
-        select: { id: true },
-      });
+        if (!guardianBefore) totalGuardiansCreated++;
 
-      if (existingStudent) {
-        await prisma.student.update({
+        // ── Upsert Alumno ─────────────────────────────────────────────────────
+        const existingStudent = await prisma.student.findUnique({
           where: { rut: rutAlumno },
-          data: {
-            name: nombreAlumno,
-            courseId: courseId,
-            guardianId: guardianResult.id,
-          },
+          select: { id: true },
         });
-        studentsUpdated++;
-      } else {
-        await prisma.student.create({
-          data: {
-            rut: rutAlumno,
-            name: nombreAlumno,
-            courseId: courseId,
-            guardianId: guardianResult.id,
-          },
-        });
-        studentsCreated++;
-      }
 
-      console.log(
-        `  Fila ${rowNumber} procesada — Alumno: ${nombreAlumno} (${rutAlumno}) | ` +
-        `Curso: ${nombreCurso} | Apoderado: ${nombreApoderado}`,
-      );
-    } catch (error) {
-      errorsCount++;
-      console.error(`  [FILA ${rowNumber}] ERROR:`, (error as Error).message);
+        if (existingStudent) {
+          await prisma.student.update({
+            where: { rut: rutAlumno },
+            data: { name: nombreAlumno, courseId, guardianId: guardian.id },
+          });
+          sheetUpdated++;
+          totalStudentsUpdated++;
+        } else {
+          await prisma.student.create({
+            data: { rut: rutAlumno, name: nombreAlumno, courseId, guardianId: guardian.id },
+          });
+          sheetCreated++;
+          totalStudentsCreated++;
+        }
+
+        console.log(
+          `  Fila ${rowNumber} ✓ — ${nombreAlumno} (${rutAlumno}) | correo apoderado: ${emailApoderado}`,
+        );
+      } catch (error) {
+        totalErrors++;
+        console.error(`  [FILA ${rowNumber}] ERROR:`, (error as Error).message);
+      }
     }
+
+    console.log(
+      `  Hoja "${worksheet.name}" completada — ` +
+        `${sheetCreated} alumnos creados, ${sheetUpdated} actualizados.`,
+    );
   }
 
-  // ── Resumen final ──────────────────────────────────────────────────────────
+  // ── Resumen final ────────────────────────────────────────────────────────────
   console.log('');
-  console.log('───────────────────────────────────────────────────');
+  console.log('─────────────────────────────────────────────────────');
   console.log('  IMPORTACIÓN FINALIZADA');
-  console.log(`  Cursos creados   : ${coursesCreated}`);
-  console.log(`  Apoderados nuevos: ${guardiansCreated}`);
-  console.log(`  Alumnos creados  : ${studentsCreated}`);
-  console.log(`  Alumnos actualizados: ${studentsUpdated}`);
-  console.log(`  Filas con error  : ${errorsCount}`);
-  console.log('───────────────────────────────────────────────────');
+  console.log(`  Cursos creados       : ${totalCoursesCreated}`);
+  console.log(`  Apoderados creados   : ${totalGuardiansCreated}`);
+  console.log(`  Alumnos creados      : ${totalStudentsCreated}`);
+  console.log(`  Alumnos actualizados : ${totalStudentsUpdated}`);
+  console.log(`  Filas con error      : ${totalErrors}`);
+  console.log('─────────────────────────────────────────────────────');
   console.log('');
 
   await app.close();
