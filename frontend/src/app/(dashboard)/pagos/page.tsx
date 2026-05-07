@@ -191,7 +191,7 @@ export default function PagosMasterPage() {
                 </PopoverTrigger>
                 <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]" align="start">
                   <Command filter={cmdkPersonFilter} className="bg-transparent">
-                    <CommandInput placeholder="Buscar por nombre o RUT..." className="border-none focus:ring-0" />
+                    <CommandInput placeholder="Buscar por nombre o RUT..." />
                     <CommandList>
                       <CommandEmpty>No se encontró el alumno.</CommandEmpty>
                       <CommandGroup>

@@ -184,7 +184,7 @@ export default function UsuariosPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0 z-[60]">
                       <Command className="bg-transparent">
-                        <CommandInput placeholder="Buscar rol..." className="border-none focus:ring-0" />
+                        <CommandInput placeholder="Buscar rol..." />
                         <CommandList>
                           <CommandEmpty>No se encontró el rol.</CommandEmpty>
                           <CommandGroup>

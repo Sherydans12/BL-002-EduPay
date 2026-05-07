@@ -203,7 +203,7 @@ export default function NewPaymentPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0">
                       <Command filter={cmdkPersonFilter} className="bg-transparent">
-                        <CommandInput placeholder="Buscar por nombre o RUT..." className="border-none focus:ring-0" />
+                        <CommandInput placeholder="Buscar por nombre o RUT..." />
                         <CommandList>
                           <CommandEmpty>No se encontró el alumno.</CommandEmpty>
                           <CommandGroup>
@@ -279,7 +279,7 @@ export default function NewPaymentPage() {
                   </PopoverTrigger>
                   <PopoverContent className="w-[480px] p-0">
                     <Command filter={cmdkCourseFilter} className="bg-transparent">
-                      <CommandInput placeholder="Buscar concepto..." className="border-none focus:ring-0" />
+                      <CommandInput placeholder="Buscar concepto..." />
                       <CommandList>
                         <CommandEmpty>No se encontró el concepto.</CommandEmpty>
                         <CommandGroup>

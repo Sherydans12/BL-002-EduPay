@@ -154,7 +154,7 @@ export function StudentFormDialog({
                     </PopoverTrigger>
                     <PopoverContent className="w-[450px] p-0 z-[60]">
                       <Command filter={cmdkCourseFilter} className="bg-transparent">
-                        <CommandInput placeholder="Buscar curso..." className="border-none focus:ring-0" />
+                        <CommandInput placeholder="Buscar curso..." />
                         <CommandList>
                           <CommandEmpty>No se encontró el curso.</CommandEmpty>
                           <CommandGroup>
@@ -201,7 +201,7 @@ export function StudentFormDialog({
                     </PopoverTrigger>
                     <PopoverContent className="w-[450px] p-0 z-[60]">
                       <Command filter={cmdkPersonFilter} className="bg-transparent">
-                        <CommandInput placeholder="Buscar apoderado por nombre o RUT..." className="border-none focus:ring-0" />
+                        <CommandInput placeholder="Buscar apoderado por nombre o RUT..." />
                         <CommandList>
                           <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
                           <CommandGroup>
