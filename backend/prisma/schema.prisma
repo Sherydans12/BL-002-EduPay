@@ -26,6 +26,7 @@ model Course {
   students  Student[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@map("courses")
 }
@@ -39,6 +40,7 @@ model Guardian {
   students  Student[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@map("guardians")
 }
@@ -54,6 +56,7 @@ model Student {
   payments   Payment[]
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
 
   @@map("students")
 }

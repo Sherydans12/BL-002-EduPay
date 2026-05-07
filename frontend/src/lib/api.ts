@@ -131,7 +131,13 @@ export interface CourseSummary {
 
 // ─── Courses ──────────────────────────────────────────────────
 export const coursesApi = {
-  getAll: () => request<Course[]>("/courses"),
+  getAll: (page?: number, limit?: number) => {
+    const params = new URLSearchParams();
+    if (page) params.set("page", page.toString());
+    if (limit) params.set("limit", limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return request<PaginatedResponse<Course>>(`/courses${query}`);
+  },
   getOne: (id: number) => request<Course>(`/courses/${id}`),
   create: (data: { name: string }) =>
     request<Course>("/courses", {
@@ -149,7 +155,13 @@ export const coursesApi = {
 
 // ─── Guardians ────────────────────────────────────────────────
 export const guardiansApi = {
-  getAll: () => request<Guardian[]>("/guardians"),
+  getAll: (page?: number, limit?: number) => {
+    const params = new URLSearchParams();
+    if (page) params.set("page", page.toString());
+    if (limit) params.set("limit", limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return request<PaginatedResponse<Guardian>>(`/guardians${query}`);
+  },
   getOne: (id: number) => request<Guardian>(`/guardians/${id}`),
   create: (data: Partial<Guardian>) =>
     request<Guardian>("/guardians", {
@@ -167,10 +179,14 @@ export const guardiansApi = {
 
 // ─── Students ─────────────────────────────────────────────────
 export const studentsApi = {
-  getAll: (courseId?: number) =>
-    request<Student[]>(
-      `/students${courseId ? `?courseId=${courseId}` : ""}`
-    ),
+  getAll: (courseId?: number, page?: number, limit?: number) => {
+    const params = new URLSearchParams();
+    if (courseId) params.set("courseId", courseId.toString());
+    if (page) params.set("page", page.toString());
+    if (limit) params.set("limit", limit.toString());
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return request<PaginatedResponse<Student>>(`/students${query}`);
+  },
   getOne: (id: number) => request<Student>(`/students/${id}`),
   create: (data: {
     rut: string;

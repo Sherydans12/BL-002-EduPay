@@ -16,7 +16,7 @@ export default function ReportesPage() {
 
   useEffect(() => {
     coursesApi.getAll()
-      .then(setCourses)
+      .then((res) => setCourses(res.data))
       .catch(console.error);
   }, []);
 

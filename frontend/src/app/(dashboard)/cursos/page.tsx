@@ -35,8 +35,8 @@ export default function CoursesPage() {
 
   const load = async () => {
     try {
-      const data = await coursesApi.getAll();
-      setCourses(data);
+      const res = await coursesApi.getAll();
+      setCourses(res.data);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar cursos");
     } finally {

@@ -31,8 +31,8 @@ function isValidRut(rut: string): boolean {
 const studentSchema = z.object({
   rut: z.string().refine((val) => rutRegex.test(val) && isValidRut(val), "RUT inválido (formato: 12.345.678-9)"),
   name: z.string().min(1, "El nombre es requerido").max(200, "Máximo 200 caracteres"),
-  courseId: z.number({ required_error: "Seleccione un curso" }).min(1),
-  guardianId: z.number({ required_error: "Seleccione un apoderado" }).min(1),
+  courseId: z.number().min(1, "Seleccione un curso"),
+  guardianId: z.number().min(1, "Seleccione un apoderado"),
 });
 
 type StudentFormData = z.infer<typeof studentSchema>;
@@ -59,8 +59,8 @@ export default function StudentsPage() {
 
   const load = async () => {
     try {
-      const [s, c, g] = await Promise.all([studentsApi.getAll(), coursesApi.getAll(), guardiansApi.getAll()]);
-      setStudents(s); setCourses(c); setGuardians(g);
+      const [sRes, cRes, gRes] = await Promise.all([studentsApi.getAll(), coursesApi.getAll(), guardiansApi.getAll()]);
+      setStudents(sRes.data); setCourses(cRes.data); setGuardians(gRes.data);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar datos");
     } finally {

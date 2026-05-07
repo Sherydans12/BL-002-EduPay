@@ -29,12 +29,31 @@ export class StudentsService {
     }
   }
 
-  async findAll(courseId?: number) {
-    return this.prisma.student.findMany({
-      where: courseId ? { courseId } : undefined,
-      orderBy: { name: 'asc' },
-      include: { course: true, guardian: true },
-    });
+  async findAll(courseId?: number, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const where: Prisma.StudentWhereInput = { deletedAt: null };
+    if (courseId) where.courseId = courseId;
+
+    const [data, total] = await Promise.all([
+      this.prisma.student.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        include: { course: true, guardian: true },
+        skip,
+        take: limit,
+      }),
+      this.prisma.student.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        lastPage: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: number) {
@@ -71,6 +90,9 @@ export class StudentsService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.student.delete({ where: { id } });
+    return this.prisma.student.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 }

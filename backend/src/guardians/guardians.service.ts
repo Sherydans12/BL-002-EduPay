@@ -26,11 +26,30 @@ export class GuardiansService {
     }
   }
 
-  async findAll() {
-    return this.prisma.guardian.findMany({
-      orderBy: { name: 'asc' },
-      include: { _count: { select: { students: true } } },
-    });
+  async findAll(page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const where = { deletedAt: null };
+
+    const [data, total] = await Promise.all([
+      this.prisma.guardian.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        include: { _count: { select: { students: true } } },
+        skip,
+        take: limit,
+      }),
+      this.prisma.guardian.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        lastPage: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: number) {
@@ -61,6 +80,9 @@ export class GuardiansService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.guardian.delete({ where: { id } });
+    return this.prisma.guardian.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
   }
 }

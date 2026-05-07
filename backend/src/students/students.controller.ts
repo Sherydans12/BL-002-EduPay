@@ -8,8 +8,15 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
@@ -29,11 +36,18 @@ export class StudentsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar alumnos (filtro opcional por curso)' })
+  @ApiOperation({ summary: 'Listar alumnos paginados (filtro opcional por curso)' })
   @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
-  @ApiResponse({ status: 200, description: 'Lista de alumnos con curso y apoderado' })
-  findAll(@Query('courseId') courseId?: number) {
-    return this.studentsService.findAll(courseId);
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
+  @ApiResponse({ status: 200, description: 'Lista paginada de alumnos con curso y apoderado' })
+  findAll(
+    @Query('courseId') courseId?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
+  ) {
+    const parsedCourseId = courseId ? Number(courseId) : undefined;
+    return this.studentsService.findAll(parsedCourseId, page, limit);
   }
 
   @Get(':id')
@@ -60,9 +74,9 @@ export class StudentsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar un alumno' })
+  @ApiOperation({ summary: 'Eliminar (soft delete) un alumno' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del alumno' })
-  @ApiResponse({ status: 200, description: 'Alumno eliminado' })
+  @ApiResponse({ status: 200, description: 'Alumno eliminado lógicamente' })
   @ApiResponse({ status: 404, description: 'Alumno no encontrado' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.studentsService.remove(id);

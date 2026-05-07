@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { v4 as uuid } from 'uuid';
@@ -18,7 +19,12 @@ export const multerConfig = {
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF files are allowed'), false);
+      cb(
+        new BadRequestException(
+          `Tipo de archivo no permitido: "${file.mimetype}". Solo se aceptan archivos PDF (application/pdf).`,
+        ),
+        false,
+      );
     }
   },
   limits: {

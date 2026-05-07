@@ -15,7 +15,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 const userSchema = z.object({
   name: z.string().min(1, "El nombre es requerido").max(100),
   email: z.string().email("Email inválido"),
-  roleId: z.number({ required_error: "Seleccione un rol" }).min(1),
+  roleId: z.number().min(1, "Seleccione un rol"),
 });
 
 type UserFormData = z.infer<typeof userSchema>;

@@ -52,7 +52,8 @@ export default function GuardiansPage() {
 
   const load = async () => {
     try {
-      setGuardians(await guardiansApi.getAll());
+      const res = await guardiansApi.getAll();
+      setGuardians(res.data);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al cargar apoderados");
     } finally {

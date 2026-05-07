@@ -6,9 +6,17 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { GuardiansService } from './guardians.service';
 import { CreateGuardianDto } from './dto/create-guardian.dto';
 import { UpdateGuardianDto } from './dto/update-guardian.dto';
@@ -28,10 +36,15 @@ export class GuardiansController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar todos los apoderados' })
-  @ApiResponse({ status: 200, description: 'Lista de apoderados con conteo de alumnos' })
-  findAll() {
-    return this.guardiansService.findAll();
+  @ApiOperation({ summary: 'Listar todos los apoderados (paginado)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
+  @ApiResponse({ status: 200, description: 'Lista paginada de apoderados con conteo de alumnos' })
+  findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.guardiansService.findAll(page, limit);
   }
 
   @Get(':id')
@@ -58,9 +71,9 @@ export class GuardiansController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar un apoderado' })
+  @ApiOperation({ summary: 'Eliminar (soft delete) un apoderado' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del apoderado' })
-  @ApiResponse({ status: 200, description: 'Apoderado eliminado' })
+  @ApiResponse({ status: 200, description: 'Apoderado eliminado lógicamente' })
   @ApiResponse({ status: 404, description: 'Apoderado no encontrado' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.guardiansService.remove(id);

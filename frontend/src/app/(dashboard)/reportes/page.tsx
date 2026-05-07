@@ -37,8 +37,8 @@ export default function ReportsPage() {
   const [tab, setTab] = useState<"table" | "summary">("table");
 
   useEffect(() => {
-    coursesApi.getAll().then(setCourses).catch(() => {});
-    studentsApi.getAll().then(setStudents).catch(() => {});
+    coursesApi.getAll().then((res) => setCourses(res.data)).catch(() => {});
+    studentsApi.getAll().then((res) => setStudents(res.data)).catch(() => {});
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -292,7 +292,7 @@ export default function ReportsPage() {
                       <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
                         {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                       </Pie>
-                      <Tooltip formatter={(value: number) => `$${value.toLocaleString("es-CL")}`} contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155", color: "#f1f5f9" }} />
+                      <Tooltip formatter={(value) => `$${Number(value ?? 0).toLocaleString("es-CL")}`} contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155", color: "#f1f5f9" }} />
                       <Legend />
                     </PieChart>
                   </ResponsiveContainer>
