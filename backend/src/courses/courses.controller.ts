@@ -9,7 +9,9 @@ import {
   Query,
   ParseIntPipe,
   DefaultValuePipe,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -32,6 +34,20 @@ export class CoursesController {
   @ApiResponse({ status: 400, description: 'Datos de entrada inválidos' })
   create(@Body() dto: CreateCourseDto) {
     return this.coursesService.create(dto);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Exportar cursos a XLSX' })
+  @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
+  async exportXlsx(@Res() res: Response) {
+    const buffer = await this.coursesService.exportToXlsx();
+    const date = new Date().toISOString().split('T')[0];
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename=cursos_${date}.xlsx`,
+      'Content-Length': String(buffer.length),
+    });
+    res.end(buffer);
   }
 
   @Get()

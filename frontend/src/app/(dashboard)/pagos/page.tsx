@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { paymentsApi, studentsApi, coursesApi } from "@/lib/api";
+import { paymentsApi, studentsApi, coursesApi, downloadBlob } from "@/lib/api";
 import type { Payment, Student, Course } from "@/lib/api";
 import { toast } from "sonner";
-import { Search, Download, FileText, Plus } from "lucide-react";
+import { Search, Download, FileText, Plus, FileSpreadsheet } from "lucide-react";
 import Link from "next/link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -46,6 +46,7 @@ export default function PagosMasterPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -100,6 +101,24 @@ export default function PagosMasterPage() {
 
   const selectedStudent = filters.studentId != null ? students.find((s) => s.id === filters.studentId) : undefined;
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading("Generando Excel...");
+    try {
+      const params: Record<string, string> = {};
+      if (appliedFilters.dateFrom) params.dateFrom = appliedFilters.dateFrom;
+      if (appliedFilters.dateTo) params.dateTo = appliedFilters.dateTo;
+      if (appliedFilters.studentId != null) params.studentId = String(appliedFilters.studentId);
+      const blob = await paymentsApi.export(params);
+      downloadBlob(blob, `pagos_${new Date().toISOString().split("T")[0]}.xlsx`);
+      toast.success("Descarga completada", { id: toastId });
+    } catch {
+      toast.error("Error al exportar", { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-10">
       <div className="flex justify-between items-center">
@@ -107,12 +126,22 @@ export default function PagosMasterPage() {
           <h1 className="text-3xl font-bold text-white">Historial de Pagos</h1>
           <p className="text-[var(--color-text-secondary)] mt-1">Registro maestro de todas las transacciones</p>
         </div>
-        <Link 
-          href="/pagos/nuevo"
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
-        >
-          <Plus className="w-4 h-4" /> Registrar Pago
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {isExporting ? "Exportando..." : "Exportar Excel"}
+          </button>
+          <Link
+            href="/pagos/nuevo"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
+          >
+            <Plus className="w-4 h-4" /> Registrar Pago
+          </Link>
+        </div>
       </div>
 
       <div className="glass rounded-2xl p-6">

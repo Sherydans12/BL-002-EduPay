@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { guardiansApi } from "@/lib/api";
+import { guardiansApi, downloadBlob } from "@/lib/api";
 import type { Guardian } from "@/lib/api";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
+import { FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -49,6 +50,7 @@ export default function GuardiansPage() {
   const [editingGuardian, setEditingGuardian] = useState<Guardian | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<GuardianFormData>({
     resolver: zodResolver(guardianSchema),
@@ -122,6 +124,20 @@ export default function GuardiansPage() {
     g.rut.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading("Generando Excel...");
+    try {
+      const blob = await guardiansApi.export();
+      downloadBlob(blob, `apoderados_${new Date().toISOString().split("T")[0]}.xlsx`);
+      toast.success("Descarga completada", { id: toastId });
+    } catch {
+      toast.error("Error al exportar", { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -129,12 +145,22 @@ export default function GuardiansPage() {
           <h1 className="text-3xl font-bold text-white">Apoderados</h1>
           <p className="text-[var(--color-text-secondary)] mt-1">Gestión de apoderados / tutores</p>
         </div>
-        <button
-          onClick={openCreateDialog}
-          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
-        >
-          + Nuevo Apoderado
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {isExporting ? "Exportando..." : "Exportar Excel"}
+          </button>
+          <button
+            onClick={openCreateDialog}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
+          >
+            + Nuevo Apoderado
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">

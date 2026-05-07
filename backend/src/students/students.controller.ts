@@ -9,7 +9,9 @@ import {
   Query,
   ParseIntPipe,
   DefaultValuePipe,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -33,6 +35,25 @@ export class StudentsController {
   @ApiResponse({ status: 409, description: 'RUT duplicado' })
   create(@Body() dto: CreateStudentDto) {
     return this.studentsService.create(dto);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Exportar alumnos a XLSX' })
+  @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
+  @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
+  async exportXlsx(
+    @Query('courseId') courseId: string | undefined,
+    @Res() res: Response,
+  ) {
+    const parsedCourseId = courseId ? Number(courseId) : undefined;
+    const buffer = await this.studentsService.exportToXlsx(parsedCourseId);
+    const date = new Date().toISOString().split('T')[0];
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename=alumnos_${date}.xlsx`,
+      'Content-Length': String(buffer.length),
+    });
+    res.end(buffer);
   }
 
   @Get()

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
+import { buildWorkbook } from '../common/excel/excel.helper';
 
 @Injectable()
 export class CoursesService {
@@ -57,5 +58,25 @@ export class CoursesService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async exportToXlsx(): Promise<Buffer> {
+    const data = await this.prisma.course.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { students: true } } },
+    });
+
+    const rows = data.map((c) => ({
+      id: c.id,
+      nombre: c.name,
+      alumnos: c._count.students,
+    }));
+
+    return buildWorkbook('Cursos', [
+      { header: 'ID', key: 'id', width: 8 },
+      { header: 'Nombre', key: 'nombre', width: 40 },
+      { header: 'N° Alumnos', key: 'alumnos', width: 14 },
+    ], rows);
   }
 }

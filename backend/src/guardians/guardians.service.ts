@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateGuardianDto } from './dto/create-guardian.dto';
 import { UpdateGuardianDto } from './dto/update-guardian.dto';
 import { Prisma } from '@prisma/client';
+import { buildWorkbook } from '../common/excel/excel.helper';
 
 @Injectable()
 export class GuardiansService {
@@ -84,5 +85,31 @@ export class GuardiansService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async exportToXlsx(): Promise<Buffer> {
+    const data = await this.prisma.guardian.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { students: true } } },
+    });
+
+    const rows = data.map((g) => ({
+      id: g.id,
+      rut: g.rut,
+      nombre: g.name,
+      email: g.email ?? '',
+      telefono: g.phone ?? '',
+      alumnos: g._count.students,
+    }));
+
+    return buildWorkbook('Apoderados', [
+      { header: 'ID', key: 'id', width: 8 },
+      { header: 'RUT', key: 'rut', width: 16 },
+      { header: 'Nombre', key: 'nombre', width: 35 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Teléfono', key: 'telefono', width: 18 },
+      { header: 'N° Alumnos', key: 'alumnos', width: 14 },
+    ], rows);
   }
 }

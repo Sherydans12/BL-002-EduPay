@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { Prisma } from '@prisma/client';
+import { buildWorkbook } from '../common/excel/excel.helper';
 
 @Injectable()
 export class StudentsService {
@@ -94,5 +95,38 @@ export class StudentsService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  async exportToXlsx(courseId?: number): Promise<Buffer> {
+    const where: Prisma.StudentWhereInput = { deletedAt: null };
+    if (courseId) where.courseId = courseId;
+
+    const data = await this.prisma.student.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      include: { course: true, guardian: true },
+    });
+
+    const rows = data.map((s) => ({
+      id: s.id,
+      rut: s.rut,
+      nombre: s.name,
+      curso: s.course.name,
+      apoderado: s.guardian.name,
+      rutApoderado: s.guardian.rut,
+      emailApoderado: s.guardian.email ?? '',
+      telefonoApoderado: s.guardian.phone ?? '',
+    }));
+
+    return buildWorkbook('Alumnos', [
+      { header: 'ID', key: 'id', width: 8 },
+      { header: 'RUT', key: 'rut', width: 16 },
+      { header: 'Nombre', key: 'nombre', width: 35 },
+      { header: 'Curso', key: 'curso', width: 22 },
+      { header: 'Apoderado', key: 'apoderado', width: 35 },
+      { header: 'RUT Apoderado', key: 'rutApoderado', width: 16 },
+      { header: 'Email Apoderado', key: 'emailApoderado', width: 30 },
+      { header: 'Teléfono Apoderado', key: 'telefonoApoderado', width: 22 },
+    ], rows);
   }
 }

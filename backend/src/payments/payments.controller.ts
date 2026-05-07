@@ -9,7 +9,9 @@ import {
   ParseIntPipe,
   UseInterceptors,
   UploadedFile,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -120,6 +122,28 @@ export class PaymentsController {
   ) {
     const fileUrl = file ? `/uploads/${file.filename}` : undefined;
     return this.paymentsService.create(dto, fileUrl);
+  }
+
+  @Get('export')
+  @ApiOperation({
+    summary: 'Exportar pagos a XLSX',
+    description:
+      'Genera y descarga un archivo Excel con todos los pagos que cumplan los filtros. ' +
+      'Los parámetros page y limit son ignorados.',
+  })
+  @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
+  async exportXlsx(
+    @Query() filters: FilterPaymentsDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.paymentsService.exportToXlsx(filters);
+    const date = new Date().toISOString().split('T')[0];
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename=pagos_${date}.xlsx`,
+      'Content-Length': String(buffer.length),
+    });
+    res.end(buffer);
   }
 
   @Get()

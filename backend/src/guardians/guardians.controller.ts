@@ -9,7 +9,9 @@ import {
   Query,
   ParseIntPipe,
   DefaultValuePipe,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -33,6 +35,20 @@ export class GuardiansController {
   @ApiResponse({ status: 409, description: 'RUT duplicado' })
   create(@Body() dto: CreateGuardianDto) {
     return this.guardiansService.create(dto);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Exportar apoderados a XLSX' })
+  @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
+  async exportXlsx(@Res() res: Response) {
+    const buffer = await this.guardiansService.exportToXlsx();
+    const date = new Date().toISOString().split('T')[0];
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename=apoderados_${date}.xlsx`,
+      'Content-Length': String(buffer.length),
+    });
+    res.end(buffer);
   }
 
   @Get()

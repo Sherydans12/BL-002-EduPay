@@ -1,5 +1,21 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
+// ─── Blob Download Helper ─────────────────────────────────────
+/**
+ * Triggers a browser file download from a Blob object using the DOM trick.
+ * Works in all modern browsers; cleans up the object URL after use.
+ */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
 // ─── Auth Token Helper ────────────────────────────────────────
 /**
  * Extrae el JWT desde la cookie `auth_token`.
@@ -9,6 +25,40 @@ function getAuthToken(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/(^|;\s*)auth_token=([^;]*)/);
   return match ? match[2] : null;
+}
+
+// ─── Binary Request Wrapper ───────────────────────────────────
+/**
+ * Like `request`, but returns a raw Blob for binary responses (e.g. XLSX downloads).
+ * Does NOT unwrap the TransformInterceptor envelope — the server sends raw bytes.
+ */
+async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const callerHeaders = options?.headers
+    ? Object.fromEntries(
+        options.headers instanceof Headers
+          ? options.headers.entries()
+          : Object.entries(options.headers as Record<string, string>)
+      )
+    : {};
+
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: { ...headers, ...callerHeaders },
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = Array.isArray(body.message)
+      ? body.message.join(". ")
+      : body.message || `Error ${res.status}`;
+    throw new Error(msg);
+  }
+
+  return res.blob();
 }
 
 // ─── Request Wrapper ──────────────────────────────────────────
@@ -163,6 +213,7 @@ export const coursesApi = {
     }),
   delete: (id: number) =>
     request<Course>(`/courses/${id}`, { method: "DELETE" }),
+  export: () => requestBlob("/courses/export"),
 };
 
 // ─── Guardians ────────────────────────────────────────────────
@@ -187,6 +238,7 @@ export const guardiansApi = {
     }),
   delete: (id: number) =>
     request<Guardian>(`/guardians/${id}`, { method: "DELETE" }),
+  export: () => requestBlob("/guardians/export"),
 };
 
 // ─── Students ─────────────────────────────────────────────────
@@ -217,6 +269,10 @@ export const studentsApi = {
     }),
   delete: (id: number) =>
     request<Student>(`/students/${id}`, { method: "DELETE" }),
+  export: (courseId?: number) => {
+    const params = courseId ? `?courseId=${courseId}` : "";
+    return requestBlob(`/students/export${params}`);
+  },
 };
 
 // ─── Payments ─────────────────────────────────────────────────
@@ -241,6 +297,10 @@ export const paymentsApi = {
     if (dateTo) params.set("dateTo", dateTo);
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<CourseSummary[]>(`/payments/summary/by-course${query}`);
+  },
+  export: (params?: Record<string, string>) => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return requestBlob(`/payments/export${query}`);
   },
 };
 
@@ -281,6 +341,14 @@ export const reportsApi = {
     if (courseId) params.set("courseId", courseId);
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<ReportSummary>(`/reports/summary${query}`);
+  },
+  export: (startDate?: string, endDate?: string, courseId?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    if (courseId) params.set("courseId", courseId);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return requestBlob(`/reports/export${query}`);
   },
 };
 

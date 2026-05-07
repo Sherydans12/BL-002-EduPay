@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { paymentsApi, coursesApi, studentsApi, reportsApi } from "@/lib/api";
+import { paymentsApi, coursesApi, studentsApi, reportsApi, downloadBlob } from "@/lib/api";
 import type { Payment, Course, Student, CourseSummary, ReportSummary } from "@/lib/api";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DownloadCloud, Search } from "lucide-react";
+import { DownloadCloud, Search, FileSpreadsheet } from "lucide-react";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 
 const METHOD_LABELS: Record<string, string> = {
@@ -27,6 +27,7 @@ export default function ReportsPage() {
   const [globalSummary, setGlobalSummary] = useState<ReportSummary | null>(null);
   
   const [totalMeta, setTotalMeta] = useState({ total: 0, page: 1, totalPages: 1 });
+  const [isExporting, setIsExporting] = useState(false);
 
   // Input states
   const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", courseId: "", studentId: "" });
@@ -88,6 +89,24 @@ export default function ReportsPage() {
   const grandTotal = payments.reduce((sum, p) => sum + p.amount, 0);
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading("Generando Excel...");
+    try {
+      const blob = await reportsApi.export(
+        appliedFilters.dateFrom || undefined,
+        appliedFilters.dateTo || undefined,
+        appliedFilters.courseId || undefined,
+      );
+      downloadBlob(blob, `reporte_${new Date().toISOString().split("T")[0]}.xlsx`);
+      toast.success("Descarga completada", { id: toastId });
+    } catch {
+      toast.error("Error al exportar", { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const exportToCsv = () => {
     if (!globalSummary) {
       toast.error("No hay datos para exportar");
@@ -123,9 +142,19 @@ export default function ReportsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-10">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Reportes de Pagos</h1>
-        <p className="text-[var(--color-text-secondary)] mt-1">Busca, filtra y analiza los pagos registrados</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Reportes de Pagos</h1>
+          <p className="text-[var(--color-text-secondary)] mt-1">Busca, filtra y analiza los pagos registrados</p>
+        </div>
+        <button
+          onClick={handleExportExcel}
+          disabled={isExporting}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          {isExporting ? "Exportando..." : "Exportar Excel"}
+        </button>
       </div>
 
       {/* Filters */}

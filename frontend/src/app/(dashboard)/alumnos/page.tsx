@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { studentsApi, coursesApi, guardiansApi } from "@/lib/api";
+import { studentsApi, coursesApi, guardiansApi, downloadBlob } from "@/lib/api";
 import type { Student, Course, Guardian } from "@/lib/api";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
+import { FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -54,6 +55,7 @@ export default function StudentsPage() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Combobox states
   const [courseOpen, setCourseOpen] = useState(false);
@@ -136,6 +138,20 @@ export default function StudentsPage() {
     s.rut.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading("Generando Excel...");
+    try {
+      const blob = await studentsApi.export();
+      downloadBlob(blob, `alumnos_${new Date().toISOString().split("T")[0]}.xlsx`);
+      toast.success("Descarga completada", { id: toastId });
+    } catch {
+      toast.error("Error al exportar", { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -143,12 +159,22 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold text-white">Alumnos</h1>
           <p className="text-[var(--color-text-secondary)] mt-1">Gestión de alumnos del colegio</p>
         </div>
-        <button
-          onClick={openCreateDialog}
-          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
-        >
-          + Nuevo Alumno
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {isExporting ? "Exportando..." : "Exportar Excel"}
+          </button>
+          <button
+            onClick={openCreateDialog}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
+          >
+            + Nuevo Alumno
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">

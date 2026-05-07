@@ -4,6 +4,15 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { Prisma } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
+import { buildWorkbook } from '../common/excel/excel.helper';
+
+const METHOD_LABELS: Record<string, string> = {
+  CASH: 'Efectivo',
+  DEBIT: 'Débito',
+  CREDIT: 'Crédito',
+  CHECK: 'Cheque',
+  TRANSFER: 'Transferencia',
+};
 
 @Injectable()
 export class PaymentsService {
@@ -113,6 +122,65 @@ export class PaymentsService {
   async remove(id: number) {
     await this.findOne(id);
     return this.prisma.payment.delete({ where: { id } });
+  }
+
+  /** Genera buffer XLSX con todos los pagos que cumplan los filtros (sin paginación) */
+  async exportToXlsx(filters: FilterPaymentsDto): Promise<Buffer> {
+    const { dateFrom, dateTo, courseId, studentId } = filters;
+
+    const where: Prisma.PaymentWhereInput = {};
+    if (dateFrom || dateTo) {
+      where.paymentDate = {};
+      if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.paymentDate.lte = end;
+      }
+    }
+    if (courseId) where.student = { courseId };
+    if (studentId) where.studentId = studentId;
+
+    const data = await this.prisma.payment.findMany({
+      where,
+      orderBy: { paymentDate: 'desc' },
+      include: {
+        student: { include: { course: true, guardian: true } },
+        concept: true,
+      },
+    });
+
+    const rows = data.map((p) => ({
+      id: p.id,
+      fecha: new Date(p.paymentDate).toLocaleDateString('es-CL'),
+      alumno: p.student.name,
+      rutAlumno: p.student.rut,
+      curso: p.student.course.name,
+      monto: p.amount,
+      metodo: METHOD_LABELS[p.method] ?? p.method,
+      concepto: p.concept?.name ?? '',
+      pagador: p.payerName ?? 'Apoderado',
+      rutPagador: p.payerRut ?? '',
+      boleta: p.boletaNumber ?? '',
+      referencia: p.referenceCode ?? '',
+      notas: p.notes ?? '',
+    }));
+
+    return buildWorkbook('Pagos', [
+      { header: 'ID', key: 'id', width: 8 },
+      { header: 'Fecha', key: 'fecha', width: 14 },
+      { header: 'Alumno', key: 'alumno', width: 32 },
+      { header: 'RUT Alumno', key: 'rutAlumno', width: 16 },
+      { header: 'Curso', key: 'curso', width: 20 },
+      { header: 'Monto', key: 'monto', width: 15, numFmt: '"$"#,##0' },
+      { header: 'Método', key: 'metodo', width: 16 },
+      { header: 'Concepto', key: 'concepto', width: 22 },
+      { header: 'Pagador', key: 'pagador', width: 30 },
+      { header: 'RUT Pagador', key: 'rutPagador', width: 16 },
+      { header: 'N° Boleta', key: 'boleta', width: 16 },
+      { header: 'Referencia', key: 'referencia', width: 22 },
+      { header: 'Notas', key: 'notas', width: 32 },
+    ], rows);
   }
 
   /** Resumen agrupado por curso */
