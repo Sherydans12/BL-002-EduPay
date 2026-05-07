@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -18,11 +18,10 @@ export class UsersController {
   @Post('invite')
   @RequirePermissions('manage:users')
   inviteUser(@Body() createUserDto: any) {
-    // Implementar env\u00edo de mail o contrase\u00f1a temporal
     return this.usersService.inviteUser(createUserDto);
   }
 
-  @Put(':id/toggle-status')
+  @Patch(':id/toggle')
   @RequirePermissions('manage:users')
   toggleStatus(@Param('id') id: string) {
     return this.usersService.toggleStatus(id);

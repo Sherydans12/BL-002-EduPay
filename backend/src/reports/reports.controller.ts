@@ -12,6 +12,15 @@ import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  @Get('dashboard/revenue-trend')
+  @RequirePermissions('view:reports')
+  @ApiOperation({ summary: 'Tendencia de ingresos por mes (últimos N meses)' })
+  @ApiQuery({ name: 'months', required: false, type: Number, description: 'Cantidad de meses (default 12)' })
+  @ApiResponse({ status: 200, description: 'Array de { month, total } ordenado cronológicamente' })
+  getRevenueTrend(@Query('months') months?: string) {
+    return this.reportsService.getRevenueTrend(months ? Number(months) : 12);
+  }
+
   @Get('export')
   @RequirePermissions('view:reports')
   @ApiOperation({ summary: 'Exportar reporte analítico a XLSX (multi-hoja)' })

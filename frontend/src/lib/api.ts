@@ -333,6 +333,11 @@ export interface ReportSummary {
   }[];
 }
 
+export interface RevenueTrendItem {
+  month: string;
+  total: number;
+}
+
 export const reportsApi = {
   getSummary: (startDate?: string, endDate?: string, courseId?: string) => {
     const params = new URLSearchParams();
@@ -350,6 +355,8 @@ export const reportsApi = {
     const query = params.toString() ? `?${params.toString()}` : "";
     return requestBlob(`/reports/export${query}`);
   },
+  getRevenueTrend: (months = 12) =>
+    request<RevenueTrendItem[]>(`/reports/dashboard/revenue-trend?months=${months}`),
 };
 
 // ─── Roles & Permissions ──────────────────────────────────────

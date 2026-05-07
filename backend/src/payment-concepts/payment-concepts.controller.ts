@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,13 +18,18 @@ import {
 import { PaymentConceptsService } from './payment-concepts.service';
 import { CreatePaymentConceptDto } from './dto/create-payment-concept.dto';
 import { UpdatePaymentConceptDto } from './dto/update-payment-concept.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 
 @ApiTags('payment-concepts')
 @Controller('payment-concepts')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PaymentConceptsController {
   constructor(private readonly service: PaymentConceptsService) {}
 
   @Post()
+  @RequirePermissions('manage:payment-concepts')
   @ApiOperation({ summary: 'Crear un nuevo concepto de pago' })
   @ApiResponse({ status: 201, description: 'Concepto creado' })
   @ApiResponse({ status: 409, description: 'Nombre duplicado' })
@@ -32,6 +38,7 @@ export class PaymentConceptsController {
   }
 
   @Get()
+  @RequirePermissions('view:payment-concepts')
   @ApiOperation({ summary: 'Listar todos los conceptos activos' })
   @ApiResponse({ status: 200, description: 'Lista de conceptos' })
   findAll() {
@@ -39,6 +46,7 @@ export class PaymentConceptsController {
   }
 
   @Get(':id')
+  @RequirePermissions('view:payment-concepts')
   @ApiOperation({ summary: 'Obtener un concepto por ID' })
   @ApiParam({ name: 'id', type: Number })
   @ApiResponse({ status: 200, description: 'Concepto encontrado' })
@@ -48,6 +56,7 @@ export class PaymentConceptsController {
   }
 
   @Put(':id')
+  @RequirePermissions('manage:payment-concepts')
   @ApiOperation({ summary: 'Actualizar un concepto de pago' })
   @ApiParam({ name: 'id', type: Number })
   @ApiResponse({ status: 200, description: 'Concepto actualizado' })
@@ -58,6 +67,7 @@ export class PaymentConceptsController {
   }
 
   @Delete(':id')
+  @RequirePermissions('manage:payment-concepts')
   @ApiOperation({ summary: 'Eliminar (soft-delete) un concepto de pago' })
   @ApiParam({ name: 'id', type: Number })
   @ApiResponse({ status: 200, description: 'Concepto desactivado' })

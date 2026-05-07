@@ -22,7 +22,16 @@ async function main() {
       'view:roles',
       'create:payment',
       'view:payments',
+      'manage:payments',
       'view:reports',
+      'view:courses',
+      'manage:courses',
+      'view:students',
+      'manage:students',
+      'view:guardians',
+      'manage:guardians',
+      'view:payment-concepts',
+      'manage:payment-concepts',
     ];
 
     const createdPermissions = [];

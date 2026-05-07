@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -22,13 +23,18 @@ import {
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 
 @ApiTags('students')
 @Controller('students')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 
   @Post()
+  @RequirePermissions('manage:students')
   @ApiOperation({ summary: 'Registrar un nuevo alumno' })
   @ApiResponse({ status: 201, description: 'Alumno creado exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos de entrada inválidos' })
@@ -38,6 +44,7 @@ export class StudentsController {
   }
 
   @Get('export')
+  @RequirePermissions('view:students')
   @ApiOperation({ summary: 'Exportar alumnos a XLSX' })
   @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
   @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
@@ -57,6 +64,7 @@ export class StudentsController {
   }
 
   @Get()
+  @RequirePermissions('view:students')
   @ApiOperation({ summary: 'Listar alumnos paginados (filtro opcional por curso)' })
   @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
@@ -72,6 +80,7 @@ export class StudentsController {
   }
 
   @Get(':id')
+  @RequirePermissions('view:students')
   @ApiOperation({ summary: 'Obtener un alumno por ID' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del alumno' })
   @ApiResponse({ status: 200, description: 'Alumno con curso, apoderado y pagos' })
@@ -81,6 +90,7 @@ export class StudentsController {
   }
 
   @Put(':id')
+  @RequirePermissions('manage:students')
   @ApiOperation({ summary: 'Actualizar un alumno' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del alumno' })
   @ApiResponse({ status: 200, description: 'Alumno actualizado' })
@@ -95,6 +105,7 @@ export class StudentsController {
   }
 
   @Delete(':id')
+  @RequirePermissions('manage:students')
   @ApiOperation({ summary: 'Eliminar (soft delete) un alumno' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del alumno' })
   @ApiResponse({ status: 200, description: 'Alumno eliminado lógicamente' })

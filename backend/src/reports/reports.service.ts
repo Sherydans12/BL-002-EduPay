@@ -60,6 +60,35 @@ export class ReportsService {
   }
 
   /**
+   * Ingresos agrupados por mes para los últimos N meses (12 por defecto).
+   * Rellena con total=0 los meses sin pagos para garantizar una serie continua.
+   */
+  async getRevenueTrend(months = 12): Promise<{ month: string; total: number }[]> {
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+
+    const payments = await this.prisma.payment.findMany({
+      where: { paymentDate: { gte: startDate } },
+      select: { paymentDate: true, amount: true },
+    });
+
+    const grouped = new Map<string, number>();
+    for (const p of payments) {
+      const key = `${p.paymentDate.getFullYear()}-${String(p.paymentDate.getMonth() + 1).padStart(2, '0')}`;
+      grouped.set(key, (grouped.get(key) ?? 0) + p.amount);
+    }
+
+    const result: { month: string; total: number }[] = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' });
+      result.push({ month: label, total: grouped.get(key) ?? 0 });
+    }
+    return result;
+  }
+
+  /**
    * Genera un XLSX multi-hoja con:
    *  - Hoja 1: Resumen global
    *  - Hoja 2: Detalle por método de pago

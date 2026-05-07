@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -22,13 +23,18 @@ import {
 import { CoursesService } from './courses.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 
 @ApiTags('courses')
 @Controller('courses')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
   @Post()
+  @RequirePermissions('manage:courses')
   @ApiOperation({ summary: 'Crear un nuevo curso' })
   @ApiResponse({ status: 201, description: 'Curso creado exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos de entrada inválidos' })
@@ -37,6 +43,7 @@ export class CoursesController {
   }
 
   @Get('export')
+  @RequirePermissions('view:courses')
   @ApiOperation({ summary: 'Exportar cursos a XLSX' })
   @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
   async exportXlsx(@Res() res: Response) {
@@ -51,6 +58,7 @@ export class CoursesController {
   }
 
   @Get()
+  @RequirePermissions('view:courses')
   @ApiOperation({ summary: 'Listar todos los cursos (paginado)' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
@@ -63,6 +71,7 @@ export class CoursesController {
   }
 
   @Get(':id')
+  @RequirePermissions('view:courses')
   @ApiOperation({ summary: 'Obtener un curso por ID' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del curso' })
   @ApiResponse({ status: 200, description: 'Curso encontrado con detalle de alumnos' })
@@ -72,6 +81,7 @@ export class CoursesController {
   }
 
   @Put(':id')
+  @RequirePermissions('manage:courses')
   @ApiOperation({ summary: 'Actualizar un curso' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del curso' })
   @ApiResponse({ status: 200, description: 'Curso actualizado' })
@@ -85,6 +95,7 @@ export class CoursesController {
   }
 
   @Delete(':id')
+  @RequirePermissions('manage:courses')
   @ApiOperation({ summary: 'Eliminar (soft delete) un curso' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del curso' })
   @ApiResponse({ status: 200, description: 'Curso eliminado lógicamente' })

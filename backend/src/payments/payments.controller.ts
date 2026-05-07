@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   UploadedFile,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -26,13 +27,18 @@ import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { multerConfig } from './multer.config';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 
 @ApiTags('payments')
 @Controller('payments')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
+  @RequirePermissions('create:payment')
   @ApiOperation({
     summary: 'Registrar un nuevo pago',
     description:
@@ -125,6 +131,7 @@ export class PaymentsController {
   }
 
   @Get('export')
+  @RequirePermissions('view:payments')
   @ApiOperation({
     summary: 'Exportar pagos a XLSX',
     description:
@@ -147,6 +154,7 @@ export class PaymentsController {
   }
 
   @Get()
+  @RequirePermissions('view:payments')
   @ApiOperation({
     summary: 'Listar pagos con filtros avanzados',
     description:
@@ -159,6 +167,7 @@ export class PaymentsController {
   }
 
   @Get('summary/by-course')
+  @RequirePermissions('view:payments')
   @ApiOperation({
     summary: 'Resumen de pagos agrupados por curso',
     description: 'Devuelve total recaudado y cantidad de pagos por cada curso.',
@@ -174,6 +183,7 @@ export class PaymentsController {
   }
 
   @Get(':id')
+  @RequirePermissions('view:payments')
   @ApiOperation({ summary: 'Obtener un pago por ID' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del pago' })
   @ApiResponse({ status: 200, description: 'Pago encontrado con detalle de alumno, curso y apoderado' })
@@ -183,6 +193,7 @@ export class PaymentsController {
   }
 
   @Delete(':id')
+  @RequirePermissions('manage:payments')
   @ApiOperation({ summary: 'Eliminar un pago' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del pago' })
   @ApiResponse({ status: 200, description: 'Pago eliminado' })
