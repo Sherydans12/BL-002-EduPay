@@ -15,6 +15,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import * as ExcelJS from 'exceljs';
 import * as path from 'path';
+import * as fs from 'fs';
 
 // ─── COLUMN MAP ──────────────────────────────────────────────────────────────
 // Ajusta los números de columna según tu Excel (1 = columna A, 2 = B, etc.)
@@ -77,6 +78,13 @@ async function main() {
   console.log('═══════════════════════════════════════════════════');
   console.log(`  Archivo: ${EXCEL_FILE_PATH}`);
   console.log('');
+
+  // Validar que el archivo Excel exista antes de levantar el contexto de Nest
+  if (!fs.existsSync(EXCEL_FILE_PATH)) {
+    console.error(`ERROR: No se encontró el archivo Excel en:\n  ${EXCEL_FILE_PATH}`);
+    console.error('Asegúrate de copiar tu Excel como: backend/uploads/importacion.xlsx');
+    process.exit(1);
+  }
 
   // Levantar contexto NestJS para acceder a PrismaService correctamente configurado
   const app = await NestFactory.createApplicationContext(AppModule, {
