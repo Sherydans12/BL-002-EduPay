@@ -233,7 +233,7 @@ export default function NewPaymentPage() {
           {selectedStudent && (
             <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 animate-fade-in">
               <p className="text-sm text-[var(--color-text-secondary)]">
-                <strong className="text-white">Apoderado:</strong> {selectedStudent.guardian.name} — {selectedStudent.guardian.rut}
+                <strong className="text-white">Apoderado:</strong> {selectedStudent.guardian.name}{selectedStudent.guardian.rut ? ` — ${selectedStudent.guardian.rut}` : ""}
               </p>
               <p className="text-sm text-[var(--color-text-secondary)]">
                 <strong className="text-white">Curso:</strong> {selectedStudent.course.name}

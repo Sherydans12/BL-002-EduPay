@@ -129,7 +129,7 @@ export interface Course {
 
 export interface Guardian {
   id: number;
-  rut: string;
+  rut?: string | null;
   name: string;
   email?: string;
   phone?: string;

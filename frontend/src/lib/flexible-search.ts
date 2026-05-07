@@ -60,7 +60,7 @@ export function matchesStudentRow(
   if (!q) return true;
   return (
     matchesPersonFields(row.name, row.rut, q) ||
-    matchesPersonFields(row.guardian.name, row.guardian.rut, q)
+    matchesPersonFields(row.guardian.name, row.guardian.rut ?? "", q)
   );
 }
 

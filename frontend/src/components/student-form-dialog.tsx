@@ -12,27 +12,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownChevron } from "@/components/ui/dropdown-chevron";
 import { cmdkCourseFilter, cmdkPersonFilter } from "@/lib/flexible-search";
-
-const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
-
-function isValidRut(rut: string): boolean {
-  const clean = rut.replace(/\./g, "").replace("-", "");
-  if (clean.length < 8 || clean.length > 9) return false;
-  const body = clean.slice(0, -1);
-  const dv = clean.slice(-1).toUpperCase();
-  let sum = 0;
-  let mul = 2;
-  for (let i = body.length - 1; i >= 0; i--) {
-    sum += parseInt(body[i], 10) * mul;
-    mul = mul === 7 ? 2 : mul + 1;
-  }
-  const expected = 11 - (sum % 11);
-  const expectedDv = expected === 11 ? "0" : expected === 10 ? "K" : expected.toString();
-  return dv === expectedDv;
-}
+import { formatRut, isValidRut, sanitizeRutInput } from "@/lib/rut";
 
 const studentSchema = z.object({
-  rut: z.string().refine((val) => rutRegex.test(val) && isValidRut(val), "RUT inválido (formato: 12.345.678-9)"),
+  rut: z
+    .string()
+    .min(1, "El RUT es requerido")
+    .refine((val) => isValidRut(val), "RUT inválido (formato: 12.345.678-9)"),
   name: z.string().min(1, "El nombre es requerido").max(200, "Máximo 200 caracteres"),
   courseId: z.number().min(1, "Seleccione un curso"),
   guardianId: z.number().min(1, "Seleccione un apoderado"),
@@ -65,7 +51,7 @@ export function StudentFormDialog({
   const [guardianOpen, setGuardianOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<StudentFormData>({
+  const { register, control, handleSubmit, reset, setValue, formState: { errors } } = useForm<StudentFormData>({
     resolver: zodResolver(studentSchema),
   });
 
@@ -73,7 +59,7 @@ export function StudentFormDialog({
     if (!open) return;
     if (editingStudent) {
       reset({
-        rut: editingStudent.rut,
+        rut: formatRut(editingStudent.rut),
         name: editingStudent.name,
         courseId: editingStudent.courseId,
         guardianId: editingStudent.guardianId,
@@ -90,12 +76,13 @@ export function StudentFormDialog({
 
   const onSubmit = async (data: StudentFormData) => {
     setIsSubmitting(true);
+    const payload = { ...data, rut: formatRut(data.rut) };
     try {
       if (editingStudent) {
-        await studentsApi.update(editingStudent.id, data);
+        await studentsApi.update(editingStudent.id, payload);
         toast.success("Alumno actualizado exitosamente");
       } else {
-        await studentsApi.create(data);
+        await studentsApi.create(payload);
         toast.success("Alumno creado exitosamente");
       }
       await onSaved();
@@ -121,6 +108,14 @@ export function StudentFormDialog({
                 {...register("rut")}
                 placeholder="12.345.678-9"
                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+                onChange={(e) => {
+                  const sanitized = sanitizeRutInput(e.target.value);
+                  setValue("rut", sanitized, { shouldValidate: false });
+                }}
+                onBlur={(e) => {
+                  const formatted = formatRut(e.target.value);
+                  setValue("rut", formatted, { shouldValidate: true });
+                }}
               />
               {errors.rut && <p className="text-red-400 text-xs mt-1">{errors.rut.message}</p>}
             </div>
@@ -154,7 +149,7 @@ export function StudentFormDialog({
                     </PopoverTrigger>
                     <PopoverContent className="w-[450px] p-0 z-[60]">
                       <Command filter={cmdkCourseFilter} className="bg-transparent">
-                        <CommandInput placeholder="Buscar curso..." />
+                        <CommandInput placeholder="Buscar curso..." className="border-none focus:ring-0" />
                         <CommandList>
                           <CommandEmpty>No se encontró el curso.</CommandEmpty>
                           <CommandGroup>
@@ -201,14 +196,14 @@ export function StudentFormDialog({
                     </PopoverTrigger>
                     <PopoverContent className="w-[450px] p-0 z-[60]">
                       <Command filter={cmdkPersonFilter} className="bg-transparent">
-                        <CommandInput placeholder="Buscar apoderado por nombre o RUT..." />
+                        <CommandInput placeholder="Buscar apoderado por nombre o RUT..." className="border-none focus:ring-0" />
                         <CommandList>
                           <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
                           <CommandGroup>
                             {guardians.map((g) => (
                               <CommandItem
                                 key={g.id}
-                                value={`${g.name}\t${g.rut}`}
+                                value={`${g.name}\t${g.rut ?? ""}`}
                                 onSelect={() => {
                                   field.onChange(g.id);
                                   setGuardianOpen(false);
@@ -217,7 +212,7 @@ export function StudentFormDialog({
                               >
                                 <div className="flex flex-col">
                                   <span>{g.name}</span>
-                                  <span className="text-xs text-[var(--color-text-muted)]">{g.rut}</span>
+                                  {g.rut && <span className="text-xs text-[var(--color-text-muted)]">{g.rut}</span>}
                                 </div>
                               </CommandItem>
                             ))}

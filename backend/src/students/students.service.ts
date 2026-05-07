@@ -117,7 +117,7 @@ export class StudentsService {
       nombre: s.name,
       curso: s.course.name,
       apoderado: s.guardian.name,
-      rutApoderado: s.guardian.rut,
+      rutApoderado: s.guardian.rut ?? '',
       emailApoderado: s.guardian.email ?? '',
       telefonoApoderado: s.guardian.phone ?? '',
     }));

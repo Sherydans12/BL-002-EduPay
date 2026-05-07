@@ -100,7 +100,7 @@ export class GuardiansService {
 
     const rows = data.map((g) => ({
       id: g.id,
-      rut: g.rut,
+      rut: g.rut ?? '',
       nombre: g.name,
       email: g.email ?? '',
       telefono: g.phone ?? '',

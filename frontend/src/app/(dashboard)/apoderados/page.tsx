@@ -11,25 +11,17 @@ import { FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
-
-const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
-function isValidRut(rut: string): boolean {
-  const clean = rut.replace(/\./g, "").replace("-", "");
-  if (clean.length < 8 || clean.length > 9) return false;
-  const body = clean.slice(0, -1);
-  const dv = clean.slice(-1).toUpperCase();
-  let sum = 0, mul = 2;
-  for (let i = body.length - 1; i >= 0; i--) {
-    sum += parseInt(body[i], 10) * mul;
-    mul = mul === 7 ? 2 : mul + 1;
-  }
-  const expected = 11 - (sum % 11);
-  const expectedDv = expected === 11 ? "0" : expected === 10 ? "K" : expected.toString();
-  return dv === expectedDv;
-}
+import { formatRut, isValidRut, sanitizeRutInput } from "@/lib/rut";
 
 const guardianSchema = z.object({
-  rut: z.string().refine((val) => rutRegex.test(val) && isValidRut(val), "RUT inválido (formato: 12.345.678-9)"),
+  rut: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (val) => !val || isValidRut(val),
+      "RUT inválido (formato: 12.345.678-9)",
+    ),
   name: z.string().min(1, "El nombre es requerido").max(200, "Máximo 200 caracteres"),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
@@ -54,7 +46,7 @@ export default function GuardiansPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<GuardianFormData>({
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<GuardianFormData>({
     resolver: zodResolver(guardianSchema),
     defaultValues: { rut: "", name: "", email: "", phone: "" }
   });
@@ -129,13 +121,18 @@ export default function GuardiansPage() {
 
   const openEditDialog = (g: Guardian) => {
     setEditingGuardian(g);
-    reset({ rut: g.rut, name: g.name, email: g.email || "", phone: g.phone || "" });
+    reset({ rut: g.rut ? formatRut(g.rut) : "", name: g.name, email: g.email || "", phone: g.phone || "" });
     setIsDialogOpen(true);
   };
 
   const onSubmit = async (data: GuardianFormData) => {
     setIsSubmitting(true);
-    const payload = { ...data, email: data.email || undefined, phone: data.phone || undefined };
+    const payload = {
+      ...data,
+      rut: data.rut ? formatRut(data.rut) : undefined,
+      email: data.email || undefined,
+      phone: data.phone || undefined,
+    };
     try {
       if (editingGuardian) {
         await guardiansApi.update(editingGuardian.id, payload);
@@ -237,7 +234,7 @@ export default function GuardiansPage() {
               <tbody className="divide-y divide-[var(--color-border)]">
                 {guardians.map((g) => (
                   <tr key={g.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                    <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{g.rut}</td>
+                    <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{g.rut || "—"}</td>
                     <td className="px-6 py-4 font-medium text-white">{g.name}</td>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.email || "—"}</td>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.phone || "—"}</td>
@@ -270,8 +267,20 @@ export default function GuardiansPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT *</label>
-                <input {...register("rut")} placeholder="12.345.678-9" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT</label>
+                <input
+                  {...register("rut")}
+                  placeholder="12.345.678-9"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+                  onChange={(e) => {
+                    const sanitized = sanitizeRutInput(e.target.value);
+                    setValue("rut", sanitized, { shouldValidate: false });
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    setValue("rut", val ? formatRut(val) : "", { shouldValidate: true });
+                  }}
+                />
                 {errors.rut && <p className="text-red-400 text-xs mt-1">{errors.rut.message}</p>}
               </div>
               <div className="col-span-full md:col-span-1">

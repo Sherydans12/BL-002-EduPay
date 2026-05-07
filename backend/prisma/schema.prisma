@@ -33,9 +33,9 @@ model Course {
 
 model Guardian {
   id        Int       @id @default(autoincrement())
-  rut       String    @unique
+  rut       String?   @unique
   /** Derivado en BD para búsqueda sin puntos/guiones */
-  rutNormalized String  @default(dbgenerated("regexp_replace(upper(COALESCE(rut, '')), '[^0-9K]', '', 'g')")) @map("rut_normalized")
+  rutNormalized String?  @default(dbgenerated("regexp_replace(upper(COALESCE(rut, '')), '[^0-9K]', '', 'g')")) @map("rut_normalized")
   name      String
   email     String?
   phone     String?
