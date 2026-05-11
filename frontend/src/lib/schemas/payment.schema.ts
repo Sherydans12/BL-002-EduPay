@@ -83,6 +83,25 @@ export const paymentSchema = z
         { message: "RUT del pagador inválido (formato: 12.345.678-9)" }
       ),
 
+    /** Datos del apoderado (paso 3 cuando no es tercero); se persisten vía PUT /guardians/:id */
+    guardianName: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
+
+    guardianRut: z
+      .string()
+      .optional()
+      .or(z.literal(""))
+      .refine(
+        (val) => {
+          if (!val || val === "") return true;
+          return rutRegex.test(val) && isValidRut(val);
+        },
+        { message: "RUT del apoderado inválido (formato: 12.345.678-9)" }
+      ),
+
+    guardianEmail: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
+
+    guardianPhone: z.string().max(50, "Máximo 50 caracteres").optional().or(z.literal("")),
+
     // Paso 4: Boleta
     boletaNumber: z.string().max(50, "Máximo 50 caracteres").optional().or(z.literal("")),
 
@@ -111,6 +130,25 @@ export const paymentSchema = z
         message: "El nombre del pagador es requerido cuando paga un tercero",
         path: ["payerName"],
       });
+    }
+
+    if (!data.useAltPayer && data.studentId) {
+      const gName = data.guardianName?.trim();
+      if (!gName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "El nombre del apoderado es requerido",
+          path: ["guardianName"],
+        });
+      }
+      const gEmail = data.guardianEmail?.trim();
+      if (gEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gEmail)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Correo del apoderado inválido",
+          path: ["guardianEmail"],
+        });
+      }
     }
   });
 

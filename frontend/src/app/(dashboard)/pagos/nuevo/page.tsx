@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { paymentSchema, type PaymentFormData } from "@/lib/schemas/payment.schema";
-import { paymentsApi, conceptsApi } from "@/lib/api";
+import { paymentsApi, conceptsApi, guardiansApi } from "@/lib/api";
 import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
 import type { Student, Course, PaymentConcept } from "@/lib/api";
 import { toast } from "sonner";
@@ -55,6 +55,10 @@ export default function NewPaymentPage() {
       studentId: undefined,
       payerName: "",
       payerRut: "",
+      guardianName: "",
+      guardianRut: "",
+      guardianEmail: "",
+      guardianPhone: "",
       referenceCode: "",
       notes: "",
       boletaNumber: "",
@@ -88,6 +92,24 @@ export default function NewPaymentPage() {
       setFilteredStudents(students);
     }
   }, [courseFilter, students]);
+
+  useEffect(() => {
+    if (!studentId) {
+      setValue("guardianName", "");
+      setValue("guardianRut", "");
+      setValue("guardianEmail", "");
+      setValue("guardianPhone", "");
+      return;
+    }
+    if (useAltPayer) return;
+    const s = students.find((x) => x.id === studentId);
+    if (!s) return;
+    const g = s.guardian;
+    setValue("guardianName", g.name ?? "");
+    setValue("guardianRut", g.rut ?? "");
+    setValue("guardianEmail", g.email ?? "");
+    setValue("guardianPhone", g.phone ?? "");
+  }, [studentId, useAltPayer, students, setValue]);
 
   // Auto-fill amount when concept changes
   const handleConceptSelect = useCallback(
@@ -124,6 +146,16 @@ export default function NewPaymentPage() {
   async function onSubmit(data: PaymentFormData) {
     setSubmitting(true);
     try {
+      const studentRow = students.find((s) => s.id === data.studentId);
+      if (!data.useAltPayer && studentRow) {
+        await guardiansApi.update(studentRow.guardianId, {
+          name: (data.guardianName ?? "").trim(),
+          rut: data.guardianRut?.trim() || null,
+          email: data.guardianEmail?.trim() || null,
+          phone: data.guardianPhone?.trim() || null,
+        });
+      }
+
       const fd = new FormData();
       fd.append("amount", data.amount.toString());
       fd.append("method", data.method);
@@ -143,7 +175,8 @@ export default function NewPaymentPage() {
       reset();
       setTimeout(() => router.push("/reportes"), 1500);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al registrar pago");
+      const msg = err instanceof Error ? err.message : "Error al registrar pago";
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -367,7 +400,66 @@ export default function NewPaymentPage() {
             </label>
           </div>
           {!useAltPayer ? (
-            <p className="text-sm text-[var(--color-text-muted)] italic">El pagador será el apoderado del alumno seleccionado.</p>
+            !selectedStudent ? (
+              <p className="text-sm text-amber-200/90">
+                Seleccioná un alumno en el paso 1 para cargar y editar los datos del apoderado.
+              </p>
+            ) : (
+              <div className="space-y-4 animate-fade-in">
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                  El pago queda registrado a nombre del apoderado. Podés corregir o completar sus datos aquí; se
+                  guardarán al registrar el pago (útil si el nombre era genérico o faltaban RUT, teléfono, etc.).
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                      Nombre del apoderado *
+                    </label>
+                    <input
+                      type="text"
+                      autoComplete="name"
+                      placeholder="Nombre completo"
+                      {...register("guardianName")}
+                      className={errors.guardianName ? inputErr : inputOk}
+                    />
+                    <FieldError message={errors.guardianName?.message} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT</label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder="12.345.678-9"
+                      {...register("guardianRut")}
+                      className={errors.guardianRut ? inputErr : inputOk}
+                    />
+                    <FieldError message={errors.guardianRut?.message} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Teléfono</label>
+                    <input
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="+56 9 1234 5678"
+                      {...register("guardianPhone")}
+                      className={errors.guardianPhone ? inputErr : inputOk}
+                    />
+                    <FieldError message={errors.guardianPhone?.message} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Correo</label>
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      placeholder="correo@ejemplo.cl"
+                      {...register("guardianEmail")}
+                      className={errors.guardianEmail ? inputErr : inputOk}
+                    />
+                    <FieldError message={errors.guardianEmail?.message} />
+                  </div>
+                </div>
+              </div>
+            )
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
               <div>
