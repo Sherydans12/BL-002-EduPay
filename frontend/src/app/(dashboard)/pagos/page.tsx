@@ -6,20 +6,14 @@ import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
 import type { Payment, Student, Course } from "@/lib/api";
 import { cmdkPersonFilter } from "@/lib/flexible-search";
 import { toast } from "sonner";
-import { Search, Download, FileText, Plus, FileSpreadsheet } from "lucide-react";
+import { Search, Download, FileText, Plus, FileSpreadsheet, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownChevron, NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { formatPaymentDate } from "@/lib/format-payment-date";
-
-const METHOD_LABELS: Record<string, string> = {
-  CASH: "Efectivo",
-  DEBIT: "Débito",
-  CREDIT: "Crédito",
-  CHECK: "Cheque",
-  TRANSFER: "Transferencia",
-};
+import { METHOD_LABELS } from "@/lib/payment-method-labels";
+import { PaymentDetailDialog } from "@/components/payment-detail-dialog";
 
 const fieldClass =
   "w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all";
@@ -50,6 +44,7 @@ export default function PagosMasterPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const [paymentDetail, setPaymentDetail] = useState<Payment | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -255,6 +250,9 @@ export default function PagosMasterPage() {
       </div>
 
       <div className="glass rounded-2xl overflow-hidden shadow-xl border-[var(--color-border)]">
+        <p className="px-6 pt-4 text-xs text-[var(--color-text-muted)]">
+          Pasá el cursor sobre una fila y hacé clic para ver el detalle completo del pago.
+        </p>
         {loading ? (
           <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" /></div>
         ) : payments.length === 0 ? (
@@ -270,12 +268,27 @@ export default function PagosMasterPage() {
                     <th className="px-6 py-4">Monto</th>
                     <th className="px-6 py-4">Método</th>
                     <th className="px-6 py-4">Pagador</th>
+                    <th className="w-12 px-2 py-4" aria-hidden />
                     <th className="px-6 py-4 text-center">Comprobante</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {payments.map((p, i) => (
-                    <tr key={p.id} className="hover:bg-[var(--color-surface-hover)] transition-colors animate-fade-in" style={{ animationDelay: `${i * 20}ms` }}>
+                    <tr
+                      key={p.id}
+                      role="button"
+                      tabIndex={0}
+                      title="Ver detalle del pago"
+                      onClick={() => setPaymentDetail(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setPaymentDetail(p);
+                        }
+                      }}
+                      className="group cursor-pointer border-l-2 border-l-transparent transition-all duration-200 ease-out hover:border-l-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] hover:shadow-[inset_0_0_0_9999px_rgba(59,130,246,0.04)] focus-visible:outline-none focus-visible:border-l-[var(--color-primary)] focus-visible:bg-[var(--color-surface-hover)] animate-fade-in"
+                      style={{ animationDelay: `${i * 20}ms` }}
+                    >
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-white">#{p.id}</div>
                         <div className="text-xs text-[var(--color-text-muted)]">{formatPaymentDate(p.paymentDate)}</div>
@@ -302,6 +315,9 @@ export default function PagosMasterPage() {
                           <span className="italic">Apoderado</span>
                         )}
                       </td>
+                      <td className="w-12 px-2 py-4 align-middle" aria-hidden>
+                        <ChevronRight className="mx-auto w-4 h-4 shrink-0 text-[var(--color-primary)] opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0" />
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center">
                           {p.boletaFileUrl ? (
@@ -309,6 +325,7 @@ export default function PagosMasterPage() {
                               href={`${API_URL}${p.boletaFileUrl}`} 
                               target="_blank" 
                               rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 hover:text-blue-300 transition-colors text-xs font-medium border border-slate-700 hover:border-blue-500/30"
                               title={p.boletaNumber ? `Boleta N° ${p.boletaNumber}` : "Ver comprobante"}
                             >
@@ -349,6 +366,15 @@ export default function PagosMasterPage() {
           </>
         )}
       </div>
+
+      <PaymentDetailDialog
+        payment={paymentDetail}
+        open={paymentDetail != null}
+        onOpenChange={(next) => {
+          if (!next) setPaymentDetail(null);
+        }}
+        apiBaseUrl={API_URL}
+      />
     </div>
   );
 }

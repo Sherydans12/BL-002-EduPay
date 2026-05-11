@@ -7,17 +7,11 @@ import type { Payment, Course, Student, CourseSummary, ReportSummary } from "@/l
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DownloadCloud, Search, FileSpreadsheet } from "lucide-react";
+import { DownloadCloud, Search, FileSpreadsheet, ChevronRight } from "lucide-react";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { formatPaymentDate } from "@/lib/format-payment-date";
-
-const METHOD_LABELS: Record<string, string> = {
-  CASH: "Efectivo",
-  DEBIT: "Débito",
-  CREDIT: "Crédito",
-  CHECK: "Cheque",
-  TRANSFER: "Transferencia",
-};
+import { METHOD_LABELS } from "@/lib/payment-method-labels";
+import { PaymentDetailDialog } from "@/components/payment-detail-dialog";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
 
@@ -39,6 +33,7 @@ export default function ReportsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"table" | "summary">("table");
+  const [paymentDetail, setPaymentDetail] = useState<Payment | null>(null);
 
   useEffect(() => {
     fetchAllCourses().then((data) => setCourses(data)).catch(() => {});
@@ -249,6 +244,9 @@ export default function ReportsPage() {
       {/* Table View */}
       {tab === "table" && (
         <div className="glass rounded-2xl overflow-hidden">
+          <p className="px-6 pt-4 text-xs text-[var(--color-text-muted)]">
+            Pasá el cursor sobre una fila y hacé clic para ver el detalle completo del pago.
+          </p>
           {loading ? (
             <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" /></div>
           ) : payments.length === 0 ? (
@@ -260,21 +258,40 @@ export default function ReportsPage() {
                   <thead>
                     <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
                       <th className="px-6 py-4">Fecha</th><th className="px-6 py-4">Alumno</th><th className="px-6 py-4 whitespace-nowrap">Curso</th>
-                      <th className="px-6 py-4">Monto</th><th className="px-6 py-4">Método</th><th className="px-6 py-4">Pagador</th><th className="px-6 py-4">Boleta</th>
+                      <th className="px-6 py-4">Monto</th><th className="px-6 py-4">Método</th><th className="px-6 py-4">Pagador</th>
+                      <th className="w-12 px-2 py-4" aria-hidden />
+                      <th className="px-6 py-4">Boleta</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {payments.map((p, i) => (
-                      <tr key={p.id} className="hover:bg-[var(--color-surface-hover)] transition-colors animate-fade-in" style={{ animationDelay: `${i * 30}ms` }}>
+                      <tr
+                        key={p.id}
+                        role="button"
+                        tabIndex={0}
+                        title="Ver detalle del pago"
+                        onClick={() => setPaymentDetail(p)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setPaymentDetail(p);
+                          }
+                        }}
+                        className="group cursor-pointer border-l-2 border-l-transparent transition-all duration-200 ease-out hover:border-l-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] hover:shadow-[inset_0_0_0_9999px_rgba(59,130,246,0.04)] focus-visible:outline-none focus-visible:border-l-[var(--color-primary)] focus-visible:bg-[var(--color-surface-hover)] animate-fade-in"
+                        style={{ animationDelay: `${i * 30}ms` }}
+                      >
                         <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{formatPaymentDate(p.paymentDate)}</td>
                         <td className="px-6 py-4"><p className="font-medium text-white text-sm">{p.student.name}</p><p className="text-xs text-[var(--color-text-muted)]">{p.student.rut}</p></td>
                         <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)] whitespace-nowrap">{p.student.course.name}</td>
                         <td className="px-6 py-4 font-semibold text-emerald-400">${p.amount.toLocaleString("es-CL")}</td>
                         <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-[var(--color-primary-light)] text-blue-300">{METHOD_LABELS[p.method] || p.method}</span></td>
                         <td className="px-6 py-4 text-sm">{p.payerName ? (<div><p className="text-white">{p.payerName}</p>{p.payerRut && <p className="text-xs text-[var(--color-text-muted)]">{p.payerRut}</p>}</div>) : <span className="text-[var(--color-text-muted)] italic">Apoderado</span>}</td>
+                        <td className="w-12 px-2 py-4 align-middle" aria-hidden>
+                          <ChevronRight className="mx-auto w-4 h-4 shrink-0 text-[var(--color-primary)] opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0" />
+                        </td>
                         <td className="px-6 py-4">
                           {p.boletaFileUrl ? (
-                            <a href={`${API_URL}${p.boletaFileUrl}`} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--color-primary)] hover:underline">{p.boletaNumber || "Ver PDF"}</a>
+                            <a href={`${API_URL}${p.boletaFileUrl}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-sm text-[var(--color-primary)] hover:underline">{p.boletaNumber || "Ver PDF"}</a>
                           ) : <span className="text-[var(--color-text-muted)]">—</span>}
                         </td>
                       </tr>
@@ -373,6 +390,15 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      <PaymentDetailDialog
+        payment={paymentDetail}
+        open={paymentDetail != null}
+        onOpenChange={(next) => {
+          if (!next) setPaymentDetail(null);
+        }}
+        apiBaseUrl={API_URL}
+      />
     </div>
   );
 }
