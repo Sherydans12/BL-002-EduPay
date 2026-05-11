@@ -38,4 +38,4 @@ USER node
 
 EXPOSE 3001
 
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "if [ -f dist/main.js ]; then node dist/main.js; elif [ -f dist/src/main.js ]; then node dist/src/main.js; else echo 'CRITICAL ERROR: main.js no encontrado. Estructura de dist:'; find dist; exit 1; fi"]
