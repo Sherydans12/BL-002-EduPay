@@ -11,7 +11,7 @@ function resolveJwtSecret(): Uint8Array | null {
   return new TextEncoder().encode(raw);
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('auth_token')?.value;
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
@@ -20,7 +20,7 @@ export async function middleware(request: NextRequest) {
   const jwtSecret = resolveJwtSecret();
   if (!jwtSecret) {
     console.error(
-      '[middleware] FATAL: JWT_SECRET no está definido. ' +
+      '[proxy] FATAL: JWT_SECRET no está definido. ' +
         'Acceso denegado a ruta protegida:',
       pathname,
     );

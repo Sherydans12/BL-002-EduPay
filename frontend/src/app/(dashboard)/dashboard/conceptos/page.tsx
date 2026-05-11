@@ -34,7 +34,7 @@ const conceptSchema = z.object({
     .number({ error: "El monto es requerido" })
     .int("Debe ser un número entero")
     .positive("Debe ser mayor a 0"),
-  isActive: z.boolean().default(true),
+  isActive: z.boolean(),
 });
 
 type ConceptFormData = z.infer<typeof conceptSchema>;

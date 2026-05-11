@@ -79,7 +79,10 @@ npx prisma migrate deploy
 ```
 NEXT_PUBLIC_API_URL=https://api.tu-dominio.cl/api
 NODE_ENV=production
+JWT_SECRET=<misma cadena que en el backend; obligatoria para el proxy de sesión>
 ```
+
+Opcional en desarrollo local (HMR al abrir la app por IP de red): `NEXT_ALLOWED_DEV_ORIGINS` — ver comentarios en `frontend/.env.example`.
 
 ### 3.3 Puerto
 El contenedor expone el puerto `3000`. Configura el dominio/proxy de Coolify apuntando a ese puerto.

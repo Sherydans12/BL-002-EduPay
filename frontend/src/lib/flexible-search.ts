@@ -53,7 +53,11 @@ export function matchesCourseName(courseName: string, query: string): boolean {
 
 /** Alumno + apoderado (vista curso). */
 export function matchesStudentRow(
-  row: { name: string; rut: string; guardian: { name: string; rut: string } },
+  row: {
+    name: string;
+    rut: string;
+    guardian: { name: string; rut?: string | null };
+  },
   query: string,
 ): boolean {
   const q = query.trim();
