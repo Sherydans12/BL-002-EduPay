@@ -24,6 +24,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { formatPaymentDate } from "@/lib/format-payment-date";
 
 // ─── Helpers ─────────────────────────────────────────────────
 function timeAgo(dateStr: string): string {
@@ -32,7 +33,7 @@ function timeAgo(dateStr: string): string {
   if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
   if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
   if (diff < 604800) return `hace ${Math.floor(diff / 86400)} días`;
-  return new Date(dateStr).toLocaleDateString("es-CL");
+  return formatPaymentDate(dateStr);
 }
 
 function initials(name: string): string {

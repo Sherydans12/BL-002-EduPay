@@ -5,6 +5,7 @@ import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { Prisma } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { buildWorkbook } from '../common/excel/excel.helper';
+import { formatPaymentCalendarDateEsCl } from '../common/format-payment-calendar-date';
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: 'Efectivo',
@@ -152,7 +153,7 @@ export class PaymentsService {
 
     const rows = data.map((p) => ({
       id: p.id,
-      fecha: new Date(p.paymentDate).toLocaleDateString('es-CL'),
+      fecha: formatPaymentCalendarDateEsCl(p.paymentDate),
       alumno: p.student.name,
       rutAlumno: p.student.rut,
       curso: p.student.course.name,

@@ -71,6 +71,7 @@ export class MailService {
     const subject = 'Comprobante de Pago - BaseLogic EduPay';
     const formattedDate = new Intl.DateTimeFormat('es-CL', {
       dateStyle: 'long',
+      timeZone: 'UTC',
     }).format(paymentDate);
     const formattedAmount = amount.toLocaleString('es-CL', {
       style: 'currency',

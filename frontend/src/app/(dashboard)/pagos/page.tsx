@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownChevron, NativeSelectField } from "@/components/ui/dropdown-chevron";
+import { formatPaymentDate } from "@/lib/format-payment-date";
 
 const METHOD_LABELS: Record<string, string> = {
   CASH: "Efectivo",
@@ -277,7 +278,7 @@ export default function PagosMasterPage() {
                     <tr key={p.id} className="hover:bg-[var(--color-surface-hover)] transition-colors animate-fade-in" style={{ animationDelay: `${i * 20}ms` }}>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-white">#{p.id}</div>
-                        <div className="text-xs text-[var(--color-text-muted)]">{new Date(p.paymentDate).toLocaleDateString("es-CL")}</div>
+                        <div className="text-xs text-[var(--color-text-muted)]">{formatPaymentDate(p.paymentDate)}</div>
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-medium text-white text-sm">{p.student.name}</p>

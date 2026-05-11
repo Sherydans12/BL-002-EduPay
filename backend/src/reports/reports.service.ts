@@ -74,7 +74,7 @@ export class ReportsService {
 
     const grouped = new Map<string, number>();
     for (const p of payments) {
-      const key = `${p.paymentDate.getFullYear()}-${String(p.paymentDate.getMonth() + 1).padStart(2, '0')}`;
+      const key = `${p.paymentDate.getUTCFullYear()}-${String(p.paymentDate.getUTCMonth() + 1).padStart(2, '0')}`;
       grouped.set(key, (grouped.get(key) ?? 0) + p.amount);
     }
 
