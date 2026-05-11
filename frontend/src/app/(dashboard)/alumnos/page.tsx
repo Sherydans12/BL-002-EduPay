@@ -195,10 +195,11 @@ export default function StudentsPage() {
           <div className="text-center py-16 text-[var(--color-text-muted)]">No hay alumnos que coincidan con la búsqueda</div>
         ) : (
           <>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                  <th className="px-6 py-4">RUT</th>
+                  <th className="px-6 py-4 whitespace-nowrap">RUT</th>
                   <th className="px-6 py-4">Nombre</th>
                   <th className="px-6 py-4">Curso</th>
                   <th className="px-6 py-4">Apoderado</th>
@@ -208,7 +209,7 @@ export default function StudentsPage() {
               <tbody className="divide-y divide-[var(--color-border)]">
                 {students.map((s) => (
                   <tr key={s.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                    <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{s.rut}</td>
+                    <td className="px-6 py-4 text-sm font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">{s.rut}</td>
                     <td className="px-6 py-4 font-medium text-white">{s.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300 whitespace-nowrap">
@@ -228,6 +229,7 @@ export default function StudentsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
             <TablePagination
               page={meta.page}
               totalPages={meta.lastPage}

@@ -224,17 +224,18 @@ export default function GuardiansPage() {
           <div className="text-center py-16 text-[var(--color-text-muted)]">No hay apoderados que coincidan con la búsqueda</div>
         ) : (
           <>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                  <th className="px-6 py-4">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Email</th>
+                  <th className="px-6 py-4 whitespace-nowrap">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Email</th>
                   <th className="px-6 py-4">Teléfono</th><th className="px-6 py-4">Alumnos</th><th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
                 {guardians.map((g) => (
                   <tr key={g.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                    <td className="px-6 py-4 text-sm font-mono text-[var(--color-text-secondary)]">{g.rut || "—"}</td>
+                    <td className="px-6 py-4 text-sm font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">{g.rut || "—"}</td>
                     <td className="px-6 py-4 font-medium text-white">{g.name}</td>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.email || "—"}</td>
                     <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.phone || "—"}</td>
@@ -247,6 +248,7 @@ export default function GuardiansPage() {
                 ))}
               </tbody>
             </table>
+            </div>
             <TablePagination
               page={meta.page}
               totalPages={meta.lastPage}
