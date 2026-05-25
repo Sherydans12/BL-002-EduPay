@@ -8,11 +8,21 @@ export interface ExcelColumn {
   numFmt?: string;
 }
 
-const HEADER_BG = 'FF1E3A5F';
+const HEADER_BG = 'FF1E293B';
 const HEADER_FG = 'FFFFFFFF';
-const ROW_ALT_BG = 'FFF0F4F8';
+const HEADER_BORDER = 'FF334155';
+const ZEBRA_WHITE = 'FFFFFFFF';
+const ZEBRA_ALT = 'FFF8FAFC';
 const ROW_BORDER = 'FFE2E8F0';
-const HEADER_BORDER = 'FF2563EB';
+
+function thinBorder(): Partial<ExcelJS.Borders> {
+  return {
+    top: { style: 'thin', color: { argb: ROW_BORDER } },
+    left: { style: 'thin', color: { argb: ROW_BORDER } },
+    bottom: { style: 'thin', color: { argb: ROW_BORDER } },
+    right: { style: 'thin', color: { argb: ROW_BORDER } },
+  };
+}
 
 /** Excel worksheet names: max 31 chars, no \ / ? * [ ] : */
 export function sanitizeExcelSheetName(raw: string, fallback: string): string {
@@ -37,7 +47,8 @@ function uniqueTabName(baseSanitized: string, used: Set<string>): string {
   return candidate;
 }
 
-function fillStyledSheet(
+/** Aplica cabecera corporativa, zebra striping y bordes finos a una hoja. */
+export function buildStyledSheet(
   sheet: ExcelJS.Worksheet,
   columns: ExcelColumn[],
   rows: Record<string, unknown>[],
@@ -49,7 +60,7 @@ function fillStyledSheet(
   }));
 
   const headerRow = sheet.getRow(1);
-  headerRow.height = 22;
+  headerRow.height = 24;
   headerRow.eachCell({ includeEmpty: true }, (cell) => {
     cell.font = { bold: true, color: { argb: HEADER_FG }, size: 11 };
     cell.fill = {
@@ -71,16 +82,14 @@ function fillStyledSheet(
 
   sheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
-    const fillColor = rowNumber % 2 === 0 ? ROW_ALT_BG : 'FFFFFFFF';
+    const fillColor = rowNumber % 2 === 0 ? ZEBRA_ALT : ZEBRA_WHITE;
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: fillColor },
       };
-      cell.border = {
-        bottom: { style: 'thin', color: { argb: ROW_BORDER } },
-      };
+      cell.border = thinBorder();
       const col = columns[colNumber - 1];
       if (col?.numFmt) cell.numFmt = col.numFmt;
     });
@@ -103,7 +112,7 @@ export async function buildWorkbook(
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet(sheetName);
-  fillStyledSheet(sheet, columns, rows);
+  buildStyledSheet(sheet, columns, rows);
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
@@ -130,7 +139,7 @@ export async function buildMultiSheetWorkbook(
 
   if (sheets.length === 0) {
     const sheet = workbook.addWorksheet('Info');
-    fillStyledSheet(
+    buildStyledSheet(
       sheet,
       [{ header: 'Mensaje', key: 'mensaje', width: 50 }],
       [{ mensaje: 'No hay cursos activos para exportar.' }],
@@ -139,7 +148,7 @@ export async function buildMultiSheetWorkbook(
     for (const spec of sheets) {
       const tabName = uniqueTabName(spec.name, usedNames);
       const sheet = workbook.addWorksheet(tabName);
-      fillStyledSheet(sheet, spec.columns, spec.rows);
+      buildStyledSheet(sheet, spec.columns, spec.rows);
     }
   }
 

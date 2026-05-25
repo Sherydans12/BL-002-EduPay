@@ -174,25 +174,40 @@ export class GuardiansService {
     const data = await this.prisma.guardian.findMany({
       where: { deletedAt: null },
       orderBy: { name: 'asc' },
-      include: { _count: { select: { students: true } } },
+      include: {
+        students: {
+          where: { deletedAt: null },
+          orderBy: { name: 'asc' },
+          select: { name: true },
+        },
+      },
     });
 
-    const rows = data.map((g) => ({
-      id: g.id,
-      rut: g.rut ?? '',
-      nombre: g.name,
-      email: g.email ?? '',
-      telefono: g.phone ?? '',
-      alumnos: g._count.students,
-    }));
+    const rows = data.map((g) => {
+      const nombresAlumnos = g.students.map((s) => s.name);
+      return {
+        id: g.id,
+        rut: g.rut ?? '',
+        nombre: g.name,
+        email: g.email ?? '',
+        telefono: g.phone ?? '',
+        alumnosAsociados: nombresAlumnos.join(', '),
+        cantidadAlumnos: nombresAlumnos.length,
+      };
+    });
 
-    return buildWorkbook('Apoderados', [
-      { header: 'ID', key: 'id', width: 8 },
-      { header: 'RUT', key: 'rut', width: 16 },
-      { header: 'Nombre', key: 'nombre', width: 35 },
-      { header: 'Email', key: 'email', width: 30 },
-      { header: 'Teléfono', key: 'telefono', width: 18 },
-      { header: 'N° Alumnos', key: 'alumnos', width: 14 },
-    ], rows);
+    return buildWorkbook(
+      'Apoderados',
+      [
+        { header: 'ID', key: 'id', width: 8 },
+        { header: 'RUT', key: 'rut', width: 16 },
+        { header: 'Nombre', key: 'nombre', width: 35 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Teléfono', key: 'telefono', width: 18 },
+        { header: 'Alumnos Asociados', key: 'alumnosAsociados', width: 45 },
+        { header: 'Cantidad de Alumnos', key: 'cantidadAlumnos', width: 18 },
+      ],
+      rows,
+    );
   }
 }

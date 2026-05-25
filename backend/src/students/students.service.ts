@@ -10,6 +10,12 @@ import { Prisma, StudentStatus } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
 import { buildStudentSearchWhere } from '../common/search/flexible-search';
 
+const STUDENT_STATUS_LABELS: Record<StudentStatus, string> = {
+  ACTIVE: 'Activo',
+  INACTIVE: 'Inactivo',
+  GRADUATED: 'Egresado',
+};
+
 @Injectable()
 export class StudentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -123,21 +129,21 @@ export class StudentsService {
       rut: s.rut,
       nombre: s.name,
       curso: s.course.name,
-      apoderado: s.guardian.name,
-      rutApoderado: s.guardian.rut ?? '',
-      emailApoderado: s.guardian.email ?? '',
-      telefonoApoderado: s.guardian.phone ?? '',
+      estado: STUDENT_STATUS_LABELS[s.status],
+      apoderado: s.guardian?.name ?? 'Sin Apoderado',
     }));
 
-    return buildWorkbook('Alumnos', [
-      { header: 'ID', key: 'id', width: 8 },
-      { header: 'RUT', key: 'rut', width: 16 },
-      { header: 'Nombre', key: 'nombre', width: 35 },
-      { header: 'Curso', key: 'curso', width: 22 },
-      { header: 'Apoderado', key: 'apoderado', width: 35 },
-      { header: 'RUT Apoderado', key: 'rutApoderado', width: 16 },
-      { header: 'Email Apoderado', key: 'emailApoderado', width: 30 },
-      { header: 'Teléfono Apoderado', key: 'telefonoApoderado', width: 22 },
-    ], rows);
+    return buildWorkbook(
+      'Alumnos',
+      [
+        { header: 'ID', key: 'id', width: 8 },
+        { header: 'RUT', key: 'rut', width: 16 },
+        { header: 'Nombre', key: 'nombre', width: 35 },
+        { header: 'Curso', key: 'curso', width: 22 },
+        { header: 'Estado', key: 'estado', width: 14 },
+        { header: 'Apoderado', key: 'apoderado', width: 35 },
+      ],
+      rows,
+    );
   }
 }

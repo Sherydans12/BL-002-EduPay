@@ -2,12 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
-import {
-  buildMultiSheetWorkbook,
-  sanitizeExcelSheetName,
-  type ExcelColumn,
-} from '../common/excel/excel.helper';
-import { Prisma } from '@prisma/client';
+import { buildWorkbook } from '../common/excel/excel.helper';
+import { Prisma, StudentStatus } from '@prisma/client';
 import { buildCourseSearchWhere } from '../common/search/flexible-search';
 
 @Injectable()
@@ -76,42 +72,33 @@ export class CoursesService {
   }
 
   async exportToXlsx(): Promise<Buffer> {
-    const columns: ExcelColumn[] = [
-      { header: 'ID', key: 'id', width: 8 },
-      { header: 'RUT', key: 'rut', width: 14 },
-      { header: 'Nombre completo', key: 'nombre', width: 40 },
-      { header: 'Apoderado', key: 'apoderado', width: 35 },
-      { header: 'RUT apoderado', key: 'rutApoderado', width: 18 },
-      { header: 'Email apoderado', key: 'emailApoderado', width: 32 },
-      { header: 'Teléfono apoderado', key: 'telefonoApoderado', width: 18 },
-    ];
-
     const courses = await this.prisma.course.findMany({
       where: { deletedAt: null },
       orderBy: { id: 'asc' },
       include: {
         students: {
-          where: { deletedAt: null },
-          orderBy: { name: 'asc' },
-          include: { guardian: true },
+          where: { deletedAt: null, status: StudentStatus.ACTIVE },
+          select: { id: true },
         },
       },
     });
 
-    const sheets = courses.map((c) => ({
-      name: sanitizeExcelSheetName(c.name, `Curso ${c.id}`),
-      columns,
-      rows: c.students.map((s) => ({
-        id: s.id,
-        rut: s.rut,
-        nombre: s.name,
-        apoderado: s.guardian.name,
-        rutApoderado: s.guardian.rut,
-        emailApoderado: s.guardian.email ?? '',
-        telefonoApoderado: s.guardian.phone ?? '',
-      })),
+    const rows = courses.map((c) => ({
+      id: c.id,
+      nombre: c.name,
+      nivel: '—',
+      matriculaActual: c.students.length,
     }));
 
-    return buildMultiSheetWorkbook(sheets);
+    return buildWorkbook(
+      'Cursos',
+      [
+        { header: 'ID', key: 'id', width: 8 },
+        { header: 'Nombre del Curso', key: 'nombre', width: 30 },
+        { header: 'Nivel', key: 'nivel', width: 16 },
+        { header: 'Matrícula Actual', key: 'matriculaActual', width: 18 },
+      ],
+      rows,
+    );
   }
 }
