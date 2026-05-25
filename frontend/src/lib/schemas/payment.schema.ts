@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 // ─── RUT Chileno ──────────────────────────────────────────────
-// Valida formato XX.XXX.XXX-X o XXXXXXXX-X (con o sin puntos)
 const rutRegex = /^(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])$/;
 
 function isValidRut(rut: string): boolean {
@@ -25,31 +24,35 @@ function isValidRut(rut: string): boolean {
   return dv === expectedDv;
 }
 
-// ─── Constantes ───────────────────────────────────────────────
 const PAYMENT_METHODS = ["CASH", "DEBIT", "CREDIT", "CHECK", "TRANSFER"] as const;
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_PDF_TYPE = "application/pdf";
 
-// ─── Schema (Zod 4) ──────────────────────────────────────────
+export const paymentAllocationSchema = z.object({
+  studentId: z
+    .number({ error: "Alumno requerido" })
+    .int()
+    .positive("Alumno inválido"),
+  conceptId: z
+    .number({ error: "Debe seleccionar un concepto" })
+    .int()
+    .positive("Debe seleccionar un concepto"),
+  amount: z
+    .number({ error: "Monto requerido" })
+    .int("El monto debe ser un número entero")
+    .positive("El monto debe ser mayor a 0"),
+});
+
 export const paymentSchema = z
   .object({
-    // Paso 1: Selección de alumno
-    studentId: z
-      .number({ error: "Debe seleccionar un alumno" })
-      .int()
-      .positive("Debe seleccionar un alumno"),
+    totalAmount: z
+      .number({ error: "El monto total es requerido" })
+      .int("El monto total debe ser un número entero")
+      .positive("El monto total debe ser mayor a 0"),
 
-    // Concepto de pago
-    conceptId: z
-      .number({ error: "Debe seleccionar un concepto de pago" })
-      .int()
-      .positive("Debe seleccionar un concepto de pago"),
-
-    // Paso 2: Datos del pago
-    amount: z
-      .number({ error: "El monto es requerido" })
-      .int("El monto debe ser un número entero")
-      .positive("El monto debe ser mayor a 0"),
+    allocations: z
+      .array(paymentAllocationSchema)
+      .min(1, "Debe incluir al menos un alumno en el pago"),
 
     method: z.enum(PAYMENT_METHODS, {
       error: "Método de pago inválido",
@@ -57,16 +60,12 @@ export const paymentSchema = z
 
     paymentDate: z
       .string({ error: "La fecha de pago es requerida" })
-      .regex(
-        /^\d{4}-\d{2}-\d{2}$/,
-        "Formato de fecha inválido (use YYYY-MM-DD)"
-      )
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido (use YYYY-MM-DD)")
       .refine((val) => !isNaN(Date.parse(val)), "Fecha inválida"),
 
     referenceCode: z.string().max(100, "Máximo 100 caracteres").optional().or(z.literal("")),
     notes: z.string().max(500, "Máximo 500 caracteres").optional().or(z.literal("")),
 
-    // Paso 3: Pagador alternativo
     useAltPayer: z.boolean().default(false),
 
     payerName: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
@@ -83,7 +82,6 @@ export const paymentSchema = z
         { message: "RUT del pagador inválido (formato: 12.345.678-9)" }
       ),
 
-    /** Datos del apoderado (paso 3 cuando no es tercero); se persisten vía PUT /guardians/:id */
     guardianName: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
 
     guardianRut: z
@@ -102,7 +100,6 @@ export const paymentSchema = z
 
     guardianPhone: z.string().max(50, "Máximo 50 caracteres").optional().or(z.literal("")),
 
-    // Paso 4: Boleta
     boletaNumber: z.string().max(50, "Máximo 50 caracteres").optional().or(z.literal("")),
 
     boleta: z
@@ -124,6 +121,15 @@ export const paymentSchema = z
       ),
   })
   .superRefine((data, ctx) => {
+    const sum = data.allocations.reduce((acc, row) => acc + row.amount, 0);
+    if (sum !== data.totalAmount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "La suma de los montos por alumno debe coincidir con el monto total",
+        path: ["totalAmount"],
+      });
+    }
+
     if (data.useAltPayer && (!data.payerName || data.payerName.trim().length === 0)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -132,7 +138,7 @@ export const paymentSchema = z
       });
     }
 
-    if (!data.useAltPayer && data.studentId) {
+    if (!data.useAltPayer && data.allocations.length > 0) {
       const gName = data.guardianName?.trim();
       if (!gName) {
         ctx.addIssue({
@@ -152,5 +158,5 @@ export const paymentSchema = z
     }
   });
 
-// Usar z.input para compatibilidad con React Hook Form resolver
 export type PaymentFormData = z.input<typeof paymentSchema>;
+export type PaymentAllocationFormData = z.infer<typeof paymentAllocationSchema>;

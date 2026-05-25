@@ -182,6 +182,7 @@ export interface Payment {
   paymentDate: string;
   studentId: number;
   student: Student;
+  paymentGroupId?: number | null;
   conceptId?: number | null;
   concept?: PaymentConcept | null;
   payerName?: string;
@@ -191,6 +192,49 @@ export interface Payment {
   boletaFileUrl?: string;
   boletaNumber?: string;
   createdAt: string;
+}
+
+export interface PaymentGroup {
+  id: number;
+  totalAmount: number;
+  method: string;
+  paymentDate: string;
+  boletaFileUrl?: string | null;
+  boletaNumber?: string | null;
+  notes?: string | null;
+  payments: Payment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Serializa el payload de pago agrupado para POST /payments/batch (multipart). */
+export function buildPaymentBatchFormData(data: {
+  totalAmount: number;
+  method: string;
+  paymentDate: string;
+  allocations: Array<{ studentId: number; conceptId: number; amount: number }>;
+  boletaNumber?: string;
+  notes?: string;
+  boleta?: File;
+}): FormData {
+  const fd = new FormData();
+  fd.append("totalAmount", String(data.totalAmount));
+  fd.append("method", data.method);
+  fd.append("paymentDate", data.paymentDate);
+  fd.append(
+    "allocations",
+    JSON.stringify(
+      data.allocations.map((a) => ({
+        studentId: a.studentId,
+        conceptId: a.conceptId,
+        amount: a.amount,
+      }))
+    )
+  );
+  if (data.boletaNumber?.trim()) fd.append("boletaNumber", data.boletaNumber.trim());
+  if (data.notes?.trim()) fd.append("notes", data.notes.trim());
+  if (data.boleta) fd.append("boleta", data.boleta);
+  return fd;
 }
 
 export interface PaginatedResponse<T> {
@@ -311,6 +355,11 @@ export const paymentsApi = {
   getOne: (id: number) => request<Payment>(`/payments/${id}`),
   create: (formData: FormData) =>
     request<Payment>("/payments", {
+      method: "POST",
+      body: formData,
+    }),
+  createBatch: (formData: FormData) =>
+    request<PaymentGroup>("/payments/batch", {
       method: "POST",
       body: formData,
     }),
