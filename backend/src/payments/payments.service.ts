@@ -16,6 +16,18 @@ const METHOD_LABELS: Record<string, string> = {
   TRANSFER: 'Transferencia',
 };
 
+const paymentLineInclude = {
+  student: { include: { course: true, guardian: true } },
+  concept: true,
+} as const;
+
+const paymentGroupInclude = {
+  payments: {
+    include: paymentLineInclude,
+    orderBy: { id: 'asc' as const },
+  },
+} as const;
+
 @Injectable()
 export class PaymentsService {
   constructor(
@@ -23,25 +35,67 @@ export class PaymentsService {
     private readonly mailService: MailService,
   ) {}
 
+  /** Migra pagos sin grupo a un PaymentGroup 1:1 (idempotente). */
+  async migrateLegacyPayments(): Promise<void> {
+    const orphans = await this.prisma.payment.findMany({
+      where: { paymentGroupId: null },
+      orderBy: { id: 'asc' },
+    });
+    if (orphans.length === 0) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const p of orphans) {
+        const group = await tx.paymentGroup.create({
+          data: {
+            totalAmount: p.amount,
+            method: p.method,
+            paymentDate: p.paymentDate,
+            boletaFileUrl: p.boletaFileUrl,
+            boletaNumber: p.boletaNumber,
+            notes: p.notes,
+          },
+        });
+        await tx.payment.update({
+          where: { id: p.id },
+          data: { paymentGroupId: group.id },
+        });
+      }
+    });
+  }
+
   async create(dto: CreatePaymentDto, boletaFileUrl?: string) {
-    const payment = await this.prisma.payment.create({
-      data: {
-        amount: dto.amount,
-        method: dto.method,
-        paymentDate: new Date(dto.paymentDate),
-        studentId: dto.studentId,
-        conceptId: dto.conceptId || null,
-        payerName: dto.payerName || null,
-        payerRut: dto.payerRut || null,
-        referenceCode: dto.referenceCode || null,
-        notes: dto.notes || null,
-        boletaNumber: dto.boletaNumber || null,
-        boletaFileUrl: boletaFileUrl || null,
-      },
-      include: {
-        student: { include: { course: true, guardian: true } },
-        concept: true,
-      },
+    const paymentDate = new Date(dto.paymentDate);
+    const resolvedBoletaUrl = boletaFileUrl ?? null;
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const group = await tx.paymentGroup.create({
+        data: {
+          totalAmount: dto.amount,
+          method: dto.method,
+          paymentDate,
+          boletaFileUrl: resolvedBoletaUrl,
+          boletaNumber: dto.boletaNumber ?? null,
+          notes: dto.notes ?? null,
+        },
+      });
+
+      return tx.payment.create({
+        data: {
+          amount: dto.amount,
+          method: dto.method,
+          paymentDate,
+          studentId: dto.studentId,
+          conceptId: dto.conceptId || null,
+          paymentGroupId: group.id,
+          payerName: dto.payerName || null,
+          payerRut: dto.payerRut || null,
+          referenceCode: dto.referenceCode || null,
+          notes: null,
+          boletaNumber: null,
+          boletaFileUrl: null,
+        },
+        include: paymentLineInclude,
+      });
     });
 
     const guardianEmail = payment.student.guardian.email?.trim();
@@ -51,7 +105,7 @@ export class PaymentsService {
         studentName: payment.student.name,
         amount: payment.amount,
         paymentDate: payment.paymentDate,
-        boletaFileUrl: payment.boletaFileUrl,
+        boletaFileUrl: resolvedBoletaUrl ?? undefined,
       });
     }
 
@@ -120,6 +174,60 @@ export class PaymentsService {
     });
   }
 
+  private buildPaymentGroupWhere(
+    filters: FilterPaymentsDto,
+  ): Prisma.PaymentGroupWhereInput {
+    const { dateFrom, dateTo, courseId, studentId } = filters;
+    const where: Prisma.PaymentGroupWhereInput = { deletedAt: null };
+
+    if (dateFrom || dateTo) {
+      where.paymentDate = {};
+      if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        where.paymentDate.lte = end;
+      }
+    }
+
+    if (studentId || courseId) {
+      where.payments = {
+        some: {
+          ...(studentId ? { studentId } : {}),
+          ...(courseId ? { student: { courseId } } : {}),
+        },
+      };
+    }
+
+    return where;
+  }
+
+  async findGroups(filters: FilterPaymentsDto) {
+    const { page = 1, limit = 50 } = filters;
+    const where = this.buildPaymentGroupWhere(filters);
+
+    const [data, total] = await Promise.all([
+      this.prisma.paymentGroup.findMany({
+        where,
+        orderBy: { paymentDate: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: paymentGroupInclude,
+      }),
+      this.prisma.paymentGroup.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async findAll(filters: FilterPaymentsDto) {
     const { dateFrom, dateTo, courseId, studentId, page = 1, limit = 50 } = filters;
 
@@ -155,6 +263,7 @@ export class PaymentsService {
         include: {
           student: { include: { course: true, guardian: true } },
           concept: true,
+          paymentGroup: true,
         },
       }),
       this.prisma.payment.count({ where }),
@@ -177,6 +286,7 @@ export class PaymentsService {
       include: {
         student: { include: { course: true, guardian: true } },
         concept: true,
+        paymentGroup: true,
       },
     });
     if (!payment) throw new NotFoundException(`Payment #${id} not found`);
@@ -211,11 +321,13 @@ export class PaymentsService {
       include: {
         student: { include: { course: true, guardian: true } },
         concept: true,
+        paymentGroup: true,
       },
     });
 
     const rows = data.map((p) => ({
       id: p.id,
+      grupoId: p.paymentGroupId ?? '',
       fecha: formatPaymentCalendarDateEsCl(p.paymentDate),
       alumno: p.student.name,
       rutAlumno: p.student.rut,
@@ -225,13 +337,14 @@ export class PaymentsService {
       concepto: p.concept?.name ?? '',
       pagador: p.payerName ?? 'Apoderado',
       rutPagador: p.payerRut ?? '',
-      boleta: p.boletaNumber ?? '',
+      boleta: p.paymentGroup?.boletaNumber ?? p.boletaNumber ?? '',
       referencia: p.referenceCode ?? '',
-      notas: p.notes ?? '',
+      notas: p.paymentGroup?.notes ?? p.notes ?? '',
     }));
 
     return buildWorkbook('Pagos', [
       { header: 'ID', key: 'id', width: 8 },
+      { header: 'ID Grupo', key: 'grupoId', width: 10 },
       { header: 'Fecha', key: 'fecha', width: 14 },
       { header: 'Alumno', key: 'alumno', width: 32 },
       { header: 'RUT Alumno', key: 'rutAlumno', width: 16 },

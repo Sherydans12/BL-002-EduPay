@@ -183,6 +183,10 @@ export interface Payment {
   studentId: number;
   student: Student;
   paymentGroupId?: number | null;
+  paymentGroup?: Pick<
+    PaymentGroup,
+    "id" | "boletaFileUrl" | "boletaNumber" | "notes" | "totalAmount"
+  > | null;
   conceptId?: number | null;
   concept?: PaymentConcept | null;
   payerName?: string;
@@ -351,6 +355,12 @@ export const paymentsApi = {
       ? `?${new URLSearchParams(params).toString()}`
       : "";
     return request<PaginatedResponse<Payment>>(`/payments${query}`);
+  },
+  getGroups: (params?: Record<string, string>) => {
+    const query = params
+      ? `?${new URLSearchParams(params).toString()}`
+      : "";
+    return request<PaginatedResponse<PaymentGroup>>(`/payments/groups${query}`);
   },
   getOne: (id: number) => request<Payment>(`/payments/${id}`),
   create: (formData: FormData) =>

@@ -199,6 +199,19 @@ export class PaymentsController {
     res.end(buffer);
   }
 
+  @Get('groups')
+  @RequirePermissions('view:payments')
+  @ApiOperation({
+    summary: 'Listar transacciones (PaymentGroup) paginadas',
+    description:
+      'Historial agrupado por cobro. Incluye líneas de pago por alumno. ' +
+      'Soporta filtros por fecha, curso y alumno.',
+  })
+  @ApiResponse({ status: 200, description: 'Lista paginada de grupos con payments' })
+  findGroups(@Query() filters: FilterPaymentsDto) {
+    return this.paymentsService.findGroups(filters);
+  }
+
   @Get()
   @RequirePermissions('view:payments')
   @ApiOperation({

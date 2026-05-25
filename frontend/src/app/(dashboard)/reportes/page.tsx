@@ -11,6 +11,10 @@ import { DownloadCloud, Search, FileSpreadsheet, ChevronRight } from "lucide-rea
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { formatPaymentDate } from "@/lib/format-payment-date";
 import { METHOD_LABELS } from "@/lib/payment-method-labels";
+import {
+  getPaymentBoletaFileUrl,
+  getPaymentBoletaNumber,
+} from "@/lib/payment-group-utils";
 import { PaymentDetailDialog } from "@/components/payment-detail-dialog";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
@@ -288,9 +292,19 @@ export default function ReportsPage() {
                           <ChevronRight className="mx-auto w-4 h-4 shrink-0 text-[var(--color-primary)] opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0" />
                         </td>
                         <td className="px-6 py-4">
-                          {p.boletaFileUrl ? (
-                            <a href={resolveUploadUrl(p.boletaFileUrl)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-sm text-[var(--color-primary)] hover:underline">{p.boletaNumber || "Ver PDF"}</a>
-                          ) : <span className="text-[var(--color-text-muted)]">—</span>}
+                          {getPaymentBoletaFileUrl(p) ? (
+                            <a
+                              href={resolveUploadUrl(getPaymentBoletaFileUrl(p)!)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-sm text-[var(--color-primary)] hover:underline"
+                            >
+                              {getPaymentBoletaNumber(p) || "Ver PDF"}
+                            </a>
+                          ) : (
+                            <span className="text-[var(--color-text-muted)]">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
