@@ -231,7 +231,7 @@ npm run build            # Build para producción
 
 ## Despliegue en Producción (cPanel)
 
-Consultar la guía detallada en [`README-deploy.md`](./README-deploy.md).
+Consultar la guía detallada en [`README-deploy.md`](./README-deploy.md) (Coolify + Docker; migraciones automáticas al arranque del backend).
 
 ---
 

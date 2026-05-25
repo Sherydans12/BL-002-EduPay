@@ -51,6 +51,9 @@ SMTP_PASS=
 SMTP_FROM=noreply@colegio.cl
 
 UPLOAD_DIR=uploads
+
+# Opcional: omitir migraciones al arranque (por defecto se aplican solas)
+# RUN_MIGRATIONS=false
 ```
 
 ### 2.3 Volumen persistente
@@ -60,11 +63,37 @@ En la pestaña **Storages** del recurso backend, añade:
 |-------------------------|-------------------------|
 | `uploads`               | `/usr/src/app/uploads`  |
 
-### 2.4 Comando post-deploy (migraciones)
-En la pestaña **Advanced → Post-deployment Command**:
-```bash
-npx prisma migrate deploy
+### 2.4 Migraciones y arranque automáticos
+
+No hace falta configurar **Post-deployment Command** en Coolify para las migraciones: el contenedor las aplica solo al iniciar, mediante `backend/docker-entrypoint.sh`:
+
+1. Verifica que exista `DATABASE_URL`.
+2. Ejecuta `npx prisma migrate deploy` (aplica migraciones pendientes de `prisma/migrations/`).
+3. Arranca NestJS (`node dist/.../main.js`).
+
+Si en Coolify tenías un comando post-deploy con `prisma migrate deploy`, puedes **eliminarlo** para evitar ejecutar las migraciones dos veces por despliegue.
+
+Para desactivar migraciones al arranque (solo casos excepcionales, p. ej. depuración):
+
 ```
+RUN_MIGRATIONS=false
+```
+
+---
+
+### 2.5 Qué ocurre en cada redespliegue (Coolify)
+
+| Paso | Backend | Frontend |
+|------|---------|----------|
+| Build de imagen | `npm ci` instala dependencias según `package-lock.json` | `npm ci` + `npm run build` (standalone) |
+| Prisma Client | `npx prisma generate` en etapa builder | — |
+| Migraciones DB | Al **iniciar** el contenedor (`migrate deploy`) | — |
+| Dependencias nuevas | Incluidas si subiste cambios en `package.json` / lock y Coolify reconstruyó la imagen | Igual |
+| Runtime `npm install` | No aplica: todo va en la imagen Docker | No aplica |
+
+**Importante:** cada push que dispare un rebuild ejecuta `npm ci` de cero; no depende de un `npm install` manual en el servidor. Si agregaste una librería, commitea `package.json` y `package-lock.json` y redespliega.
+
+`prisma` está en `dependencies` (no solo en dev) para que el CLI exista en la imagen de producción.
 
 ---
 
