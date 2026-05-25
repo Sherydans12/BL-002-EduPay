@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { paymentsApi, reportsApi, downloadBlob } from "@/lib/api";
+import { paymentsApi, reportsApi, downloadBlob, resolveUploadUrl } from "@/lib/api";
 import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
 import type { Payment, Course, Student, CourseSummary, ReportSummary } from "@/lib/api";
 import { toast } from "sonner";
@@ -88,8 +88,6 @@ export default function ReportsPage() {
   };
 
   const grandTotal = payments.reduce((sum, p) => sum + p.amount, 0);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-
   const handleExportExcel = async () => {
     setIsExporting(true);
     const toastId = toast.loading("Generando Excel...");
@@ -291,7 +289,7 @@ export default function ReportsPage() {
                         </td>
                         <td className="px-6 py-4">
                           {p.boletaFileUrl ? (
-                            <a href={`${API_URL}${p.boletaFileUrl}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-sm text-[var(--color-primary)] hover:underline">{p.boletaNumber || "Ver PDF"}</a>
+                            <a href={resolveUploadUrl(p.boletaFileUrl)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-sm text-[var(--color-primary)] hover:underline">{p.boletaNumber || "Ver PDF"}</a>
                           ) : <span className="text-[var(--color-text-muted)]">—</span>}
                         </td>
                       </tr>
@@ -397,7 +395,6 @@ export default function ReportsPage() {
         onOpenChange={(next) => {
           if (!next) setPaymentDetail(null);
         }}
-        apiBaseUrl={API_URL}
       />
     </div>
   );

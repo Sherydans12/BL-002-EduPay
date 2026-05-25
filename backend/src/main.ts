@@ -58,7 +58,8 @@ async function bootstrap() {
     process.cwd(),
     config.get<string>('UPLOAD_DIR') || 'uploads',
   );
-  app.useStaticAssets(uploadDir, { prefix: '/uploads' });
+  // Mismo prefijo que usa el frontend: NEXT_PUBLIC_API_URL + boletaFileUrl (/uploads/…)
+  app.useStaticAssets(uploadDir, { prefix: '/api/uploads' });
 
   // ─── Swagger (solo fuera de producción) ──────────────────────
   if (!isProduction) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { paymentsApi, downloadBlob } from "@/lib/api";
+import { paymentsApi, downloadBlob, resolveUploadUrl } from "@/lib/api";
 import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
 import type { Payment, Student, Course } from "@/lib/api";
 import { cmdkPersonFilter } from "@/lib/flexible-search";
@@ -45,8 +45,6 @@ export default function PagosMasterPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<Payment | null>(null);
-
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
   useEffect(() => {
     fetchAllCourses().then((data) => setCourses(data)).catch(() => {});
@@ -322,7 +320,7 @@ export default function PagosMasterPage() {
                         <div className="flex justify-center">
                           {p.boletaFileUrl ? (
                             <a 
-                              href={`${API_URL}${p.boletaFileUrl}`} 
+                              href={resolveUploadUrl(p.boletaFileUrl)} 
                               target="_blank" 
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
@@ -373,7 +371,6 @@ export default function PagosMasterPage() {
         onOpenChange={(next) => {
           if (!next) setPaymentDetail(null);
         }}
-        apiBaseUrl={API_URL}
       />
     </div>
   );

@@ -1,5 +1,12 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
+/** URL absoluta de un PDF guardado en el backend (boletaFileUrl = `/uploads/…`). */
+export function resolveUploadUrl(boletaFileUrl: string): string {
+  const base = API_URL.replace(/\/$/, "");
+  const path = boletaFileUrl.startsWith("/") ? boletaFileUrl : `/${boletaFileUrl}`;
+  return `${base}${path}`;
+}
+
 // ─── Blob Download Helper ─────────────────────────────────────
 /**
  * Triggers a browser file download from a Blob object using the DOM trick.

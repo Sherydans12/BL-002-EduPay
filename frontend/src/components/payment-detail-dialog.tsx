@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { Payment } from "@/lib/api";
+import { resolveUploadUrl } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -43,14 +44,12 @@ export type PaymentDetailDialogProps = {
   payment: Payment | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  apiBaseUrl: string;
 };
 
 export function PaymentDetailDialog({
   payment,
   open,
   onOpenChange,
-  apiBaseUrl,
 }: PaymentDetailDialogProps) {
   const g = payment?.student.guardian;
   const methodLabel = payment
@@ -169,7 +168,7 @@ export function PaymentDetailDialog({
                   )}
                 </div>
                 <a
-                  href={`${apiBaseUrl}${payment.boletaFileUrl}`}
+                  href={resolveUploadUrl(payment.boletaFileUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 w-fit px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 hover:text-blue-300 text-xs font-medium border border-slate-700 hover:border-blue-500/30 transition-colors"
