@@ -1,20 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { Prisma } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
-import { buildWorkbook } from '../common/excel/excel.helper';
-import { formatPaymentCalendarDateEsCl } from '../common/format-payment-calendar-date';
-
-const METHOD_LABELS: Record<string, string> = {
-  CASH: 'Efectivo',
-  DEBIT: 'Débito',
-  CREDIT: 'Crédito',
-  CHECK: 'Cheque',
-  TRANSFER: 'Transferencia',
-};
+import { buildPaymentGroupsWorkbookBuffer } from '../common/excel/payment-groups-sheet.export';
 
 const paymentLineInclude = {
   student: { include: { course: true, guardian: true } },
@@ -29,11 +20,15 @@ const paymentGroupInclude = {
 } as const;
 
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.migrateLegacyPayments();
+  }
 
   /** Migra pagos sin grupo a un PaymentGroup 1:1 (idempotente). */
   async migrateLegacyPayments(): Promise<void> {
@@ -298,66 +293,20 @@ export class PaymentsService {
     return this.prisma.payment.delete({ where: { id } });
   }
 
-  /** Genera buffer XLSX con todos los pagos que cumplan los filtros (sin paginación) */
-  async exportToXlsx(filters: FilterPaymentsDto): Promise<Buffer> {
-    const { dateFrom, dateTo, courseId, studentId } = filters;
-
-    const where: Prisma.PaymentWhereInput = {};
-    if (dateFrom || dateTo) {
-      where.paymentDate = {};
-      if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        where.paymentDate.lte = end;
-      }
-    }
-    if (courseId) where.student = { courseId };
-    if (studentId) where.studentId = studentId;
-
-    const data = await this.prisma.payment.findMany({
+  /** Grupos de pago para exportación (sin paginación), alineado con filtros de la UI. */
+  async findAllGroupsForExport(filters: FilterPaymentsDto) {
+    const where = this.buildPaymentGroupWhere(filters);
+    return this.prisma.paymentGroup.findMany({
       where,
-      orderBy: { paymentDate: 'desc' },
-      include: {
-        student: { include: { course: true, guardian: true } },
-        concept: true,
-        paymentGroup: true,
-      },
+      orderBy: [{ paymentDate: 'desc' }, { id: 'desc' }],
+      include: paymentGroupInclude,
     });
+  }
 
-    const rows = data.map((p) => ({
-      id: p.id,
-      grupoId: p.paymentGroupId ?? '',
-      fecha: formatPaymentCalendarDateEsCl(p.paymentDate),
-      alumno: p.student.name,
-      rutAlumno: p.student.rut,
-      curso: p.student.course.name,
-      monto: p.amount,
-      metodo: METHOD_LABELS[p.method] ?? p.method,
-      concepto: p.concept?.name ?? '',
-      pagador: p.payerName ?? 'Apoderado',
-      rutPagador: p.payerRut ?? '',
-      boleta: p.paymentGroup?.boletaNumber ?? p.boletaNumber ?? '',
-      referencia: p.referenceCode ?? '',
-      notas: p.paymentGroup?.notes ?? p.notes ?? '',
-    }));
-
-    return buildWorkbook('Pagos', [
-      { header: 'ID', key: 'id', width: 8 },
-      { header: 'ID Grupo', key: 'grupoId', width: 10 },
-      { header: 'Fecha', key: 'fecha', width: 14 },
-      { header: 'Alumno', key: 'alumno', width: 32 },
-      { header: 'RUT Alumno', key: 'rutAlumno', width: 16 },
-      { header: 'Curso', key: 'curso', width: 20 },
-      { header: 'Monto', key: 'monto', width: 15, numFmt: '"$"#,##0' },
-      { header: 'Método', key: 'metodo', width: 16 },
-      { header: 'Concepto', key: 'concepto', width: 22 },
-      { header: 'Pagador', key: 'pagador', width: 30 },
-      { header: 'RUT Pagador', key: 'rutPagador', width: 16 },
-      { header: 'N° Boleta', key: 'boleta', width: 16 },
-      { header: 'Referencia', key: 'referencia', width: 22 },
-      { header: 'Notas', key: 'notas', width: 32 },
-    ], rows);
+  /** Genera buffer XLSX con cabecera-detalle y celdas combinadas por transacción. */
+  async exportToXlsx(filters: FilterPaymentsDto): Promise<Buffer> {
+    const groups = await this.findAllGroupsForExport(filters);
+    return buildPaymentGroupsWorkbookBuffer(groups, 'Historial de Pagos');
   }
 
   /** Resumen agrupado por curso */

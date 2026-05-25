@@ -457,12 +457,18 @@ export const reportsApi = {
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<ReportSummary>(`/reports/summary${query}`);
   },
-  export: (startDate?: string, endDate?: string, courseId?: string) => {
-    const params = new URLSearchParams();
-    if (startDate) params.set("startDate", startDate);
-    if (endDate) params.set("endDate", endDate);
-    if (courseId) params.set("courseId", courseId);
-    const query = params.toString() ? `?${params.toString()}` : "";
+  export: (params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    courseId?: string;
+    studentId?: string;
+  }) => {
+    const search = new URLSearchParams();
+    if (params?.dateFrom) search.set("dateFrom", params.dateFrom);
+    if (params?.dateTo) search.set("dateTo", params.dateTo);
+    if (params?.courseId) search.set("courseId", params.courseId);
+    if (params?.studentId) search.set("studentId", params.studentId);
+    const query = search.toString() ? `?${search.toString()}` : "";
     return requestBlob(`/reports/export${query}`);
   },
   getRevenueTrend: (months = 12) =>

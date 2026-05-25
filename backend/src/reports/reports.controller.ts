@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { FilterPaymentsDto } from '../payments/dto/filter-payments.dto';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -24,17 +25,20 @@ export class ReportsController {
   @Get('export')
   @RequirePermissions('view:reports')
   @ApiOperation({ summary: 'Exportar reporte analítico a XLSX (multi-hoja)' })
-  @ApiQuery({ name: 'startDate', required: false })
-  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'dateFrom', required: false })
+  @ApiQuery({ name: 'dateTo', required: false })
   @ApiQuery({ name: 'courseId', required: false })
-  @ApiResponse({ status: 200, description: 'Archivo XLSX con resumen, por método y por curso' })
+  @ApiQuery({ name: 'studentId', required: false })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Archivo XLSX con resumen, por método, por curso, por concepto y detalle de transacciones',
+  })
   async exportXlsx(
-    @Query('startDate') startDate: string | undefined,
-    @Query('endDate') endDate: string | undefined,
-    @Query('courseId') courseId: string | undefined,
+    @Query() filters: FilterPaymentsDto,
     @Res() res: Response,
   ) {
-    const buffer = await this.reportsService.exportToXlsx(startDate, endDate, courseId);
+    const buffer = await this.reportsService.exportToXlsx(filters);
     const date = new Date().toISOString().split('T')[0];
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

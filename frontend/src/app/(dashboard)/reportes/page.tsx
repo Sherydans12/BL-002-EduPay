@@ -96,11 +96,12 @@ export default function ReportsPage() {
     setIsExporting(true);
     const toastId = toast.loading("Generando Excel...");
     try {
-      const blob = await reportsApi.export(
-        appliedFilters.dateFrom || undefined,
-        appliedFilters.dateTo || undefined,
-        appliedFilters.courseId || undefined,
-      );
+      const blob = await reportsApi.export({
+        dateFrom: appliedFilters.dateFrom || undefined,
+        dateTo: appliedFilters.dateTo || undefined,
+        courseId: appliedFilters.courseId || undefined,
+        studentId: appliedFilters.studentId || undefined,
+      });
       downloadBlob(blob, `reporte_${new Date().toISOString().split("T")[0]}.xlsx`);
       toast.success("Descarga completada", { id: toastId });
     } catch {

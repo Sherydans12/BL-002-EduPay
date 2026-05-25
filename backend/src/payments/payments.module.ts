@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 
@@ -7,10 +7,4 @@ import { PaymentsController } from './payments.controller';
   providers: [PaymentsService],
   exports: [PaymentsService],
 })
-export class PaymentsModule implements OnModuleInit {
-  constructor(private readonly paymentsService: PaymentsService) {}
-
-  async onModuleInit() {
-    await this.paymentsService.migrateLegacyPayments();
-  }
-}
+export class PaymentsModule {}
