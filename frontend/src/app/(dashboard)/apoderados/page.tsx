@@ -172,7 +172,17 @@ export default function GuardiansPage() {
       }
       setIsDialogOpen(false);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar");
+      const error = err as {
+        response?: { data?: { message?: string | string[] } };
+        message?: string;
+      };
+      const raw = error.response?.data?.message;
+      const backendMsg = Array.isArray(raw) ? raw.join(". ") : raw;
+      toast.error(
+        backendMsg ||
+          (err instanceof Error ? err.message : undefined) ||
+          "Error al guardar",
+      );
     } finally {
       setIsSubmitting(false);
     }

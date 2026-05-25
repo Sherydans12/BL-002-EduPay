@@ -15,16 +15,31 @@ import { buildGuardianSearchWhere } from '../common/search/flexible-search';
 export class GuardiansService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async validateStudentIds(studentIds: number[]): Promise<void> {
+  private async validateStudentIds(
+    studentIds: number[],
+    guardianId?: number,
+  ): Promise<void> {
     if (studentIds.length === 0) return;
     const found = await this.prisma.student.findMany({
       where: { id: { in: studentIds }, deletedAt: null },
-      select: { id: true },
+      select: { id: true, name: true, guardianId: true },
     });
     if (found.length !== studentIds.length) {
       const foundSet = new Set(found.map((s) => s.id));
       const missing = studentIds.filter((id) => !foundSet.has(id));
       throw new NotFoundException(`Students not found: ${missing.join(', ')}`);
+    }
+
+    const conflicts = found.filter((s) =>
+      guardianId === undefined
+        ? s.guardianId != null
+        : s.guardianId !== guardianId,
+    );
+    if (conflicts.length > 0) {
+      const names = conflicts.map((s) => s.name).join(', ');
+      throw new BadRequestException(
+        `El/los alumno(s) ${names} ya están asignados a otro apoderado. Debe desvincularlos primero.`,
+      );
     }
   }
 
@@ -114,7 +129,7 @@ export class GuardiansService {
     await this.findOne(id);
     const { studentIds, ...fields } = dto;
     if (studentIds !== undefined) {
-      await this.validateStudentIds(studentIds);
+      await this.validateStudentIds(studentIds, id);
     }
     const studentsRelation = this.buildStudentRelation(studentIds);
     const data: Prisma.GuardianUpdateInput = {
