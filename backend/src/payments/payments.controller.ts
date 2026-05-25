@@ -25,6 +25,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { multerConfig } from './multer.config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -128,6 +129,51 @@ export class PaymentsController {
   ) {
     const fileUrl = file ? `/uploads/${file.filename}` : undefined;
     return this.paymentsService.create(dto, fileUrl);
+  }
+
+  @Post('batch')
+  @RequirePermissions('create:payment')
+  @ApiOperation({
+    summary: 'Registrar pago agrupado (varios alumnos, una boleta)',
+    description:
+      'Crea un PaymentGroup y un Payment por cada allocation. ' +
+      'Acepta multipart/form-data; el campo allocations debe ser un JSON array.',
+  })
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiBody({
+    description: 'Cobro agrupado con allocations y PDF opcional',
+    schema: {
+      type: 'object',
+      required: ['totalAmount', 'method', 'paymentDate', 'allocations'],
+      properties: {
+        totalAmount: { type: 'integer', minimum: 1, example: 150000 },
+        method: {
+          type: 'string',
+          enum: ['CASH', 'DEBIT', 'CREDIT', 'CHECK', 'TRANSFER'],
+        },
+        paymentDate: { type: 'string', format: 'date', example: '2026-05-25' },
+        boletaNumber: { type: 'string', nullable: true },
+        notes: { type: 'string', nullable: true },
+        allocations: {
+          type: 'string',
+          description:
+            'JSON array: [{ studentId, conceptId, amount }]. Suma de amount = totalAmount.',
+          example:
+            '[{"studentId":1,"conceptId":1,"amount":75000},{"studentId":2,"conceptId":1,"amount":75000}]',
+        },
+        boleta: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'PaymentGroup creado con sus payments' })
+  @ApiResponse({ status: 400, description: 'Validación fallida (suma de montos, allocations vacío)' })
+  @UseInterceptors(FileInterceptor('boleta', multerConfig))
+  createBatch(
+    @Body() dto: CreatePaymentBatchDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const fileUrl = file ? `/uploads/${file.filename}` : undefined;
+    return this.paymentsService.createBatch(dto, fileUrl);
   }
 
   @Get('export')

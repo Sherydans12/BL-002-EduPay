@@ -78,6 +78,22 @@ model PaymentConcept {
   @@map("payment_concepts")
 }
 
+model PaymentGroup {
+  id            Int           @id @default(autoincrement())
+  totalAmount   Int
+  method        PaymentMethod
+  paymentDate   DateTime
+  boletaFileUrl String?
+  boletaNumber  String?
+  notes         String?
+  payments      Payment[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  @@map("payment_groups")
+}
+
 model Payment {
   id            Int              @id @default(autoincrement())
   amount        Int
@@ -85,6 +101,9 @@ model Payment {
   paymentDate   DateTime
   studentId     Int
   student       Student          @relation(fields: [studentId], references: [id])
+
+  paymentGroupId Int?
+  paymentGroup   PaymentGroup?   @relation(fields: [paymentGroupId], references: [id])
 
   // Concepto de pago (opcional para compatibilidad con registros anteriores)
   conceptId     Int?
@@ -98,7 +117,7 @@ model Payment {
   referenceCode String?
   notes         String?
 
-  // Comprobante / boleta
+  // Comprobante / boleta (pagos individuales legacy; agrupados usan PaymentGroup)
   boletaFileUrl String?
   boletaNumber  String?
 

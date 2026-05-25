@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { Prisma } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
@@ -55,6 +56,68 @@ export class PaymentsService {
     }
 
     return payment;
+  }
+
+  async createBatch(dto: CreatePaymentBatchDto, boletaFileUrl?: string) {
+    const studentIds = [...new Set(dto.allocations.map((a) => a.studentId))];
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: studentIds }, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (students.length !== studentIds.length) {
+      const found = new Set(students.map((s) => s.id));
+      const missing = studentIds.filter((id) => !found.has(id));
+      throw new NotFoundException(
+        `Alumno(s) no encontrado(s): ${missing.join(', ')}`,
+      );
+    }
+
+    const paymentDate = new Date(dto.paymentDate);
+    const resolvedBoletaUrl = boletaFileUrl ?? dto.boletaFileUrl ?? null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const group = await tx.paymentGroup.create({
+        data: {
+          totalAmount: dto.totalAmount,
+          method: dto.method,
+          paymentDate,
+          boletaFileUrl: resolvedBoletaUrl,
+          boletaNumber: dto.boletaNumber ?? null,
+          notes: dto.notes ?? null,
+        },
+      });
+
+      for (const allocation of dto.allocations) {
+        await tx.payment.create({
+          data: {
+            amount: allocation.amount,
+            method: dto.method,
+            paymentDate,
+            studentId: allocation.studentId,
+            conceptId: allocation.conceptId,
+            paymentGroupId: group.id,
+            boletaFileUrl: null,
+            boletaNumber: null,
+            notes: null,
+          },
+        });
+      }
+
+      const result = await tx.paymentGroup.findUniqueOrThrow({
+        where: { id: group.id },
+        include: {
+          payments: {
+            include: {
+              student: { include: { course: true, guardian: true } },
+              concept: true,
+            },
+          },
+        },
+      });
+
+      return result;
+    });
   }
 
   async findAll(filters: FilterPaymentsDto) {
