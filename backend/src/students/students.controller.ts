@@ -68,6 +68,12 @@ export class StudentsController {
   @ApiOperation({ summary: 'Listar alumnos paginados (filtro opcional por curso)' })
   @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
   @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['ACTIVE', 'INACTIVE', 'GRADUATED'],
+    description: 'Filtrar por estado de matrícula',
+  })
+  @ApiQuery({
     name: 'search',
     required: false,
     type: String,
@@ -78,17 +84,23 @@ export class StudentsController {
   @ApiResponse({ status: 200, description: 'Lista paginada de alumnos con curso y apoderado' })
   findAll(
     @Query('courseId') courseId?: string,
+    @Query('status') status?: string,
     @Query('search') search?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
   ) {
     const parsedCourseId = courseId ? Number(courseId) : undefined;
     const trimmed = search?.trim();
+    const parsedStatus =
+      status === 'ACTIVE' || status === 'INACTIVE' || status === 'GRADUATED'
+        ? status
+        : undefined;
     return this.studentsService.findAll(
       parsedCourseId,
       page,
       limit,
       trimmed || undefined,
+      parsedStatus,
     );
   }
 

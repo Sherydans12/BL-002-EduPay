@@ -6,7 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
 import { studentsApi } from "@/lib/api";
-import type { Student, Course, Guardian } from "@/lib/api";
+import type { Student, Course, Guardian, StudentStatus } from "@/lib/api";
+import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -22,6 +23,7 @@ const studentSchema = z.object({
   name: z.string().min(1, "El nombre es requerido").max(200, "Máximo 200 caracteres"),
   courseId: z.number().min(1, "Seleccione un curso"),
   guardianId: z.number().min(1, "Seleccione un apoderado"),
+  status: z.enum(["ACTIVE", "INACTIVE", "GRADUATED"]),
 });
 
 export type StudentFormData = z.infer<typeof studentSchema>;
@@ -63,6 +65,7 @@ export function StudentFormDialog({
         name: editingStudent.name,
         courseId: editingStudent.courseId,
         guardianId: editingStudent.guardianId,
+        status: editingStudent.status ?? "ACTIVE",
       });
     } else {
       reset({
@@ -70,6 +73,7 @@ export function StudentFormDialog({
         name: "",
         courseId: defaultCourseId && defaultCourseId >= 1 ? defaultCourseId : undefined,
         guardianId: undefined,
+        status: "ACTIVE" as StudentStatus,
       });
     }
   }, [open, editingStudent, defaultCourseId, reset]);
@@ -224,6 +228,28 @@ export function StudentFormDialog({
                 )}
               />
               {errors.guardianId && <p className="text-red-400 text-xs mt-1">{errors.guardianId.message}</p>}
+            </div>
+
+            <div className="col-span-full">
+              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Estado</label>
+              <Controller
+                name="status"
+                control={control}
+                render={({ field }) => (
+                  <NativeSelectField>
+                    <select
+                      value={field.value}
+                      onChange={(e) => field.onChange(e.target.value as StudentStatus)}
+                      className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
+                    >
+                      <option value="ACTIVE">Activo</option>
+                      <option value="INACTIVE">Inactivo</option>
+                      <option value="GRADUATED">Egresado</option>
+                    </select>
+                  </NativeSelectField>
+                )}
+              />
+              {errors.status && <p className="text-red-400 text-xs mt-1">{errors.status.message}</p>}
             </div>
           </div>
 

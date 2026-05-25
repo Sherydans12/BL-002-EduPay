@@ -93,7 +93,7 @@ export default function DashboardPage() {
 
       const [cRes, sRes, pRes, sumRes, trendRes] = await Promise.all([
         coursesApi.getAll(1, 1),
-        studentsApi.getAll(undefined, 1, 1),
+        studentsApi.getAll({ page: 1, limit: 1 }),
         paymentsApi.getAll({ limit: "5" }),
         reportsApi.getSummary(monthStart, monthEnd),
         reportsApi.getRevenueTrend(12),

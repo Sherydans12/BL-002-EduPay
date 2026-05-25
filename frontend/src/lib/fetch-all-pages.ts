@@ -42,7 +42,7 @@ export async function fetchAllStudents(): Promise<Student[]> {
   const all: Student[] = [];
   let page = 1;
   for (;;) {
-    const res = await studentsApi.getAll(undefined, page, PAGE_LIMIT);
+    const res = await studentsApi.getAll({ page, limit: PAGE_LIMIT });
     all.push(...res.data);
     const lp = lastPage(res.meta);
     if (page >= lp || res.data.length === 0) break;

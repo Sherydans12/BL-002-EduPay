@@ -18,6 +18,12 @@ enum PaymentMethod {
   TRANSFER
 }
 
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+}
+
 // ─── Models ──────────────────────────────────────────────────
 
 model Course {
@@ -48,11 +54,12 @@ model Guardian {
 }
 
 model Student {
-  id         Int       @id @default(autoincrement())
-  rut        String    @unique
+  id         Int           @id @default(autoincrement())
+  rut        String        @unique
   /** Derivado en BD para búsqueda sin puntos/guiones */
-  rutNormalized String   @default(dbgenerated("regexp_replace(upper(COALESCE(rut, '')), '[^0-9K]', '', 'g')")) @map("rut_normalized")
+  rutNormalized String       @default(dbgenerated("regexp_replace(upper(COALESCE(rut, '')), '[^0-9K]', '', 'g')")) @map("rut_normalized")
   name       String
+  status     StudentStatus @default(ACTIVE)
   courseId    Int
   guardianId Int
   course     Course    @relation(fields: [courseId], references: [id])

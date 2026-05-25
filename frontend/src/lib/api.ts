@@ -168,10 +168,13 @@ export interface CourseWithStudents extends Course {
   }>;
 }
 
+export type StudentStatus = "ACTIVE" | "INACTIVE" | "GRADUATED";
+
 export interface Student {
   id: number;
   rut: string;
   name: string;
+  status: StudentStatus;
   courseId: number;
   guardianId: number;
   course: Course;
@@ -327,14 +330,23 @@ export const guardiansApi = {
 };
 
 // ─── Students ─────────────────────────────────────────────────
+export type StudentsListParams = {
+  courseId?: number;
+  status?: StudentStatus;
+  page?: number;
+  limit?: number;
+  search?: string;
+};
+
 export const studentsApi = {
-  getAll: (courseId?: number, page?: number, limit?: number, search?: string) => {
-    const params = new URLSearchParams();
-    if (courseId) params.set("courseId", courseId.toString());
-    if (page) params.set("page", page.toString());
-    if (limit) params.set("limit", limit.toString());
-    if (search?.trim()) params.set("search", search.trim());
-    const query = params.toString() ? `?${params.toString()}` : "";
+  getAll: (params?: StudentsListParams) => {
+    const qs = new URLSearchParams();
+    if (params?.courseId) qs.set("courseId", params.courseId.toString());
+    if (params?.status) qs.set("status", params.status);
+    if (params?.page) qs.set("page", params.page.toString());
+    if (params?.limit) qs.set("limit", params.limit.toString());
+    if (params?.search?.trim()) qs.set("search", params.search.trim());
+    const query = qs.toString() ? `?${qs.toString()}` : "";
     return request<PaginatedResponse<Student>>(`/students${query}`);
   },
   getOne: (id: number) => request<Student>(`/students/${id}`),
@@ -343,6 +355,7 @@ export const studentsApi = {
     name: string;
     courseId: number;
     guardianId: number;
+    status?: StudentStatus;
   }) =>
     request<Student>("/students", {
       method: "POST",

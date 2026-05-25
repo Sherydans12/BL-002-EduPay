@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, StudentStatus } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
 import { buildStudentSearchWhere } from '../common/search/flexible-search';
 
@@ -31,11 +31,18 @@ export class StudentsService {
     }
   }
 
-  async findAll(courseId?: number, page = 1, limit = 50, search?: string) {
+  async findAll(
+    courseId?: number,
+    page = 1,
+    limit = 50,
+    search?: string,
+    status?: StudentStatus,
+  ) {
     const skip = (page - 1) * limit;
     const where: Prisma.StudentWhereInput = {
       deletedAt: null,
       ...(courseId ? { courseId } : {}),
+      ...(status ? { status } : {}),
       ...(buildStudentSearchWhere(search) ?? {}),
     };
 

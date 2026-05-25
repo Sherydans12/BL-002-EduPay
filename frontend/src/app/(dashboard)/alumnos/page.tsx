@@ -2,15 +2,36 @@
 
 import { useEffect, useState, useRef } from "react";
 import { studentsApi, downloadBlob } from "@/lib/api";
+import type { StudentStatus } from "@/lib/api";
 import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
 import type { Student, Course, Guardian } from "@/lib/api";
 import { toast } from "sonner";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, TriangleAlert } from "lucide-react";
 import { StudentFormDialog } from "@/components/student-form-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
+import { NativeSelectField } from "@/components/ui/dropdown-chevron";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const LIMIT = 20;
+
+const STATUS_LABELS: Record<StudentStatus, string> = {
+  ACTIVE: "Activo",
+  INACTIVE: "Inactivo",
+  GRADUATED: "Egresado",
+};
+
+const STATUS_BADGE_VARIANT: Record<StudentStatus, "success" | "destructive" | "secondary"> = {
+  ACTIVE: "success",
+  INACTIVE: "destructive",
+  GRADUATED: "secondary",
+};
+
+function needsGuardianAlert(student: Student): boolean {
+  if (!student.guardian) return true;
+  return student.guardian.name.includes("Apoderado de");
+}
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -19,8 +40,11 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [courseFilter, setCourseFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const prevDebouncedSearch = useRef<string | null>(null);
+  const prevFilters = useRef<{ course: string; status: string } | null>(null);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -46,19 +70,30 @@ export default function StudentsPage() {
     const searchChanged =
       prevDebouncedSearch.current !== null &&
       prevDebouncedSearch.current !== debouncedSearch;
+    const filtersChanged =
+      prevFilters.current !== null &&
+      (prevFilters.current.course !== courseFilter ||
+        prevFilters.current.status !== statusFilter);
 
-    if (searchChanged && page !== 1) {
+    if ((searchChanged || filtersChanged) && page !== 1) {
       setPage(1);
       return;
     }
 
     prevDebouncedSearch.current = debouncedSearch;
+    prevFilters.current = { course: courseFilter, status: statusFilter };
 
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const res = await studentsApi.getAll(undefined, page, LIMIT, debouncedSearch || undefined);
+        const res = await studentsApi.getAll({
+          courseId: courseFilter ? Number(courseFilter) : undefined,
+          status: (statusFilter as StudentStatus) || undefined,
+          page,
+          limit: LIMIT,
+          search: debouncedSearch || undefined,
+        });
         if (cancelled) return;
         setStudents(res.data);
         setMeta({
@@ -79,12 +114,18 @@ export default function StudentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, courseFilter, statusFilter]);
 
   const reloadCurrentStudents = async () => {
     setLoading(true);
     try {
-      const res = await studentsApi.getAll(undefined, page, LIMIT, debouncedSearch || undefined);
+      const res = await studentsApi.getAll({
+        courseId: courseFilter ? Number(courseFilter) : undefined,
+        status: (statusFilter as StudentStatus) || undefined,
+        page,
+        limit: LIMIT,
+        search: debouncedSearch || undefined,
+      });
       setStudents(res.data);
       setMeta({
         total: res.meta.total,
@@ -140,7 +181,7 @@ export default function StudentsPage() {
     setIsExporting(true);
     const toastId = toast.loading("Generando Excel...");
     try {
-      const blob = await studentsApi.export();
+      const blob = await studentsApi.export(courseFilter ? Number(courseFilter) : undefined);
       downloadBlob(blob, `alumnos_${new Date().toISOString().split("T")[0]}.xlsx`);
       toast.success("Descarga completada", { id: toastId });
     } catch {
@@ -175,15 +216,40 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-4">
         <input
           type="text"
           placeholder="Buscar alumno por nombre o RUT..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-1/2 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
+          className="w-full md:flex-1 md:min-w-[200px] px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
         />
-        <span className="text-sm text-[var(--color-text-muted)]">{meta.total} alumnos en total</span>
+        <NativeSelectField className="w-full md:w-52">
+          <select
+            value={courseFilter}
+            onChange={(e) => setCourseFilter(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
+          >
+            <option value="">Todos los cursos</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </NativeSelectField>
+        <NativeSelectField className="w-full md:w-44">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all"
+          >
+            <option value="">Todos</option>
+            <option value="ACTIVE">Activos</option>
+            <option value="INACTIVE">Inactivos</option>
+          </select>
+        </NativeSelectField>
+        <span className="text-sm text-[var(--color-text-muted)] shrink-0">{meta.total} alumnos en total</span>
       </div>
 
       <div className="glass rounded-2xl overflow-hidden">
@@ -201,6 +267,7 @@ export default function StudentsPage() {
                 <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
                   <th className="px-6 py-4 whitespace-nowrap">RUT</th>
                   <th className="px-6 py-4">Nombre</th>
+                  <th className="px-6 py-4">Estado</th>
                   <th className="px-6 py-4">Curso</th>
                   <th className="px-6 py-4">Apoderado</th>
                   <th className="px-6 py-4 text-right">Acciones</th>
@@ -212,11 +279,30 @@ export default function StudentsPage() {
                     <td className="px-6 py-4 text-sm font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">{s.rut}</td>
                     <td className="px-6 py-4 font-medium text-white">{s.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      <Badge variant={STATUS_BADGE_VARIANT[s.status ?? "ACTIVE"]}>
+                        {STATUS_LABELS[s.status ?? "ACTIVE"]}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/15 text-blue-300 whitespace-nowrap">
                         {s.course.name}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{s.guardian.name}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">
+                      <span className="inline-flex items-center gap-2">
+                        {s.guardian?.name ?? "—"}
+                        {needsGuardianAlert(s) && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex text-amber-400 cursor-help">
+                                <TriangleAlert className="w-4 h-4" aria-hidden />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Falta regularizar apoderado</TooltipContent>
+                          </Tooltip>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-right space-x-2">
                       <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">
                         Editar

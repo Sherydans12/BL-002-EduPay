@@ -1,6 +1,7 @@
-import { IsString, IsNotEmpty, IsInt, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, Matches, IsEnum, IsOptional } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { StudentStatus } from '@prisma/client';
 import { formatRut } from '../../common/rut/rut.util';
 import { IsValidChileanRut } from '../../common/rut/is-valid-rut.validator';
 
@@ -37,4 +38,13 @@ export class CreateStudentDto {
   })
   @IsInt()
   guardianId: number;
+
+  @ApiPropertyOptional({
+    description: 'Estado de matrícula del alumno',
+    enum: StudentStatus,
+    default: StudentStatus.ACTIVE,
+  })
+  @IsOptional()
+  @IsEnum(StudentStatus)
+  status?: StudentStatus;
 }
