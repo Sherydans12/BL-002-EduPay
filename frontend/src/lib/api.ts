@@ -141,7 +141,20 @@ export interface Guardian {
   email?: string;
   phone?: string;
   _count?: { students: number };
+  students?: Array<{
+    id: number;
+    rut: string;
+    name: string;
+    courseId: number;
+    course?: Course;
+  }>;
 }
+
+export type GuardianPayload = Partial<
+  Pick<Guardian, "rut" | "name" | "email" | "phone">
+> & {
+  studentIds?: number[];
+};
 
 /** Respuesta de GET /courses/:id (incluye alumnos activos con apoderado) */
 export interface CourseWithStudents extends Course {
@@ -298,12 +311,12 @@ export const guardiansApi = {
     return request<PaginatedResponse<Guardian>>(`/guardians${query}`);
   },
   getOne: (id: number) => request<Guardian>(`/guardians/${id}`),
-  create: (data: Partial<Guardian>) =>
+  create: (data: GuardianPayload) =>
     request<Guardian>("/guardians", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: number, data: Partial<Guardian>) =>
+  update: (id: number, data: GuardianPayload) =>
     request<Guardian>(`/guardians/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),

@@ -1,5 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, IsEmail, Matches } from 'class-validator';
-import { Transform } from 'class-transformer';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEmail,
+  Matches,
+  IsArray,
+  IsInt,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { formatRut } from '../../common/rut/rut.util';
 import { IsValidChileanRut } from '../../common/rut/is-valid-rut.validator';
@@ -41,4 +49,15 @@ export class CreateGuardianDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({
+    description: 'IDs de alumnos a asociar a este apoderado',
+    type: [Number],
+    example: [1, 2],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  studentIds?: number[];
 }

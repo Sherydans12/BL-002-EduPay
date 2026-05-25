@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGuardianDto } from './dto/create-guardian.dto';
@@ -14,15 +15,56 @@ import { buildGuardianSearchWhere } from '../common/search/flexible-search';
 export class GuardiansService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async validateStudentIds(studentIds: number[]): Promise<void> {
+    if (studentIds.length === 0) return;
+    const found = await this.prisma.student.findMany({
+      where: { id: { in: studentIds }, deletedAt: null },
+      select: { id: true },
+    });
+    if (found.length !== studentIds.length) {
+      const foundSet = new Set(found.map((s) => s.id));
+      const missing = studentIds.filter((id) => !foundSet.has(id));
+      throw new NotFoundException(`Students not found: ${missing.join(', ')}`);
+    }
+  }
+
+  private buildStudentRelation(
+    studentIds: number[] | undefined,
+  ): Prisma.GuardianUpdateInput['students'] | undefined {
+    if (studentIds === undefined) return undefined;
+    return { set: studentIds.map((id) => ({ id })) };
+  }
+
   async create(dto: CreateGuardianDto) {
+    const { studentIds, ...fields } = dto;
+    if (studentIds !== undefined) {
+      await this.validateStudentIds(studentIds);
+    }
+    const studentsRelation = this.buildStudentRelation(studentIds);
+    const data: Prisma.GuardianCreateInput = {
+      ...fields,
+      ...(studentsRelation ? { students: studentsRelation } : {}),
+    };
     try {
-      return await this.prisma.guardian.create({ data: dto });
+      return await this.prisma.guardian.create({
+        data,
+        include: { students: { include: { course: true } } },
+      });
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
         throw new ConflictException(`Guardian with RUT ${dto.rut} already exists`);
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2014' &&
+        studentIds !== undefined
+      ) {
+        throw new BadRequestException(
+          'No se puede desasociar un alumno sin asignarlo a otro apoderado',
+        );
       }
       throw error;
     }
@@ -70,14 +112,36 @@ export class GuardiansService {
 
   async update(id: number, dto: UpdateGuardianDto) {
     await this.findOne(id);
+    const { studentIds, ...fields } = dto;
+    if (studentIds !== undefined) {
+      await this.validateStudentIds(studentIds);
+    }
+    const studentsRelation = this.buildStudentRelation(studentIds);
+    const data: Prisma.GuardianUpdateInput = {
+      ...fields,
+      ...(studentsRelation ? { students: studentsRelation } : {}),
+    };
     try {
-      return await this.prisma.guardian.update({ where: { id }, data: dto });
+      return await this.prisma.guardian.update({
+        where: { id },
+        data,
+        include: { students: { include: { course: true } } },
+      });
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
         throw new ConflictException(`Guardian with RUT ${dto.rut} already exists`);
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        (error.code === 'P2014' || error.code === 'P2003') &&
+        studentIds !== undefined
+      ) {
+        throw new BadRequestException(
+          'No se puede desasociar un alumno sin asignarlo a otro apoderado',
+        );
       }
       throw error;
     }
