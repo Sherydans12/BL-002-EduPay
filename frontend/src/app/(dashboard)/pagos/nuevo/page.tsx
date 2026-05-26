@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller, useFieldArray } from "react-hook-form";
+import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { paymentSchema, type PaymentFormData } from "@/lib/schemas/payment.schema";
 import {
@@ -110,7 +110,7 @@ export default function NewPaymentPage() {
   });
 
   const useAltPayer = watch("useAltPayer");
-  const allocations = watch("allocations");
+  const allocations = useWatch({ control, name: "allocations" });
   const boletaFile = watch("boleta");
 
   const studentById = useMemo(
@@ -570,13 +570,27 @@ export default function NewPaymentPage() {
                         <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
                           Monto ($) *
                         </label>
-                        <input
-                          type="number"
-                          min="1"
-                          {...register(`allocations.${index}.amount`, {
-                            valueAsNumber: true,
-                          })}
-                          className={`${rowErrors?.amount ? inputErr : inputOk} py-2.5`}
+                        <Controller
+                          control={control}
+                          name={`allocations.${index}.amount`}
+                          render={({ field: amountField }) => (
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              name={amountField.name}
+                              ref={amountField.ref}
+                              onBlur={amountField.onBlur}
+                              value={amountField.value ?? ""}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                amountField.onChange(
+                                  raw === "" ? undefined : Number(raw)
+                                );
+                              }}
+                              className={`${rowErrors?.amount ? inputErr : inputOk} py-2.5`}
+                            />
+                          )}
                         />
                         <FieldError message={rowErrors?.amount?.message} />
                       </div>
