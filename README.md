@@ -25,6 +25,7 @@ EduPay permite al personal administrativo de un colegio:
 
 | Recurso | Contenido |
 |---------|-----------|
+| [docs/TESTING.md](docs/TESTING.md) | Suite de pruebas (unit + e2e), flujo de pagos, CI y cómo ejecutarlas |
 | [frontend/docs/UI-STYLES.md](frontend/docs/UI-STYLES.md) | Colores (`--color-*`), formularios, desplegables (`DropdownChevron`, `NativeSelectField`), glass, tablas |
 | [frontend/AGENTS.md](frontend/AGENTS.md) | Next.js en este repo + enlace a la guía UI |
 
@@ -219,13 +220,18 @@ BL-002/
 npm run start:dev        # Desarrollo con hot-reload
 npm run build            # Build para producción
 npm run start:prod       # Ejecutar build
+npm test                 # Tests unitarios (Jest)
+npm run test:e2e         # Tests e2e (requiere Postgres; ver docs/TESTING.md)
 npx prisma studio        # GUI para la base de datos
 npx prisma migrate dev   # Crear/aplicar migración
 
 # Frontend
 npm run dev              # Desarrollo con hot-reload
 npm run build            # Build para producción
+npm test                 # Tests unitarios (Vitest)
 ```
+
+Detalle de cada prueba, cobertura del flujo de pagos y CI: **[docs/TESTING.md](docs/TESTING.md)**.
 
 ---
 
