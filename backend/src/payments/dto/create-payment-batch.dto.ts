@@ -15,16 +15,46 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';
-import { Type, Transform } from 'class-transformer';
+import { Type, Transform, plainToInstance } from 'class-transformer';
 import { PaymentAllocationDto } from './payment-allocation.dto';
+
+function parseAllocationsFromMultipart(
+  value: unknown,
+): PaymentAllocationDto[] | unknown {
+  const rows = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(value) as unknown[];
+          } catch {
+            return value;
+          }
+        })()
+      : null;
+
+  if (!Array.isArray(rows)) return value;
+
+  return rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return plainToInstance(PaymentAllocationDto, {
+      studentId: Number(r.studentId),
+      conceptId: Number(r.conceptId),
+      amount: Number(r.amount),
+    });
+  });
+}
 
 @ValidatorConstraint({ name: 'allocationsSumMatchesTotal', async: false })
 class AllocationsSumMatchesTotalConstraint implements ValidatorConstraintInterface {
   validate(_value: unknown, args: ValidationArguments): boolean {
     const dto = args.object as CreatePaymentBatchDto;
     if (!dto.allocations?.length) return false;
-    const sum = dto.allocations.reduce((acc, row) => acc + row.amount, 0);
-    return sum === dto.totalAmount;
+    const sum = dto.allocations.reduce(
+      (acc, row) => acc + Number(row.amount),
+      0,
+    );
+    return sum === Number(dto.totalAmount);
   }
 
   defaultMessage(): string {
@@ -93,16 +123,7 @@ export class CreatePaymentBatchDto {
       { studentId: 2, conceptId: 1, amount: 75000 },
     ],
   })
-  @Transform(({ value }) => {
-    if (typeof value === 'string') {
-      try {
-        return JSON.parse(value) as PaymentAllocationDto[];
-      } catch {
-        return value;
-      }
-    }
-    return value;
-  })
+  @Transform(({ value }) => parseAllocationsFromMultipart(value))
   @IsArray()
   @ArrayMinSize(1, { message: 'Debe incluir al menos una allocation (alumno)' })
   @ValidateNested({ each: true })

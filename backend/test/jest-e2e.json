@@ -5,5 +5,8 @@
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
-  }
+  },
+  "transformIgnorePatterns": ["/node_modules/(?!uuid/)"],
+  "globalSetup": "<rootDir>/global-setup.ts",
+  "testTimeout": 60000
 }
