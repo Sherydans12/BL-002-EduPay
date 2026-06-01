@@ -26,7 +26,7 @@ import {
 import { DropdownChevron, NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { cmdkCourseFilter, cmdkPersonFilter } from "@/lib/flexible-search";
 import { useDropzone } from "react-dropzone";
-import { UploadCloud, FileText, X, Info, Trash2, Users } from "lucide-react";
+import { UploadCloud, FileText, X, Info, Trash2, Users, Plus } from "lucide-react";
 
 const METHODS = [
   { value: "CASH", label: "Efectivo" },
@@ -123,11 +123,6 @@ export default function NewPaymentPage() {
     return firstId ? studentById.get(firstId) : undefined;
   }, [allocations, studentById]);
 
-  const allocationIds = useMemo(
-    () => new Set((allocations ?? []).map((a) => a.studentId)),
-    [allocations]
-  );
-
   useEffect(() => {
     Promise.all([
       fetchAllStudents().then(setStudents),
@@ -196,11 +191,6 @@ export default function NewPaymentPage() {
   const handleAddStudent = useCallback(
     (student: Student) => {
       const current = getValues("allocations") ?? [];
-      if (current.some((a) => a.studentId === student.id)) {
-        toast.info("Este alumno ya está en el pago");
-        setStudentOpen(false);
-        return;
-      }
 
       append(buildAllocationRow(student, defaultConcept));
       syncGuardianFromStudent(student);
@@ -223,7 +213,6 @@ export default function NewPaymentPage() {
   const handleAddSibling = useCallback(
     (sibling: Student) => {
       const current = getValues("allocations") ?? [];
-      if (current.some((a) => a.studentId === sibling.id)) return;
 
       append(buildAllocationRow(sibling, defaultConcept));
       setSiblingSuggestions((prev) => prev.filter((s) => s.id !== sibling.id));
@@ -406,13 +395,11 @@ export default function NewPaymentPage() {
                             value={`${s.name}\t${s.rut}`}
                             onSelect={() => handleAddStudent(s)}
                             className="cursor-pointer"
-                            disabled={allocationIds.has(s.id)}
                           >
                             <div className="flex flex-col">
                               <span>{s.name}</span>
                               <span className="text-xs text-[var(--color-text-muted)]">
                                 {s.rut} — {s.course.name}
-                                {allocationIds.has(s.id) ? " (ya en el pago)" : ""}
                               </span>
                             </div>
                           </CommandItem>
@@ -489,17 +476,30 @@ export default function NewPaymentPage() {
                           {student?.rut ?? "—"} · {student?.course.name ?? "—"}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          remove(index);
-                          setSiblingSuggestions([]);
-                        }}
-                        className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
-                        title="Quitar alumno"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (student) append(buildAllocationRow(student, defaultConcept));
+                          }}
+                          disabled={!student}
+                          className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40"
+                          title="Añadir otra glosa a este alumno"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            remove(index);
+                            setSiblingSuggestions([]);
+                          }}
+                          className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Quitar fila"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
