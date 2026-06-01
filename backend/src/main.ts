@@ -44,7 +44,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin: isProduction
-      ? frontendUrl ?? false
+      ? (frontendUrl ?? false)
       : [
           'http://localhost:3000',
           'http://localhost:3001',
@@ -98,8 +98,10 @@ async function bootstrap() {
 
   // Evita 404 en logs cuando el navegador pide el favicon contra el puerto de la API
   const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.get('/favicon.ico', (_req: unknown, res: { status: (n: number) => { end: () => void } }) =>
-    res.status(204).end(),
+  expressApp.get(
+    '/favicon.ico',
+    (_req: unknown, res: { status: (n: number) => { end: () => void } }) =>
+      res.status(204).end(),
   );
 
   const port = config.get<number>('PORT') || 3001;
@@ -110,4 +112,4 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+void bootstrap();

@@ -27,7 +27,7 @@ function thinBorder(): Partial<ExcelJS.Borders> {
 /** Excel worksheet names: max 31 chars, no \ / ? * [ ] : */
 export function sanitizeExcelSheetName(raw: string, fallback: string): string {
   const cleaned = raw
-    .replace(/[\]\[\\\/\?\*:]/g, ' ')
+    .replace(/[[\]/?:*\\]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   const base = cleaned.length > 0 ? cleaned : fallback;

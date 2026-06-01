@@ -18,9 +18,7 @@ import { PaymentMethod } from '@prisma/client';
 import { Type, Transform, plainToInstance } from 'class-transformer';
 import { PaymentAllocationDto } from './payment-allocation.dto';
 
-function parseAllocationsFromMultipart(
-  value: unknown,
-): PaymentAllocationDto[] | unknown {
+function parseAllocationsFromMultipart(value: unknown): unknown {
   const rows = Array.isArray(value)
     ? value
     : typeof value === 'string'
@@ -88,11 +86,15 @@ export class CreatePaymentBatchDto {
     description: 'Fecha en que se realizó el pago (ISO 8601)',
     example: '2026-05-25',
   })
-  @IsDateString({}, { message: 'Fecha de pago inválida. Use formato ISO 8601 (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'Fecha de pago inválida. Use formato ISO 8601 (YYYY-MM-DD)' },
+  )
   paymentDate: string;
 
   @ApiPropertyOptional({
-    description: 'URL del PDF de boleta (se asigna desde el upload en el controlador)',
+    description:
+      'URL del PDF de boleta (se asigna desde el upload en el controlador)',
     example: '/uploads/boleta-abc.pdf',
   })
   @IsOptional()
