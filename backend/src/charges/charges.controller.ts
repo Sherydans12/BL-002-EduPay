@@ -1,4 +1,11 @@
-import { Body, Controller, Param, ParseIntPipe, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+} from '@nestjs/common';
 import { ChargesService } from './charges.service';
 import { SetupFinancialPlanDto } from './dto/create-charge.dto';
 
@@ -12,5 +19,10 @@ export class ChargesController {
     @Body() dto: SetupFinancialPlanDto,
   ) {
     return this.chargesService.setupStudentFinancialPlan(studentId, dto);
+  }
+
+  @Get('pending/:studentId')
+  findPendingByStudent(@Param('studentId', ParseIntPipe) studentId: number) {
+    return this.chargesService.findPendingByStudent(studentId);
   }
 }

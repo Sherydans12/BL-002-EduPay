@@ -39,6 +39,7 @@ function parseAllocationsFromMultipart(value: unknown): unknown {
       studentId: Number(r.studentId),
       conceptId: Number(r.conceptId),
       amount: Number(r.amount),
+      chargeId: r.chargeId == null ? undefined : Number(r.chargeId),
     });
   });
 }

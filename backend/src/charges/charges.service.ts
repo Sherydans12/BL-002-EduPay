@@ -54,4 +54,22 @@ export class ChargesService {
       count: result.count,
     };
   }
+
+  findPendingByStudent(studentId: number) {
+    return this.prisma.charge.findMany({
+      where: {
+        studentId,
+        deletedAt: null,
+        status: {
+          in: [
+            ChargeStatus.PENDING,
+            ChargeStatus.PARTIALLY_PAID,
+            ChargeStatus.OVERDUE,
+          ],
+        },
+      },
+      include: { concept: true },
+      orderBy: { dueDate: 'asc' },
+    });
+  }
 }

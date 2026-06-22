@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
-import { Prisma } from '@prisma/client';
+import { ChargeStatus, Prisma } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { buildPaymentGroupsWorkbookBuffer } from '../common/excel/payment-groups-sheet.export';
 
@@ -146,12 +146,44 @@ export class PaymentsService implements OnModuleInit {
             paymentDate,
             studentId: allocation.studentId,
             conceptId: allocation.conceptId,
+            chargeId: allocation.chargeId ?? null,
             paymentGroupId: group.id,
             boletaFileUrl: null,
             boletaNumber: null,
             notes: null,
           },
         });
+
+        if (allocation.chargeId) {
+          const charge = await tx.charge.findFirst({
+            where: {
+              id: allocation.chargeId,
+              studentId: allocation.studentId,
+              deletedAt: null,
+            },
+            select: { id: true, amount: true, paidAmount: true },
+          });
+
+          if (!charge) {
+            throw new NotFoundException(
+              `Charge #${allocation.chargeId} not found for student #${allocation.studentId}`,
+            );
+          }
+
+          const nextPaidAmount = charge.paidAmount + allocation.amount;
+          const nextStatus =
+            nextPaidAmount >= charge.amount
+              ? ChargeStatus.PAID
+              : ChargeStatus.PARTIALLY_PAID;
+
+          await tx.charge.update({
+            where: { id: charge.id },
+            data: {
+              paidAmount: nextPaidAmount,
+              status: nextStatus,
+            },
+          });
+        }
       }
 
       const result = await tx.paymentGroup.findUniqueOrThrow({
