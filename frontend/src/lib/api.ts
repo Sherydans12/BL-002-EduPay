@@ -436,6 +436,11 @@ export const paymentsApi = {
     }),
   deleteGroup: (id: number) =>
     request<PaymentGroup>(`/payments/groups/${id}`, { method: "DELETE" }),
+  resolveBoleta: (id: number, formData: FormData) =>
+    request<PaymentGroup>(`/payments/groups/${id}/boleta`, {
+      method: "PATCH",
+      body: formData,
+    }),
   resolvePendingBoleta: (
     id: number,
     data: { boletaNumber: string; boleta?: File },
@@ -443,10 +448,7 @@ export const paymentsApi = {
     const fd = new FormData();
     fd.append("boletaNumber", data.boletaNumber);
     if (data.boleta) fd.append("boleta", data.boleta);
-    return request<PaymentGroup>(`/payments/groups/${id}/boleta`, {
-      method: "PATCH",
-      body: fd,
-    });
+    return paymentsApi.resolveBoleta(id, fd);
   },
   summaryByCourse: (dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams();
