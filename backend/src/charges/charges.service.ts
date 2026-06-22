@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { ChargeStatus, FinancialSetupStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { SetupFinancialPlanDto } from './dto/create-charge.dto';
+import {
+  SetupFinancialPlanDto,
+  UpdateFinancialPlanDto,
+} from './dto/create-charge.dto';
 
 @Injectable()
 export class ChargesService {
@@ -130,6 +133,114 @@ export class ChargesService {
       message: 'Financial plan configured successfully',
       count: result.count,
     };
+  }
+
+  findPlanByStudent(studentId: number) {
+    return this.prisma.charge.findMany({
+      where: { studentId, deletedAt: null },
+      include: { concept: true },
+      orderBy: { dueDate: 'asc' },
+    });
+  }
+
+  async updateStudentFinancialPlan(
+    studentId: number,
+    dto: UpdateFinancialPlanDto,
+  ) {
+    const student = await this.prisma.student.findFirst({
+      where: { id: studentId, deletedAt: null },
+      select: { id: true, financialSetup: true },
+    });
+
+    if (!student) {
+      throw new NotFoundException(`Student #${studentId} not found`);
+    }
+
+    if (student.financialSetup !== FinancialSetupStatus.CONFIGURED) {
+      throw new BadRequestException(
+        `Student #${studentId} financial plan is not configured`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const currentCharges = await tx.charge.findMany({
+        where: { studentId, deletedAt: null },
+        orderBy: { dueDate: 'asc' },
+      });
+
+      const payloadChargeIds = new Set(
+        dto.charges
+          .map((charge) => charge.id)
+          .filter((id): id is number => typeof id === 'number'),
+      );
+
+      const chargesToDelete = currentCharges.filter(
+        (charge) => !payloadChargeIds.has(charge.id),
+      );
+
+      if (
+        chargesToDelete.some((charge) => charge.status === ChargeStatus.PAID)
+      ) {
+        throw new BadRequestException(
+          'No se pueden eliminar cuotas ya pagadas',
+        );
+      }
+
+      const deletedAt = new Date();
+      if (chargesToDelete.length > 0) {
+        await tx.charge.updateMany({
+          where: { id: { in: chargesToDelete.map((charge) => charge.id) } },
+          data: { deletedAt },
+        });
+      }
+
+      const currentChargesById = new Map(
+        currentCharges.map((charge) => [charge.id, charge]),
+      );
+
+      for (const payloadCharge of dto.charges) {
+        if (!payloadCharge.id) {
+          await tx.charge.create({
+            data: {
+              studentId,
+              conceptId: payloadCharge.conceptId,
+              amount: payloadCharge.amount,
+              dueDate: new Date(payloadCharge.dueDate),
+              status: ChargeStatus.PENDING,
+            },
+          });
+          continue;
+        }
+
+        const currentCharge = currentChargesById.get(payloadCharge.id);
+        if (!currentCharge) {
+          throw new BadRequestException(
+            `Charge #${payloadCharge.id} no pertenece al alumno o fue eliminada`,
+          );
+        }
+
+        if (payloadCharge.amount < currentCharge.paidAmount) {
+          throw new BadRequestException(
+            'El monto de la cuota no puede ser menor al monto ya pagado',
+          );
+        }
+
+        await tx.charge.update({
+          where: { id: currentCharge.id },
+          data: {
+            conceptId: payloadCharge.conceptId,
+            amount: payloadCharge.amount,
+            dueDate: new Date(payloadCharge.dueDate),
+          },
+        });
+      }
+
+      return tx.charge.findMany({
+        where: { studentId, deletedAt: null },
+        include: { concept: true },
+        orderBy: { dueDate: 'asc' },
+      });
+    });
   }
 
   findPendingByStudent(studentId: number) {

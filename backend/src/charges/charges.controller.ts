@@ -5,9 +5,13 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
 } from '@nestjs/common';
 import { ChargesService } from './charges.service';
-import { SetupFinancialPlanDto } from './dto/create-charge.dto';
+import {
+  SetupFinancialPlanDto,
+  UpdateFinancialPlanDto,
+} from './dto/create-charge.dto';
 
 @Controller('charges')
 export class ChargesController {
@@ -19,6 +23,19 @@ export class ChargesController {
     @Body() dto: SetupFinancialPlanDto,
   ) {
     return this.chargesService.setupStudentFinancialPlan(studentId, dto);
+  }
+
+  @Get('plan/:studentId')
+  findPlanByStudent(@Param('studentId', ParseIntPipe) studentId: number) {
+    return this.chargesService.findPlanByStudent(studentId);
+  }
+
+  @Put('plan/:studentId')
+  updateStudentFinancialPlan(
+    @Param('studentId', ParseIntPipe) studentId: number,
+    @Body() dto: UpdateFinancialPlanDto,
+  ) {
+    return this.chargesService.updateStudentFinancialPlan(studentId, dto);
   }
 
   @Get('pending/:studentId')

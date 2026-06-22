@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { chargesApi, conceptsApi, paymentsApi, studentsApi } from "@/lib/api";
 import type {
+  ChargeStatus,
   FinancialSetupStatus,
   Payment,
   PaymentConcept,
@@ -32,9 +33,12 @@ import {
 type FilterMode = "PENDING" | "CONFIGURED" | "ALL";
 
 type ChargeFormRow = {
+  id?: number;
   conceptId?: number;
   amount?: number;
   dueDate: string;
+  status?: ChargeStatus;
+  paidAmount?: number;
 };
 
 type FinancialPlanForm = {
@@ -102,6 +106,10 @@ function buildDueDate(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, "0")}-05`;
 }
 
+function toDateInputValue(value: string): string {
+  return value.includes("T") ? value.split("T")[0] : value.slice(0, 10);
+}
+
 export default function FinancialSetupRadarPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +129,7 @@ export default function FinancialSetupRadarPage() {
   const { fields, append, remove, replace } = useFieldArray({
     control,
     name: "charges",
+    keyName: "fieldId",
   });
   const watchedCharges = useWatch({ control, name: "charges" });
   const projectedAnnualDebt = useMemo(
@@ -178,16 +187,42 @@ export default function FinancialSetupRadarPage() {
     setSheetLoading(true);
 
     try {
-      const [paymentsRes, conceptsRes] = await Promise.all([
+      const isConfigured = getFinancialSetup(student) === "CONFIGURED";
+      const [paymentsRes, conceptsRes, planRes] = await Promise.all([
         paymentsApi.getAll({
           studentId: String(student.id),
           page: "1",
           limit: "20",
         }),
         conceptsApi.getAll(),
+        isConfigured ? chargesApi.getPlan(student.id) : Promise.resolve([]),
       ]);
+
+      const activeConcepts = conceptsRes.filter((concept) => concept.isActive);
+      const activeConceptIds = new Set(
+        activeConcepts.map((concept) => concept.id),
+      );
+      const planConcepts = planRes
+        .map((charge) => charge.concept)
+        .filter(
+          (concept) => concept && !activeConceptIds.has(concept.id),
+        ) as PaymentConcept[];
+
       setPaymentHistory(paymentsRes.data);
-      setConcepts(conceptsRes.filter((concept) => concept.isActive));
+      setConcepts([...activeConcepts, ...planConcepts]);
+
+      if (isConfigured) {
+        reset({
+          charges: planRes.map((charge) => ({
+            id: charge.id,
+            conceptId: charge.conceptId,
+            amount: charge.amount,
+            dueDate: toDateInputValue(charge.dueDate),
+            status: charge.status,
+            paidAmount: charge.paidAmount,
+          })),
+        });
+      }
     } catch (err: unknown) {
       toast.error(
         err instanceof Error
@@ -255,11 +290,15 @@ export default function FinancialSetupRadarPage() {
 
   const submitFinancialPlan = async (data: FinancialPlanForm) => {
     if (!selectedStudent) return;
+    const isConfigured = getFinancialSetup(selectedStudent) === "CONFIGURED";
 
-    const charges = data.charges.map((charge) => ({
-      conceptId: Number(charge.conceptId),
-      amount: Number(charge.amount),
-      dueDate: charge.dueDate,
+    const charges = data.charges.map((charge, index) => ({
+      ...(isConfigured && fields[index]?.id
+        ? { id: Number(fields[index].id) }
+        : {}),
+      conceptId: Number(charge.conceptId ?? fields[index]?.conceptId),
+      amount: Number(charge.amount ?? fields[index]?.amount),
+      dueDate: charge.dueDate || fields[index]?.dueDate || "",
     }));
 
     if (
@@ -274,8 +313,13 @@ export default function FinancialSetupRadarPage() {
 
     setSubmitting(true);
     try {
-      await chargesApi.setupFinancialPlan(selectedStudent.id, { charges });
-      toast.success("Plan financiero configurado exitosamente");
+      if (isConfigured) {
+        await chargesApi.updateFinancialPlan(selectedStudent.id, { charges });
+        toast.success("Plan financiero actualizado exitosamente");
+      } else {
+        await chargesApi.setupFinancialPlan(selectedStudent.id, { charges });
+        toast.success("Plan financiero configurado exitosamente");
+      }
       setSelectedStudent(null);
       reset({ charges: [] });
       await reloadStudents();
@@ -545,7 +589,13 @@ export default function FinancialSetupRadarPage() {
                   type="button"
                   onClick={loadStandardSchoolYear}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/35 px-3 py-2 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/10 hover:text-white"
-                  disabled={sheetLoading || concepts.length === 0}
+                  disabled={
+                    sheetLoading ||
+                    concepts.length === 0 ||
+                    (selectedStudent
+                      ? getFinancialSetup(selectedStudent) === "CONFIGURED"
+                      : false)
+                  }
                 >
                   <Wand2 className="h-4 w-4" />
                   Cargar Año Escolar Estándar
@@ -573,67 +623,90 @@ export default function FinancialSetupRadarPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {fields.map((field, index) => (
-                      <div
-                        key={field.id}
-                        className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-3 md:grid-cols-[1.4fr_0.9fr_0.9fr_auto]"
-                      >
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                            Concepto
-                          </label>
-                          <NativeSelectField>
-                            <select
-                              {...register(`charges.${index}.conceptId`, {
+                    {fields.map((field, index) => {
+                      const watchedCharge = watchedCharges?.[index];
+                      const paidAmount = Number(
+                        watchedCharge?.paidAmount ?? field.paidAmount ?? 0,
+                      );
+                      const amount = Number(
+                        watchedCharge?.amount ?? field.amount ?? 0,
+                      );
+                      const isPaid =
+                        field.status === "PAID" ||
+                        (amount > 0 && paidAmount >= amount);
+
+                      return (
+                        <div
+                          key={field.fieldId}
+                          className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-3 md:grid-cols-[1.4fr_0.9fr_0.9fr_auto]"
+                        >
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                              Concepto
+                            </label>
+                            <NativeSelectField>
+                              <select
+                                {...register(`charges.${index}.conceptId`, {
+                                  valueAsNumber: true,
+                                })}
+                                disabled={isPaid}
+                                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
+                              >
+                                <option value="">Seleccionar...</option>
+                                {concepts.map((concept) => (
+                                  <option key={concept.id} value={concept.id}>
+                                    {concept.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </NativeSelectField>
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                              Vencimiento
+                            </label>
+                            <input
+                              type="date"
+                              {...register(`charges.${index}.dueDate`)}
+                              disabled={isPaid}
+                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                              Monto
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              {...register(`charges.${index}.amount`, {
                                 valueAsNumber: true,
                               })}
-                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
-                            >
-                              <option value="">Seleccionar...</option>
-                              {concepts.map((concept) => (
-                                <option key={concept.id} value={concept.id}>
-                                  {concept.name}
-                                </option>
-                              ))}
-                            </select>
-                          </NativeSelectField>
+                              disabled={isPaid}
+                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
+                            />
+                            {paidAmount > 0 ? (
+                              <p className="mt-1 text-xs text-emerald-300">
+                                Abonado: {formatCurrency(paidAmount)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex items-end">
+                            {!isPaid ? (
+                              <button
+                                type="button"
+                                onClick={() => remove(index)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+                                aria-label="Eliminar cuota"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                            Vencimiento
-                          </label>
-                          <input
-                            type="date"
-                            {...register(`charges.${index}.dueDate`)}
-                            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
-                          />
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                            Monto
-                          </label>
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            {...register(`charges.${index}.amount`, {
-                              valueAsNumber: true,
-                            })}
-                            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
-                          />
-                        </div>
-                        <div className="flex items-end">
-                          <button
-                            type="button"
-                            onClick={() => remove(index)}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
-                            aria-label="Eliminar cuota"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -645,6 +718,8 @@ export default function FinancialSetupRadarPage() {
                         conceptId: concepts[0]?.id,
                         amount: concepts[0]?.defaultAmount,
                         dueDate: buildDueDate(new Date().getFullYear(), 2),
+                        status: "PENDING",
+                        paidAmount: 0,
                       })
                     }
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-white"

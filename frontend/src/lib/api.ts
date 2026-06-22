@@ -186,6 +186,15 @@ export interface SetupFinancialPlanDto {
   charges: Array<{ conceptId: number; amount: number; dueDate: string }>;
 }
 
+export interface UpdateFinancialPlanDto {
+  charges: Array<{
+    id?: number;
+    conceptId: number;
+    amount: number;
+    dueDate: string;
+  }>;
+}
+
 export interface PaymentConcept {
   id: number;
   name: string;
@@ -468,6 +477,12 @@ export const chargesApi = {
   setupFinancialPlan: (studentId: number, data: SetupFinancialPlanDto) =>
     request<{ message: string; count: number }>(`/charges/setup/${studentId}`, {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getPlan: (studentId: number) => request<Charge[]>(`/charges/plan/${studentId}`),
+  updateFinancialPlan: (studentId: number, data: UpdateFinancialPlanDto) =>
+    request<Charge[]>(`/charges/plan/${studentId}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     }),
   getPendingCharges: (studentId: number) =>

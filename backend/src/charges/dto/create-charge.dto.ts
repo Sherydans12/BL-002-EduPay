@@ -3,6 +3,7 @@ import {
   IsArray,
   IsDateString,
   IsInt,
+  IsOptional,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -27,6 +28,21 @@ export class SetupFinancialPlanDto {
   @ValidateNested({ each: true })
   @Type(() => FinancialPlanChargeDto)
   charges: FinancialPlanChargeDto[];
+}
+
+export class UpdateFinancialPlanChargeDto extends FinancialPlanChargeDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  id?: number;
+}
+
+export class UpdateFinancialPlanDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => UpdateFinancialPlanChargeDto)
+  charges: UpdateFinancialPlanChargeDto[];
 }
 
 export class CreateChargeDto extends FinancialPlanChargeDto {}
