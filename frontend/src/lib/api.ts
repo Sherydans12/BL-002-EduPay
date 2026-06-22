@@ -249,6 +249,7 @@ export interface PaymentGroup {
   paymentDate: string;
   boletaFileUrl?: string | null;
   boletaNumber?: string | null;
+  isBoletaPending: boolean;
   notes?: string | null;
   payments: Payment[];
   createdAt: string;
@@ -268,6 +269,7 @@ export function buildPaymentBatchFormData(data: {
     chargeId?: number;
   }>;
   boletaNumber?: string;
+  isBoletaPending?: boolean;
   notes?: string;
   boleta?: File;
 }): FormData {
@@ -288,6 +290,7 @@ export function buildPaymentBatchFormData(data: {
   );
   if (data.boletaNumber?.trim())
     fd.append("boletaNumber", data.boletaNumber.trim());
+  if (data.isBoletaPending) fd.append("isBoletaPending", "true");
   if (data.notes?.trim()) fd.append("notes", data.notes.trim());
   if (data.boleta) fd.append("boleta", data.boleta);
   return fd;
@@ -433,6 +436,18 @@ export const paymentsApi = {
     }),
   deleteGroup: (id: number) =>
     request<PaymentGroup>(`/payments/groups/${id}`, { method: "DELETE" }),
+  resolvePendingBoleta: (
+    id: number,
+    data: { boletaNumber: string; boleta?: File },
+  ) => {
+    const fd = new FormData();
+    fd.append("boletaNumber", data.boletaNumber);
+    if (data.boleta) fd.append("boleta", data.boleta);
+    return request<PaymentGroup>(`/payments/groups/${id}/boleta`, {
+      method: "PATCH",
+      body: fd,
+    });
+  },
   summaryByCourse: (dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams();
     if (dateFrom) params.set("dateFrom", dateFrom);

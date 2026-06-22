@@ -4,10 +4,12 @@ import {
   IsDateString,
   IsOptional,
   IsString,
+  IsBoolean,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';
+import { Transform } from 'class-transformer';
 
 export class CreatePaymentDto {
   @ApiProperty({
@@ -34,7 +36,10 @@ export class CreatePaymentDto {
     description: 'Fecha en que se realizó el pago (ISO 8601)',
     example: '2026-04-30',
   })
-  @IsDateString({}, { message: 'Fecha de pago inválida. Use formato ISO 8601 (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'Fecha de pago inválida. Use formato ISO 8601 (YYYY-MM-DD)' },
+  )
   paymentDate: string;
 
   @ApiProperty({
@@ -45,7 +50,8 @@ export class CreatePaymentDto {
   studentId: number;
 
   @ApiPropertyOptional({
-    description: 'Nombre del pagador alternativo. Si es null, se asume que pagó el apoderado.',
+    description:
+      'Nombre del pagador alternativo. Si es null, se asume que pagó el apoderado.',
     example: 'Pedro Soto',
   })
   @IsOptional()
@@ -61,7 +67,8 @@ export class CreatePaymentDto {
   payerRut?: string;
 
   @ApiPropertyOptional({
-    description: 'Código de referencia de la transacción (ej. N° de operación bancaria)',
+    description:
+      'Código de referencia de la transacción (ej. N° de operación bancaria)',
     example: 'TRX-2026-00142',
   })
   @IsOptional()
@@ -83,6 +90,20 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   boletaNumber?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Indica que la boleta quedará pendiente de emisión/carga posterior',
+    example: true,
+  })
+  @Transform(({ value }) =>
+    value == null || value === ''
+      ? undefined
+      : value === true || value === 'true',
+  )
+  @IsOptional()
+  @IsBoolean()
+  isBoletaPending?: boolean;
 
   @ApiPropertyOptional({
     description: 'ID del concepto de pago (ej. Mensualidad, Matrícula)',

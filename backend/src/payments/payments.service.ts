@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
@@ -62,6 +67,8 @@ export class PaymentsService implements OnModuleInit {
   async create(dto: CreatePaymentDto, boletaFileUrl?: string) {
     const paymentDate = new Date(dto.paymentDate);
     const resolvedBoletaUrl = boletaFileUrl ?? null;
+    const boletaNumber = dto.boletaNumber?.trim() || null;
+    const isBoletaPending = !boletaNumber;
 
     const payment = await this.prisma.$transaction(async (tx) => {
       const group = await tx.paymentGroup.create({
@@ -70,7 +77,8 @@ export class PaymentsService implements OnModuleInit {
           method: dto.method,
           paymentDate,
           boletaFileUrl: resolvedBoletaUrl,
-          boletaNumber: dto.boletaNumber ?? null,
+          boletaNumber,
+          isBoletaPending,
           notes: dto.notes ?? null,
         },
       });
@@ -125,6 +133,8 @@ export class PaymentsService implements OnModuleInit {
 
     const paymentDate = new Date(dto.paymentDate);
     const resolvedBoletaUrl = boletaFileUrl ?? dto.boletaFileUrl ?? null;
+    const boletaNumber = dto.boletaNumber?.trim() || null;
+    const isBoletaPending = !boletaNumber;
 
     return this.prisma.$transaction(async (tx) => {
       const group = await tx.paymentGroup.create({
@@ -133,7 +143,8 @@ export class PaymentsService implements OnModuleInit {
           method: dto.method,
           paymentDate,
           boletaFileUrl: resolvedBoletaUrl,
-          boletaNumber: dto.boletaNumber ?? null,
+          boletaNumber,
+          isBoletaPending,
           notes: dto.notes ?? null,
         },
       });
@@ -200,6 +211,37 @@ export class PaymentsService implements OnModuleInit {
       });
 
       return result;
+    });
+  }
+
+  async resolvePendingBoleta(
+    id: number,
+    boletaNumber: string,
+    boletaFileUrl?: string,
+  ) {
+    const trimmedBoletaNumber = boletaNumber?.trim();
+
+    if (!trimmedBoletaNumber) {
+      throw new BadRequestException('El número de boleta es requerido');
+    }
+
+    const group = await this.prisma.paymentGroup.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`PaymentGroup #${id} not found`);
+    }
+
+    return this.prisma.paymentGroup.update({
+      where: { id },
+      data: {
+        boletaNumber: trimmedBoletaNumber,
+        ...(boletaFileUrl ? { boletaFileUrl } : {}),
+        isBoletaPending: false,
+      },
+      include: paymentGroupInclude,
     });
   }
 

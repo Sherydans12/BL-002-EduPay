@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -156,6 +157,12 @@ export class PaymentsController {
         },
         paymentDate: { type: 'string', format: 'date', example: '2026-05-25' },
         boletaNumber: { type: 'string', nullable: true },
+        isBoletaPending: {
+          type: 'boolean',
+          nullable: true,
+          description:
+            'Si true, marca la transacción como pendiente de boleta posterior',
+        },
         notes: { type: 'string', nullable: true },
         allocations: {
           type: 'string',
@@ -183,6 +190,45 @@ export class PaymentsController {
   ) {
     const fileUrl = file ? `/uploads/${file.filename}` : undefined;
     return this.paymentsService.createBatch(dto, fileUrl);
+  }
+
+  @Patch('groups/:id/boleta')
+  @RequirePermissions('manage:payments')
+  @ApiOperation({ summary: 'Resolver boleta pendiente de un PaymentGroup' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    description: 'ID del grupo/transacción de pago',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['boletaNumber'],
+      properties: {
+        boletaNumber: {
+          type: 'string',
+          example: 'BOL-00587',
+          description: 'Número de boleta emitida en SII',
+        },
+        boleta: {
+          type: 'string',
+          format: 'binary',
+          description: 'PDF de boleta opcional',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Boleta resuelta' })
+  @ApiResponse({ status: 404, description: 'Transacción no encontrada' })
+  @UseInterceptors(FileInterceptor('boleta', multerConfig))
+  resolvePendingBoleta(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('boletaNumber') boletaNumber: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const fileUrl = file ? `/uploads/${file.filename}` : undefined;
+    return this.paymentsService.resolvePendingBoleta(id, boletaNumber, fileUrl);
   }
 
   @Get('export')
@@ -290,5 +336,4 @@ export class PaymentsController {
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.paymentsService.findOne(id);
   }
-
 }

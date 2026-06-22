@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   IsArray,
+  IsBoolean,
   ArrayMinSize,
   ValidateNested,
   Min,
@@ -109,6 +110,20 @@ export class CreatePaymentBatchDto {
   @IsOptional()
   @IsString()
   boletaNumber?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Indica que la boleta quedará pendiente de emisión/carga posterior',
+    example: true,
+  })
+  @Transform(({ value }) =>
+    value == null || value === ''
+      ? undefined
+      : value === true || value === 'true',
+  )
+  @IsOptional()
+  @IsBoolean()
+  isBoletaPending?: boolean;
 
   @ApiPropertyOptional({
     description: 'Notas u observaciones del cobro agrupado',

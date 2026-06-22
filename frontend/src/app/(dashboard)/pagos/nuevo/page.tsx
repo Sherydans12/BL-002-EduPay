@@ -377,6 +377,8 @@ export default function NewPaymentPage() {
         });
       }
 
+      const isBoletaPending = !data.boletaNumber?.trim();
+
       const fd = buildPaymentBatchFormData({
         totalAmount: data.totalAmount,
         method: data.method,
@@ -394,6 +396,7 @@ export default function NewPaymentPage() {
           };
         }),
         boletaNumber: data.boletaNumber,
+        isBoletaPending,
         notes: data.notes,
         boleta: data.boleta,
       });
@@ -899,6 +902,10 @@ export default function NewPaymentPage() {
             </span>
             Boleta / Comprobante (única para todo el cobro)
           </h2>
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Si dejas la boleta en blanco, el pago quedará en la Bandeja de
+            Pendientes.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
