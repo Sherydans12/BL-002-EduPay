@@ -212,6 +212,7 @@ export interface Payment {
   boletaFileUrl?: string;
   boletaNumber?: string;
   createdAt: string;
+  deletedAt?: string | null;
 }
 
 export interface PaymentGroup {
@@ -225,6 +226,7 @@ export interface PaymentGroup {
   payments: Payment[];
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
 }
 
 /** Serializa el payload de pago agrupado para POST /payments/batch (multipart). */
@@ -399,8 +401,8 @@ export const paymentsApi = {
       method: "POST",
       body: formData,
     }),
-  delete: (id: number) =>
-    request<Payment>(`/payments/${id}`, { method: "DELETE" }),
+  deleteGroup: (id: number) =>
+    request<PaymentGroup>(`/payments/groups/${id}`, { method: "DELETE" }),
   summaryByCourse: (dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams();
     if (dateFrom) params.set("dateFrom", dateFrom);

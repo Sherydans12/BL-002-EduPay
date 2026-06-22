@@ -14,6 +14,7 @@ const paymentLineInclude = {
 
 const paymentGroupInclude = {
   payments: {
+    where: { deletedAt: null },
     include: paymentLineInclude,
     orderBy: { id: 'asc' as const },
   },
@@ -33,7 +34,7 @@ export class PaymentsService implements OnModuleInit {
   /** Migra pagos sin grupo a un PaymentGroup 1:1 (idempotente). */
   async migrateLegacyPayments(): Promise<void> {
     const orphans = await this.prisma.payment.findMany({
-      where: { paymentGroupId: null },
+      where: { paymentGroupId: null, deletedAt: null },
       orderBy: { id: 'asc' },
     });
     if (orphans.length === 0) return;
@@ -157,6 +158,7 @@ export class PaymentsService implements OnModuleInit {
         where: { id: group.id },
         include: {
           payments: {
+            where: { deletedAt: null },
             include: {
               student: { include: { course: true, guardian: true } },
               concept: true,
@@ -190,6 +192,7 @@ export class PaymentsService implements OnModuleInit {
         some: {
           ...(studentId ? { studentId } : {}),
           ...(courseId ? { student: { courseId } } : {}),
+          deletedAt: null,
         },
       };
     }
@@ -224,9 +227,19 @@ export class PaymentsService implements OnModuleInit {
   }
 
   async findAll(filters: FilterPaymentsDto) {
-    const { dateFrom, dateTo, courseId, studentId, page = 1, limit = 50 } = filters;
+    const {
+      dateFrom,
+      dateTo,
+      courseId,
+      studentId,
+      page = 1,
+      limit = 50,
+    } = filters;
 
-    const where: Prisma.PaymentWhereInput = {};
+    const where: Prisma.PaymentWhereInput = {
+      deletedAt: null,
+      paymentGroup: { is: { deletedAt: null } },
+    };
 
     // Filtro por rango de fechas
     if (dateFrom || dateTo) {
@@ -284,13 +297,37 @@ export class PaymentsService implements OnModuleInit {
         paymentGroup: true,
       },
     });
-    if (!payment) throw new NotFoundException(`Payment #${id} not found`);
+    if (!payment || payment.deletedAt || payment.paymentGroup?.deletedAt) {
+      throw new NotFoundException(`Payment #${id} not found`);
+    }
     return payment;
   }
 
-  async remove(id: number) {
-    await this.findOne(id);
-    return this.prisma.payment.delete({ where: { id } });
+  async removeGroup(id: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const group = await tx.paymentGroup.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+
+      if (!group) {
+        throw new NotFoundException(`PaymentGroup #${id} not found`);
+      }
+
+      const deletedAt = new Date();
+
+      const updatedGroup = await tx.paymentGroup.update({
+        where: { id },
+        data: { deletedAt },
+      });
+
+      await tx.payment.updateMany({
+        where: { paymentGroupId: id, deletedAt: null },
+        data: { deletedAt },
+      });
+
+      return updatedGroup;
+    });
   }
 
   /** Grupos de pago para exportación (sin paginación), alineado con filtros de la UI. */
@@ -311,7 +348,10 @@ export class PaymentsService implements OnModuleInit {
 
   /** Resumen agrupado por curso */
   async summaryByCourse(dateFrom?: string, dateTo?: string) {
-    const where: Prisma.PaymentWhereInput = {};
+    const where: Prisma.PaymentWhereInput = {
+      deletedAt: null,
+      paymentGroup: { is: { deletedAt: null } },
+    };
     if (dateFrom || dateTo) {
       where.paymentDate = {};
       if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
@@ -327,11 +367,18 @@ export class PaymentsService implements OnModuleInit {
       include: { student: { include: { course: true } } },
     });
 
-    const grouped: Record<string, { courseName: string; total: number; count: number }> = {};
+    const grouped: Record<
+      string,
+      { courseName: string; total: number; count: number }
+    > = {};
     for (const p of payments) {
       const key = p.student.course.id.toString();
       if (!grouped[key]) {
-        grouped[key] = { courseName: p.student.course.name, total: 0, count: 0 };
+        grouped[key] = {
+          courseName: p.student.course.name,
+          total: 0,
+          count: 0,
+        };
       }
       grouped[key].total += p.amount;
       grouped[key].count += 1;

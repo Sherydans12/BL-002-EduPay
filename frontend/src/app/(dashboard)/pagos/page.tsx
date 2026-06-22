@@ -20,8 +20,19 @@ import {
   ChevronDown,
   ChevronRight,
   Users,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Command,
@@ -73,6 +84,7 @@ export default function PagosMasterPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const [voidingGroup, setVoidingGroup] = useState<PaymentGroup | null>(null);
 
   useEffect(() => {
     fetchAllCourses().then(setCourses).catch(() => {});
@@ -151,6 +163,18 @@ export default function PagosMasterPage() {
       toast.error("Error al exportar", { id: toastId });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const confirmVoidGroup = async () => {
+    if (!voidingGroup) return;
+    try {
+      await paymentsApi.deleteGroup(voidingGroup.id);
+      toast.success("Transacción anulada exitosamente");
+      setVoidingGroup(null);
+      await fetchGroups();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al anular transacción");
     }
   };
 
@@ -380,7 +404,7 @@ export default function PagosMasterPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex justify-center">
+                            <div className="flex justify-center items-center gap-2">
                               {boletaUrl ? (
                                 <a
                                   href={resolveUploadUrl(boletaUrl)}
@@ -396,6 +420,18 @@ export default function PagosMasterPage() {
                               ) : (
                                 <span className="text-[var(--color-text-muted)] text-sm">—</span>
                               )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setVoidingGroup(group);
+                                }}
+                                className="inline-flex items-center justify-center p-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
+                                title="Anular transacción"
+                                aria-label={`Anular transacción #${group.id}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -466,6 +502,26 @@ export default function PagosMasterPage() {
           </>
         )}
       </div>
+
+      <AlertDialog open={!!voidingGroup} onOpenChange={(open) => !open && setVoidingGroup(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro de anular esta transacción?</AlertDialogTitle>
+            <AlertDialogDescription className="text-[var(--color-text-secondary)]">
+              Esta acción marcará los pagos como anulados y descontará el monto de los reportes.
+              No se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmVoidGroup} className="bg-red-600 hover:bg-red-700 text-white border-0">
+              Sí, anular transacción
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

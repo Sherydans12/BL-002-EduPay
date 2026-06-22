@@ -9,6 +9,7 @@ import {
   buildPeriodLabel,
   buildReportsWorkbookBuffer,
 } from '../common/excel/reports-workbook.export';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class ReportsService {
@@ -18,15 +19,19 @@ export class ReportsService {
   ) {}
 
   async getSummary(startDate?: string, endDate?: string, courseId?: string) {
-    const where: Record<string, unknown> = {};
+    const where: Prisma.PaymentWhereInput = {
+      deletedAt: null,
+      paymentGroup: { is: { deletedAt: null } },
+    };
 
     if (startDate || endDate) {
       where.paymentDate = {};
-      if (startDate) (where.paymentDate as Record<string, Date>).gte = new Date(startDate);
+      if (startDate)
+        where.paymentDate.gte = new Date(startDate);
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        (where.paymentDate as Record<string, Date>).lte = end;
+        where.paymentDate.lte = end;
       }
     }
 
@@ -60,12 +65,22 @@ export class ReportsService {
     };
   }
 
-  async getRevenueTrend(months = 12): Promise<{ month: string; total: number }[]> {
+  async getRevenueTrend(
+    months = 12,
+  ): Promise<{ month: string; total: number }[]> {
     const now = new Date();
-    const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+    const startDate = new Date(
+      now.getFullYear(),
+      now.getMonth() - (months - 1),
+      1,
+    );
 
     const payments = await this.prisma.payment.findMany({
-      where: { paymentDate: { gte: startDate } },
+      where: {
+        deletedAt: null,
+        paymentGroup: { is: { deletedAt: null } },
+        paymentDate: { gte: startDate },
+      },
       select: { paymentDate: true, amount: true },
     });
 
@@ -79,7 +94,10 @@ export class ReportsService {
     for (let i = months - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' });
+      const label = d.toLocaleDateString('es-CL', {
+        month: 'short',
+        year: '2-digit',
+      });
       result.push({ month: label, total: grouped.get(key) ?? 0 });
     }
     return result;
