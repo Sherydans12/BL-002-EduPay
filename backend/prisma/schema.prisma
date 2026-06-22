@@ -24,6 +24,24 @@ enum StudentStatus {
   GRADUATED
 }
 
+enum ChargeStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentSource {
+  MANUAL
+  PORTAL
+}
+
+enum FinancialSetupStatus {
+  PENDING
+  CONFIGURED
+}
+
 // ─── Models ──────────────────────────────────────────────────
 
 model Course {
@@ -38,36 +56,42 @@ model Course {
 }
 
 model Guardian {
-  id        Int       @id @default(autoincrement())
-  rut       String?   @unique
-  /** Derivado en BD para búsqueda sin puntos/guiones */
-  rutNormalized String?  @default(dbgenerated("regexp_replace(upper(COALESCE(rut, '')), '[^0-9K]', '', 'g')")) @map("rut_normalized")
-  name      String
-  email     String?
-  phone     String?
-  students  Student[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id            Int       @id @default(autoincrement())
+  rut           String?   @unique
+  /**
+   * Derivado en BD para búsqueda sin puntos/guiones
+   */
+  rutNormalized String?   @default(dbgenerated()) @map("rut_normalized")
+  name          String
+  email         String?
+  phone         String?
+  students      Student[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
 
   @@map("guardians")
 }
 
 model Student {
-  id         Int           @id @default(autoincrement())
-  rut        String        @unique
-  /** Derivado en BD para búsqueda sin puntos/guiones */
-  rutNormalized String       @default(dbgenerated("regexp_replace(upper(COALESCE(rut, '')), '[^0-9K]', '', 'g')")) @map("rut_normalized")
-  name       String
-  status     StudentStatus @default(ACTIVE)
-  courseId    Int
-  guardianId Int
-  course     Course    @relation(fields: [courseId], references: [id])
-  guardian   Guardian  @relation(fields: [guardianId], references: [id])
-  payments   Payment[]
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
+  id             Int                  @id @default(autoincrement())
+  rut            String               @unique
+  /**
+   * Derivado en BD para búsqueda sin puntos/guiones
+   */
+  rutNormalized  String?              @default(dbgenerated()) @map("rut_normalized")
+  name           String
+  status         StudentStatus        @default(ACTIVE)
+  financialSetup FinancialSetupStatus @default(PENDING)
+  courseId       Int
+  guardianId     Int
+  course         Course               @relation(fields: [courseId], references: [id])
+  guardian       Guardian             @relation(fields: [guardianId], references: [id])
+  payments       Payment[]
+  charges        Charge[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  deletedAt      DateTime?
 
   @@map("students")
 }
@@ -81,44 +105,50 @@ model PaymentConcept {
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
   payments      Payment[]
+  charges       Charge[]
 
   @@map("payment_concepts")
 }
 
 model PaymentGroup {
-  id            Int           @id @default(autoincrement())
-  totalAmount   Int
-  method        PaymentMethod
-  paymentDate   DateTime
-  boletaFileUrl String?
-  boletaNumber  String?
-  notes         String?
-  payments      Payment[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime?
+  id              Int           @id @default(autoincrement())
+  totalAmount     Int
+  method          PaymentMethod
+  paymentDate     DateTime
+  boletaFileUrl   String?
+  boletaNumber    String?
+  notes           String?
+  source          PaymentSource @default(MANUAL)
+  isBoletaPending Boolean       @default(false)
+  payments        Payment[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
 
   @@map("payment_groups")
 }
 
 model Payment {
-  id            Int              @id @default(autoincrement())
-  amount        Int
-  method        PaymentMethod
-  paymentDate   DateTime
-  studentId     Int
-  student       Student          @relation(fields: [studentId], references: [id])
+  id          Int           @id @default(autoincrement())
+  amount      Int
+  method      PaymentMethod
+  paymentDate DateTime
+  studentId   Int
+  student     Student       @relation(fields: [studentId], references: [id])
 
   paymentGroupId Int?
-  paymentGroup   PaymentGroup?   @relation(fields: [paymentGroupId], references: [id])
+  paymentGroup   PaymentGroup? @relation(fields: [paymentGroupId], references: [id])
 
   // Concepto de pago (opcional para compatibilidad con registros anteriores)
-  conceptId     Int?
-  concept       PaymentConcept?  @relation(fields: [conceptId], references: [id])
+  conceptId Int?
+  concept   PaymentConcept? @relation(fields: [conceptId], references: [id])
+
+  chargeId Int?
+  charge   Charge? @relation(fields: [chargeId], references: [id])
 
   // Datos del pagador alternativo (null = pagó el apoderado)
-  payerName     String?
-  payerRut      String?
+  payerName String?
+  payerRut  String?
 
   // Referencia y notas
   referenceCode String?
@@ -128,11 +158,30 @@ model Payment {
   boletaFileUrl String?
   boletaNumber  String?
 
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  deletedAt     DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@map("payments")
+}
+
+model Charge {
+  id         Int            @id @default(autoincrement())
+  studentId  Int
+  student    Student        @relation(fields: [studentId], references: [id])
+  conceptId  Int
+  concept    PaymentConcept @relation(fields: [conceptId], references: [id])
+  amount     Int
+  paidAmount Int            @default(0)
+  dueDate    DateTime
+  status     ChargeStatus   @default(PENDING)
+  notes      String?
+  payments   Payment[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  deletedAt  DateTime?
+
+  @@map("charges")
 }
 
 model User {
