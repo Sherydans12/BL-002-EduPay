@@ -169,16 +169,22 @@ export interface CourseWithStudents extends Course {
 }
 
 export type StudentStatus = "ACTIVE" | "INACTIVE" | "GRADUATED";
+export type FinancialSetupStatus = "PENDING" | "CONFIGURED";
 
 export interface Student {
   id: number;
   rut: string;
   name: string;
   status: StudentStatus;
+  financialSetup: FinancialSetupStatus;
   courseId: number;
   guardianId: number;
   course: Course;
   guardian: Guardian;
+}
+
+export interface SetupFinancialPlanDto {
+  charges: Array<{ conceptId: number; amount: number; dueDate: string }>;
 }
 
 export interface PaymentConcept {
@@ -414,6 +420,15 @@ export const paymentsApi = {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return requestBlob(`/payments/export${query}`);
   },
+};
+
+// ─── Charges / Accounts Receivable ───────────────────────────
+export const chargesApi = {
+  setupFinancialPlan: (studentId: number, data: SetupFinancialPlanDto) =>
+    request<{ message: string; count: number }>(`/charges/setup/${studentId}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // ─── Payment Concepts ─────────────────────────────────────────
