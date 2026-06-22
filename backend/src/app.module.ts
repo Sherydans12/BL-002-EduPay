@@ -14,6 +14,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PaymentConceptsModule } from './payment-concepts/payment-concepts.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AppController } from './app.controller';
+import { ChargesModule } from './charges/charges.module';
 
 @Module({
   controllers: [AppController],
@@ -30,6 +31,7 @@ import { AppController } from './app.controller';
     PaymentsModule,
     PaymentConceptsModule,
     MailModule,
+    ChargesModule,
   ],
   providers: [
     {
