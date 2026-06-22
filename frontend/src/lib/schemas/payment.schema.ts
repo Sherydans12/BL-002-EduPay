@@ -24,7 +24,13 @@ function isValidRut(rut: string): boolean {
   return dv === expectedDv;
 }
 
-const PAYMENT_METHODS = ["CASH", "DEBIT", "CREDIT", "CHECK", "TRANSFER"] as const;
+const PAYMENT_METHODS = [
+  "CASH",
+  "DEBIT",
+  "CREDIT",
+  "CHECK",
+  "TRANSFER",
+] as const;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_PDF_TYPE = "application/pdf";
 
@@ -36,11 +42,18 @@ export const paymentAllocationSchema = z.object({
   conceptId: z
     .number({ error: "Debe seleccionar un concepto" })
     .int()
-    .positive("Debe seleccionar un concepto"),
+    .positive("Debe seleccionar un concepto")
+    .optional(),
+  chargeId: z
+    .number({ error: "Debe seleccionar una cuota" })
+    .int()
+    .positive("Debe seleccionar una cuota")
+    .optional(),
   amount: z
     .number({ error: "Monto requerido" })
     .int("El monto debe ser un número entero")
-    .positive("El monto debe ser mayor a 0"),
+    .positive("El monto debe ser mayor a 0")
+    .optional(),
 });
 
 export const paymentSchema = z
@@ -60,15 +73,30 @@ export const paymentSchema = z
 
     paymentDate: z
       .string({ error: "La fecha de pago es requerida" })
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido (use YYYY-MM-DD)")
+      .regex(
+        /^\d{4}-\d{2}-\d{2}$/,
+        "Formato de fecha inválido (use YYYY-MM-DD)",
+      )
       .refine((val) => !isNaN(Date.parse(val)), "Fecha inválida"),
 
-    referenceCode: z.string().max(100, "Máximo 100 caracteres").optional().or(z.literal("")),
-    notes: z.string().max(500, "Máximo 500 caracteres").optional().or(z.literal("")),
+    referenceCode: z
+      .string()
+      .max(100, "Máximo 100 caracteres")
+      .optional()
+      .or(z.literal("")),
+    notes: z
+      .string()
+      .max(500, "Máximo 500 caracteres")
+      .optional()
+      .or(z.literal("")),
 
     useAltPayer: z.boolean().default(false),
 
-    payerName: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
+    payerName: z
+      .string()
+      .max(200, "Máximo 200 caracteres")
+      .optional()
+      .or(z.literal("")),
 
     payerRut: z
       .string()
@@ -79,10 +107,14 @@ export const paymentSchema = z
           if (!val || val === "") return true;
           return rutRegex.test(val) && isValidRut(val);
         },
-        { message: "RUT del pagador inválido (formato: 12.345.678-9)" }
+        { message: "RUT del pagador inválido (formato: 12.345.678-9)" },
       ),
 
-    guardianName: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
+    guardianName: z
+      .string()
+      .max(200, "Máximo 200 caracteres")
+      .optional()
+      .or(z.literal("")),
 
     guardianRut: z
       .string()
@@ -93,14 +125,26 @@ export const paymentSchema = z
           if (!val || val === "") return true;
           return rutRegex.test(val) && isValidRut(val);
         },
-        { message: "RUT del apoderado inválido (formato: 12.345.678-9)" }
+        { message: "RUT del apoderado inválido (formato: 12.345.678-9)" },
       ),
 
-    guardianEmail: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
+    guardianEmail: z
+      .string()
+      .max(200, "Máximo 200 caracteres")
+      .optional()
+      .or(z.literal("")),
 
-    guardianPhone: z.string().max(50, "Máximo 50 caracteres").optional().or(z.literal("")),
+    guardianPhone: z
+      .string()
+      .max(50, "Máximo 50 caracteres")
+      .optional()
+      .or(z.literal("")),
 
-    boletaNumber: z.string().max(50, "Máximo 50 caracteres").optional().or(z.literal("")),
+    boletaNumber: z
+      .string()
+      .max(50, "Máximo 50 caracteres")
+      .optional()
+      .or(z.literal("")),
 
     boleta: z
       .instanceof(File)
@@ -110,27 +154,60 @@ export const paymentSchema = z
           if (!file) return true;
           return file.type === ACCEPTED_PDF_TYPE;
         },
-        { message: "Solo se permiten archivos PDF" }
+        { message: "Solo se permiten archivos PDF" },
       )
       .refine(
         (file) => {
           if (!file) return true;
           return file.size <= MAX_FILE_SIZE;
         },
-        { message: "El archivo no debe superar los 10 MB" }
+        { message: "El archivo no debe superar los 10 MB" },
       ),
   })
   .superRefine((data, ctx) => {
-    const sum = data.allocations.reduce((acc, row) => acc + row.amount, 0);
+    const sum = data.allocations.reduce(
+      (acc, row) => acc + (Number(row.amount) || 0),
+      0,
+    );
     if (sum !== data.totalAmount) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "La suma de los montos por alumno debe coincidir con el monto total",
+        message:
+          "La suma de los montos por alumno debe coincidir con el monto total",
         path: ["totalAmount"],
       });
     }
 
-    if (data.useAltPayer && (!data.payerName || data.payerName.trim().length === 0)) {
+    data.allocations.forEach((row, index) => {
+      if (!row.chargeId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Debe seleccionar una cuota",
+          path: ["allocations", index, "chargeId"],
+        });
+      }
+
+      if (!row.conceptId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Debe seleccionar un concepto",
+          path: ["allocations", index, "conceptId"],
+        });
+      }
+
+      if (!row.amount || row.amount <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "El monto debe ser mayor a 0",
+          path: ["allocations", index, "amount"],
+        });
+      }
+    });
+
+    if (
+      data.useAltPayer &&
+      (!data.payerName || data.payerName.trim().length === 0)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "El nombre del pagador es requerido cuando paga un tercero",

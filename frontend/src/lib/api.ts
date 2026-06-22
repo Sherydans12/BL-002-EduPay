@@ -3,7 +3,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 /** URL absoluta de un PDF guardado en el backend (boletaFileUrl = `/uploads/…`). */
 export function resolveUploadUrl(boletaFileUrl: string): string {
   const base = API_URL.replace(/\/$/, "");
-  const path = boletaFileUrl.startsWith("/") ? boletaFileUrl : `/${boletaFileUrl}`;
+  const path = boletaFileUrl.startsWith("/")
+    ? boletaFileUrl
+    : `/${boletaFileUrl}`;
   return `${base}${path}`;
 }
 
@@ -48,7 +50,7 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
     ? Object.fromEntries(
         options.headers instanceof Headers
           ? options.headers.entries()
-          : Object.entries(options.headers as Record<string, string>)
+          : Object.entries(options.headers as Record<string, string>),
       )
     : {};
 
@@ -76,10 +78,7 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
  * 3. Parsea errores del GlobalExceptionFilter: { statusCode, message }.
  * 4. Desenvuelve el envelope del TransformInterceptor: { data } → T.
  */
-async function request<T>(
-  path: string,
-  options?: RequestInit
-): Promise<T> {
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
   // Construir headers base
   const headers: Record<string, string> = {};
 
@@ -99,7 +98,7 @@ async function request<T>(
     ? Object.fromEntries(
         options.headers instanceof Headers
           ? options.headers.entries()
-          : Object.entries(options.headers as Record<string, string>)
+          : Object.entries(options.headers as Record<string, string>),
       )
     : {};
 
@@ -138,8 +137,8 @@ export interface Guardian {
   id: number;
   rut?: string | null;
   name: string;
-  email?: string;
-  phone?: string;
+  email?: string | null;
+  phone?: string | null;
   _count?: { students: number };
   students?: Array<{
     id: number;
@@ -197,6 +196,28 @@ export interface PaymentConcept {
   deletedAt?: string | null;
 }
 
+export type ChargeStatus =
+  | "PENDING"
+  | "PARTIALLY_PAID"
+  | "PAID"
+  | "OVERDUE"
+  | "CANCELLED";
+
+export interface Charge {
+  id: number;
+  studentId: number;
+  conceptId: number;
+  amount: number;
+  paidAmount: number;
+  dueDate: string;
+  status: ChargeStatus;
+  notes?: string | null;
+  concept: PaymentConcept;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
 export interface Payment {
   id: number;
   amount: number;
@@ -240,7 +261,12 @@ export function buildPaymentBatchFormData(data: {
   totalAmount: number;
   method: string;
   paymentDate: string;
-  allocations: Array<{ studentId: number; conceptId: number; amount: number }>;
+  allocations: Array<{
+    studentId: number;
+    conceptId: number;
+    amount: number;
+    chargeId?: number;
+  }>;
   boletaNumber?: string;
   notes?: string;
   boleta?: File;
@@ -256,10 +282,12 @@ export function buildPaymentBatchFormData(data: {
         studentId: a.studentId,
         conceptId: a.conceptId,
         amount: a.amount,
-      }))
-    )
+        ...(a.chargeId ? { chargeId: a.chargeId } : {}),
+      })),
+    ),
   );
-  if (data.boletaNumber?.trim()) fd.append("boletaNumber", data.boletaNumber.trim());
+  if (data.boletaNumber?.trim())
+    fd.append("boletaNumber", data.boletaNumber.trim());
   if (data.notes?.trim()) fd.append("notes", data.notes.trim());
   if (data.boleta) fd.append("boleta", data.boleta);
   return fd;
@@ -385,15 +413,11 @@ export const studentsApi = {
 // ─── Payments ─────────────────────────────────────────────────
 export const paymentsApi = {
   getAll: (params?: Record<string, string>) => {
-    const query = params
-      ? `?${new URLSearchParams(params).toString()}`
-      : "";
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return request<PaginatedResponse<Payment>>(`/payments${query}`);
   },
   getGroups: (params?: Record<string, string>) => {
-    const query = params
-      ? `?${new URLSearchParams(params).toString()}`
-      : "";
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return request<PaginatedResponse<PaymentGroup>>(`/payments/groups${query}`);
   },
   getOne: (id: number) => request<Payment>(`/payments/${id}`),
@@ -429,24 +453,29 @@ export const chargesApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  getPendingCharges: (studentId: number) =>
+    request<Charge[]>(`/charges/pending/${studentId}`),
 };
 
 // ─── Payment Concepts ─────────────────────────────────────────
 export const conceptsApi = {
-  getAll: () => request<PaymentConcept[]>('/payment-concepts'),
+  getAll: () => request<PaymentConcept[]>("/payment-concepts"),
   getOne: (id: number) => request<PaymentConcept>(`/payment-concepts/${id}`),
   create: (data: { name: string; defaultAmount: number; isActive?: boolean }) =>
-    request<PaymentConcept>('/payment-concepts', {
-      method: 'POST',
+    request<PaymentConcept>("/payment-concepts", {
+      method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: number, data: Partial<{ name: string; defaultAmount: number; isActive: boolean }>) =>
+  update: (
+    id: number,
+    data: Partial<{ name: string; defaultAmount: number; isActive: boolean }>,
+  ) =>
     request<PaymentConcept>(`/payment-concepts/${id}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify(data),
     }),
   delete: (id: number) =>
-    request<PaymentConcept>(`/payment-concepts/${id}`, { method: 'DELETE' }),
+    request<PaymentConcept>(`/payment-concepts/${id}`, { method: "DELETE" }),
 };
 
 // ─── Reports ──────────────────────────────────────────────────
@@ -489,7 +518,9 @@ export const reportsApi = {
     return requestBlob(`/reports/export${query}`);
   },
   getRevenueTrend: (months = 12) =>
-    request<RevenueTrendItem[]>(`/reports/dashboard/revenue-trend?months=${months}`),
+    request<RevenueTrendItem[]>(
+      `/reports/dashboard/revenue-trend?months=${months}`,
+    ),
 };
 
 // ─── Roles & Permissions ──────────────────────────────────────

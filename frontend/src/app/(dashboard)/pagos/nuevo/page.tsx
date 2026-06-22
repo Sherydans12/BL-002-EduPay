@@ -4,17 +4,24 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { paymentSchema, type PaymentFormData } from "@/lib/schemas/payment.schema";
+import {
+  paymentSchema,
+  type PaymentFormData,
+} from "@/lib/schemas/payment.schema";
 import {
   paymentsApi,
-  conceptsApi,
+  chargesApi,
   guardiansApi,
   buildPaymentBatchFormData,
 } from "@/lib/api";
 import { fetchAllStudents, fetchAllGuardians } from "@/lib/fetch-all-pages";
-import type { Student, Guardian, PaymentConcept } from "@/lib/api";
+import type { Student, Guardian, Charge } from "@/lib/api";
 import { toast } from "sonner";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -23,10 +30,21 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { DropdownChevron, NativeSelectField } from "@/components/ui/dropdown-chevron";
-import { cmdkCourseFilter, cmdkPersonFilter } from "@/lib/flexible-search";
+import {
+  DropdownChevron,
+  NativeSelectField,
+} from "@/components/ui/dropdown-chevron";
+import { cmdkPersonFilter } from "@/lib/flexible-search";
 import { useDropzone } from "react-dropzone";
-import { UploadCloud, FileText, X, Info, Trash2, Users, Plus } from "lucide-react";
+import {
+  UploadCloud,
+  FileText,
+  X,
+  Info,
+  Trash2,
+  Users,
+  Plus,
+} from "lucide-react";
 
 const METHODS = [
   { value: "CASH", label: "Efectivo" },
@@ -43,18 +61,44 @@ const inputErr = `${inputBase} border-red-500/60 focus:border-red-400 focus:ring
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="mt-1.5 text-xs text-red-400 animate-fade-in">{message}</p>;
+  return (
+    <p className="mt-1.5 text-xs text-red-400 animate-fade-in">{message}</p>
+  );
 }
 
-function buildAllocationRow(
-  student: Student,
-  defaultConcept?: PaymentConcept
-): { studentId: number; conceptId: number | undefined; amount: number | undefined } {
+function buildAllocationRow(student: Student): {
+  studentId: number;
+  chargeId: number | undefined;
+  conceptId: number | undefined;
+  amount: number | undefined;
+} {
   return {
     studentId: student.id,
-    conceptId: defaultConcept?.id,
-    amount: defaultConcept?.defaultAmount,
+    chargeId: undefined,
+    conceptId: undefined,
+    amount: undefined,
   };
+}
+
+function formatChargeDate(date: string): string {
+  return new Intl.DateTimeFormat("es-CL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(date));
+}
+
+function formatCLP(amount: number): string {
+  return amount.toLocaleString("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0,
+  });
+}
+
+function getChargeBalance(charge: Charge): number {
+  return Math.max(charge.amount - charge.paidAmount, 0);
 }
 
 export default function NewPaymentPage() {
@@ -62,17 +106,13 @@ export default function NewPaymentPage() {
 
   const [students, setStudents] = useState<Student[]>([]);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
-  const [concepts, setConcepts] = useState<PaymentConcept[]>([]);
+  const [pendingCharges, setPendingCharges] = useState<
+    Record<number, Charge[]>
+  >({});
   const [submitting, setSubmitting] = useState(false);
   const [guardianOpen, setGuardianOpen] = useState(false);
   const [studentOpen, setStudentOpen] = useState(false);
-  const [conceptOpenIndex, setConceptOpenIndex] = useState<number | null>(null);
   const [siblingSuggestions, setSiblingSuggestions] = useState<Student[]>([]);
-
-  const defaultConcept = useMemo(
-    () => concepts.find((c) => c.isActive) ?? concepts[0],
-    [concepts]
-  );
 
   const {
     register,
@@ -115,7 +155,7 @@ export default function NewPaymentPage() {
 
   const studentById = useMemo(
     () => new Map(students.map((s) => [s.id, s])),
-    [students]
+    [students],
   );
 
   const primaryStudent = useMemo(() => {
@@ -127,13 +167,13 @@ export default function NewPaymentPage() {
     Promise.all([
       fetchAllStudents().then(setStudents),
       fetchAllGuardians().then(setGuardians),
-      conceptsApi.getAll().then((data) => setConcepts(data.filter((c) => c.isActive))),
     ]).catch(() => {});
   }, []);
 
   useEffect(() => {
     const sum =
-      allocations?.reduce((acc, row) => acc + (Number(row.amount) || 0), 0) ?? 0;
+      allocations?.reduce((acc, row) => acc + (Number(row.amount) || 0), 0) ??
+      0;
     setValue("totalAmount", sum, { shouldValidate: true });
   }, [allocations, setValue]);
 
@@ -146,7 +186,7 @@ export default function NewPaymentPage() {
       setValue("guardianEmail", g.email ?? "");
       setValue("guardianPhone", g.phone ?? "");
     },
-    [useAltPayer, setValue]
+    [useAltPayer, setValue],
   );
 
   const syncGuardianFromGuardianRecord = useCallback(
@@ -157,42 +197,71 @@ export default function NewPaymentPage() {
       setValue("guardianEmail", guardian.email ?? "");
       setValue("guardianPhone", guardian.phone ?? "");
     },
-    [useAltPayer, setValue]
+    [useAltPayer, setValue],
   );
 
   const updateSiblingSuggestions = useCallback(
     (currentIds: Set<number>, guardianId: number) => {
       const siblings = students.filter(
-        (s) =>
-          s.guardianId === guardianId &&
-          !currentIds.has(s.id)
+        (s) => s.guardianId === guardianId && !currentIds.has(s.id),
       );
       setSiblingSuggestions(siblings);
     },
-    [students]
+    [students],
   );
 
+  const loadPendingCharges = useCallback(async (student: Student) => {
+    const charges = await chargesApi.getPendingCharges(student.id);
+    setPendingCharges((prev) => ({ ...prev, [student.id]: charges }));
+
+    if (charges.length === 0) {
+      toast.warning(`${student.name} no tiene cuotas pendientes registradas`);
+    }
+
+    return charges;
+  }, []);
+
   const handleSelectGuardian = useCallback(
-    (guardian: Guardian) => {
+    async (guardian: Guardian) => {
       const children = students.filter((s) => s.guardianId === guardian.id);
       if (children.length === 0) {
         toast.error("Este apoderado no tiene alumnos registrados");
         return;
       }
-      replace(children.map((s) => buildAllocationRow(s, defaultConcept)));
+
+      const pendingChild = children.find(
+        (child) => child.financialSetup === "PENDING",
+      );
+      if (pendingChild) {
+        toast.error(
+          "Alumno sin deuda configurada. Vaya a Setup Financiero primero.",
+        );
+        return;
+      }
+
+      await Promise.all(children.map(loadPendingCharges));
+      replace(children.map(buildAllocationRow));
       syncGuardianFromGuardianRecord(guardian);
       setSiblingSuggestions([]);
       setGuardianOpen(false);
       toast.success(`${children.length} alumno(s) añadido(s) al pago`);
     },
-    [students, replace, defaultConcept, syncGuardianFromGuardianRecord]
+    [students, loadPendingCharges, replace, syncGuardianFromGuardianRecord],
   );
 
   const handleAddStudent = useCallback(
-    (student: Student) => {
-      const current = getValues("allocations") ?? [];
+    async (student: Student) => {
+      if (student.financialSetup === "PENDING") {
+        toast.error(
+          "Alumno sin deuda configurada. Vaya a Setup Financiero primero.",
+        );
+        return;
+      }
 
-      append(buildAllocationRow(student, defaultConcept));
+      const current = getValues("allocations") ?? [];
+      await loadPendingCharges(student);
+
+      append(buildAllocationRow(student));
       syncGuardianFromStudent(student);
 
       const nextIds = new Set(current.map((a) => a.studentId));
@@ -203,36 +272,67 @@ export default function NewPaymentPage() {
     },
     [
       append,
-      defaultConcept,
       getValues,
+      loadPendingCharges,
       syncGuardianFromStudent,
       updateSiblingSuggestions,
-    ]
+    ],
   );
 
   const handleAddSibling = useCallback(
-    (sibling: Student) => {
-      const current = getValues("allocations") ?? [];
+    async (sibling: Student) => {
+      if (sibling.financialSetup === "PENDING") {
+        toast.error(
+          "Alumno sin deuda configurada. Vaya a Setup Financiero primero.",
+        );
+        return;
+      }
 
-      append(buildAllocationRow(sibling, defaultConcept));
+      const current = getValues("allocations") ?? [];
+      await loadPendingCharges(sibling);
+
+      append(buildAllocationRow(sibling));
       setSiblingSuggestions((prev) => prev.filter((s) => s.id !== sibling.id));
 
       if (current.length === 0) {
         syncGuardianFromStudent(sibling);
       }
     },
-    [append, defaultConcept, getValues, syncGuardianFromStudent]
+    [append, getValues, loadPendingCharges, syncGuardianFromStudent],
   );
 
-  const handleConceptSelect = useCallback(
-    (index: number, concept: PaymentConcept) => {
-      setValue(`allocations.${index}.conceptId`, concept.id, { shouldValidate: true });
-      setValue(`allocations.${index}.amount`, concept.defaultAmount, {
+  const handleChargeSelect = useCallback(
+    (index: number, rawChargeId: string) => {
+      const chargeId = Number(rawChargeId);
+      const studentId = getValues(`allocations.${index}.studentId`);
+      const charge = pendingCharges[studentId]?.find(
+        (item) => item.id === chargeId,
+      );
+
+      if (!charge) {
+        setValue(`allocations.${index}.chargeId`, undefined, {
+          shouldValidate: true,
+        });
+        setValue(`allocations.${index}.conceptId`, undefined, {
+          shouldValidate: true,
+        });
+        setValue(`allocations.${index}.amount`, undefined, {
+          shouldValidate: true,
+        });
+        return;
+      }
+
+      setValue(`allocations.${index}.chargeId`, charge.id, {
         shouldValidate: true,
       });
-      setConceptOpenIndex(null);
+      setValue(`allocations.${index}.conceptId`, charge.conceptId, {
+        shouldValidate: true,
+      });
+      setValue(`allocations.${index}.amount`, getChargeBalance(charge), {
+        shouldValidate: true,
+      });
     },
-    [setValue]
+    [getValues, pendingCharges, setValue],
   );
 
   const onDrop = useCallback(
@@ -241,7 +341,7 @@ export default function NewPaymentPage() {
         setValue("boleta", acceptedFiles[0], { shouldValidate: true });
       }
     },
-    [setValue]
+    [setValue],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -252,7 +352,8 @@ export default function NewPaymentPage() {
     onDropRejected: (fileRejections) => {
       fileRejections.forEach((rejection) => {
         rejection.errors.forEach((err) => {
-          if (err.code === "file-too-large") toast.error("El archivo supera los 10MB");
+          if (err.code === "file-too-large")
+            toast.error("El archivo supera los 10MB");
           else if (err.code === "file-invalid-type")
             toast.error("Solo se permiten archivos PDF");
           else toast.error(err.message);
@@ -264,7 +365,9 @@ export default function NewPaymentPage() {
   async function onSubmit(data: PaymentFormData) {
     setSubmitting(true);
     try {
-      const firstStudent = students.find((s) => s.id === data.allocations[0]?.studentId);
+      const firstStudent = students.find(
+        (s) => s.id === data.allocations[0]?.studentId,
+      );
       if (!data.useAltPayer && firstStudent) {
         await guardiansApi.update(firstStudent.guardianId, {
           name: (data.guardianName ?? "").trim(),
@@ -278,11 +381,18 @@ export default function NewPaymentPage() {
         totalAmount: data.totalAmount,
         method: data.method,
         paymentDate: data.paymentDate,
-        allocations: data.allocations.map((a) => ({
-          studentId: a.studentId,
-          conceptId: a.conceptId as number,
-          amount: a.amount as number,
-        })),
+        allocations: data.allocations.map((a) => {
+          const charge = pendingCharges[a.studentId]?.find(
+            (item) => item.id === a.chargeId,
+          );
+
+          return {
+            studentId: a.studentId,
+            chargeId: a.chargeId as number,
+            conceptId: charge?.conceptId ?? (a.conceptId as number),
+            amount: a.amount as number,
+          };
+        }),
         boletaNumber: data.boletaNumber,
         notes: data.notes,
         boleta: data.boleta,
@@ -292,13 +402,14 @@ export default function NewPaymentPage() {
       toast.success(
         data.allocations.length > 1
           ? `Pago agrupado registrado (${data.allocations.length} alumnos)`
-          : "Pago registrado exitosamente"
+          : "Pago registrado exitosamente",
       );
       reset();
       setSiblingSuggestions([]);
       setTimeout(() => router.push("/reportes"), 1500);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al registrar pago";
+      const msg =
+        err instanceof Error ? err.message : "Error al registrar pago";
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -331,7 +442,10 @@ export default function NewPaymentPage() {
               </label>
               <Popover open={guardianOpen} onOpenChange={setGuardianOpen}>
                 <PopoverTrigger asChild>
-                  <button type="button" className={`${inputOk} flex items-center gap-2 text-left`}>
+                  <button
+                    type="button"
+                    className={`${inputOk} flex items-center gap-2 text-left`}
+                  >
                     <Users className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
                     <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
                       Cargar todos los hijos de un apoderado...
@@ -339,7 +453,10 @@ export default function NewPaymentPage() {
                     <DropdownChevron />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]" align="start">
+                <PopoverContent
+                  className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
+                  align="start"
+                >
                   <Command filter={cmdkPersonFilter} className="bg-transparent">
                     <CommandInput placeholder="Nombre o RUT del apoderado..." />
                     <CommandList>
@@ -349,7 +466,7 @@ export default function NewPaymentPage() {
                           <CommandItem
                             key={g.id}
                             value={`${g.name}\t${g.rut ?? ""}`}
-                            onSelect={() => handleSelectGuardian(g)}
+                            onSelect={() => void handleSelectGuardian(g)}
                             className="cursor-pointer"
                           >
                             <div className="flex flex-col">
@@ -376,14 +493,20 @@ export default function NewPaymentPage() {
               </label>
               <Popover open={studentOpen} onOpenChange={setStudentOpen}>
                 <PopoverTrigger asChild>
-                  <button type="button" className={`${inputOk} flex items-center gap-2 text-left`}>
+                  <button
+                    type="button"
+                    className={`${inputOk} flex items-center gap-2 text-left`}
+                  >
                     <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
                       Añadir un alumno al pago...
                     </span>
                     <DropdownChevron />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]" align="start">
+                <PopoverContent
+                  className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
+                  align="start"
+                >
                   <Command filter={cmdkPersonFilter} className="bg-transparent">
                     <CommandInput placeholder="Buscar por nombre o RUT..." />
                     <CommandList>
@@ -393,7 +516,7 @@ export default function NewPaymentPage() {
                           <CommandItem
                             key={s.id}
                             value={`${s.name}\t${s.rut}`}
-                            onSelect={() => handleAddStudent(s)}
+                            onSelect={() => void handleAddStudent(s)}
                             className="cursor-pointer"
                           >
                             <div className="flex flex-col">
@@ -434,7 +557,7 @@ export default function NewPaymentPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleAddSibling(sibling)}
+                          onClick={() => void handleAddSibling(sibling)}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-500/30 transition-colors"
                         >
                           Añadir al pago
@@ -447,19 +570,26 @@ export default function NewPaymentPage() {
             </div>
           </div>
 
-          <FieldError message={errors.allocations?.message as string | undefined} />
+          <FieldError
+            message={errors.allocations?.message as string | undefined}
+          />
 
           {fields.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)] text-center py-6 border border-dashed border-[var(--color-border)] rounded-xl">
-              Usá los buscadores para añadir alumnos. Podés cargar todos los hijos de un apoderado o
-              ir sumando alumnos uno a uno.
+              Usá los buscadores para añadir alumnos. Podés cargar todos los
+              hijos de un apoderado o ir sumando alumnos uno a uno.
             </p>
           ) : (
             <div className="space-y-3">
               {fields.map((field, index) => {
-                const student = studentById.get(allocations?.[index]?.studentId);
-                const rowConceptId = allocations?.[index]?.conceptId;
-                const rowConcept = concepts.find((c) => c.id === rowConceptId);
+                const student = studentById.get(
+                  allocations?.[index]?.studentId,
+                );
+                const rowStudentId = allocations?.[index]?.studentId;
+                const rowCharges = rowStudentId
+                  ? (pendingCharges[rowStudentId] ?? [])
+                  : [];
+                const rowChargeId = allocations?.[index]?.chargeId;
                 const rowErrors = errors.allocations?.[index];
 
                 return (
@@ -470,7 +600,8 @@ export default function NewPaymentPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-medium text-white truncate">
-                          {student?.name ?? `Alumno #${allocations?.[index]?.studentId}`}
+                          {student?.name ??
+                            `Alumno #${allocations?.[index]?.studentId}`}
                         </p>
                         <p className="text-xs text-[var(--color-text-muted)]">
                           {student?.rut ?? "—"} · {student?.course.name ?? "—"}
@@ -480,7 +611,7 @@ export default function NewPaymentPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (student) append(buildAllocationRow(student, defaultConcept));
+                            if (student) append(buildAllocationRow(student));
                           }}
                           disabled={!student}
                           className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40"
@@ -505,65 +636,33 @@ export default function NewPaymentPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                          Concepto *
+                          Cuota *
                         </label>
-                        <Controller
-                          control={control}
-                          name={`allocations.${index}.conceptId`}
-                          render={({ field: conceptField }) => (
-                            <Popover
-                              open={conceptOpenIndex === index}
-                              onOpenChange={(open) =>
-                                setConceptOpenIndex(open ? index : null)
-                              }
-                            >
-                              <PopoverTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={`${rowErrors?.conceptId ? inputErr : inputOk} flex items-center gap-2 text-left py-2.5`}
-                                >
-                                  <span className="min-w-0 flex-1 truncate text-sm">
-                                    {conceptField.value
-                                      ? concepts.find((c) => c.id === conceptField.value)?.name
-                                      : "Seleccionar concepto..."}
-                                  </span>
-                                  {rowConcept && (
-                                    <span className="shrink-0 text-xs text-[var(--color-text-muted)] font-mono">
-                                      ${rowConcept.defaultAmount.toLocaleString("es-CL")}
-                                    </span>
-                                  )}
-                                  <DropdownChevron />
-                                </button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[400px] p-0" align="start">
-                                <Command filter={cmdkCourseFilter} className="bg-transparent">
-                                  <CommandInput placeholder="Buscar concepto..." />
-                                  <CommandList>
-                                    <CommandEmpty>No se encontró el concepto.</CommandEmpty>
-                                    <CommandGroup>
-                                      {concepts.map((c) => (
-                                        <CommandItem
-                                          key={c.id}
-                                          value={c.name}
-                                          onSelect={() => handleConceptSelect(index, c)}
-                                          className="cursor-pointer"
-                                        >
-                                          <div className="flex justify-between w-full items-center">
-                                            <span>{c.name}</span>
-                                            <span className="text-xs text-[var(--color-text-muted)] font-mono tabular-nums">
-                                              ${c.defaultAmount.toLocaleString("es-CL")}
-                                            </span>
-                                          </div>
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                  </CommandList>
-                                </Command>
-                              </PopoverContent>
-                            </Popover>
-                          )}
-                        />
-                        <FieldError message={rowErrors?.conceptId?.message} />
+                        <NativeSelectField>
+                          <select
+                            value={rowChargeId ?? ""}
+                            onChange={(e) =>
+                              handleChargeSelect(index, e.target.value)
+                            }
+                            className={`${rowErrors?.chargeId ? inputErr : inputOk} py-2.5`}
+                            disabled={rowCharges.length === 0}
+                          >
+                            <option value="">Seleccionar cuota...</option>
+                            {rowCharges.map((charge) => (
+                              <option key={charge.id} value={charge.id}>
+                                {charge.concept.name} (Vence:{" "}
+                                {formatChargeDate(charge.dueDate)}) - Saldo:{" "}
+                                {formatCLP(getChargeBalance(charge))}
+                              </option>
+                            ))}
+                          </select>
+                        </NativeSelectField>
+                        {rowCharges.length === 0 && (
+                          <p className="mt-1.5 text-xs text-amber-300">
+                            No hay cuotas pendientes para este alumno.
+                          </p>
+                        )}
+                        <FieldError message={rowErrors?.chargeId?.message} />
                       </div>
 
                       <div>
@@ -585,7 +684,7 @@ export default function NewPaymentPage() {
                               onChange={(e) => {
                                 const raw = e.target.value;
                                 amountField.onChange(
-                                  raw === "" ? undefined : Number(raw)
+                                  raw === "" ? undefined : Number(raw),
                                 );
                               }}
                               className={`${rowErrors?.amount ? inputErr : inputOk} py-2.5`}
@@ -633,7 +732,10 @@ export default function NewPaymentPage() {
                 Método de Pago *
               </label>
               <NativeSelectField>
-                <select {...register("method")} className={errors.method ? inputErr : inputOk}>
+                <select
+                  {...register("method")}
+                  className={errors.method ? inputErr : inputOk}
+                >
                   {METHODS.map((m) => (
                     <option key={m.value} value={m.value}>
                       {m.label}
@@ -696,7 +798,9 @@ export default function NewPaymentPage() {
                 {...register("useAltPayer")}
                 className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)] bg-[var(--color-bg)]"
               />
-              <span className="text-sm text-[var(--color-text-secondary)]">¿Paga un tercero?</span>
+              <span className="text-sm text-[var(--color-text-secondary)]">
+                ¿Paga un tercero?
+              </span>
             </label>
           </div>
           {!useAltPayer ? (
@@ -708,8 +812,8 @@ export default function NewPaymentPage() {
               <div className="space-y-4 animate-fade-in">
                 <p className="text-sm text-[var(--color-text-secondary)]">
                   Datos del apoderado
-                  {primaryStudent ? ` (${primaryStudent.guardian.name})` : ""}. Se guardarán al
-                  registrar el pago.
+                  {primaryStudent ? ` (${primaryStudent.guardian.name})` : ""}.
+                  Se guardarán al registrar el pago.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="md:col-span-2">
@@ -851,7 +955,9 @@ export default function NewPaymentPage() {
                   <>
                     <UploadCloud className="w-10 h-10 text-[var(--color-text-muted)]" />
                     <div className="text-center">
-                      <p className="text-sm text-white">Arrastra y suelta tu archivo aquí</p>
+                      <p className="text-sm text-white">
+                        Arrastra y suelta tu archivo aquí
+                      </p>
                       <p className="text-xs mt-1 text-[var(--color-text-muted)]">
                         Máximo 10MB (solo PDF)
                       </p>
