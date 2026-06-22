@@ -1,14 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { studentsApi } from "@/lib/api";
-import type { FinancialSetupStatus, Student } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFieldArray, useForm } from "react-hook-form";
+import { chargesApi, conceptsApi, paymentsApi, studentsApi } from "@/lib/api";
+import type {
+  FinancialSetupStatus,
+  Payment,
+  PaymentConcept,
+  Student,
+} from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Plus,
+  Search,
+  Trash2,
+  Wand2,
+} from "lucide-react";
 
 type FilterMode = "PENDING" | "CONFIGURED" | "ALL";
+
+type ChargeFormRow = {
+  conceptId?: number;
+  amount?: number;
+  dueDate: string;
+};
+
+type FinancialPlanForm = {
+  charges: ChargeFormRow[];
+};
 
 const FILTERS: Array<{ value: FilterMode; label: string }> = [
   { value: "PENDING", label: "Solo Pendientes" },
@@ -42,16 +73,72 @@ function getFinancialSetup(student: Student): FinancialSetupStatus {
   return student.financialSetup ?? "PENDING";
 }
 
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("es-CL", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function normalizeConceptName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function buildDueDate(year: number, monthIndex: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-05`;
+}
+
 export default function FinancialSetupRadarPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>("PENDING");
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [paymentHistory, setPaymentHistory] = useState<Payment[]>([]);
+  const [concepts, setConcepts] = useState<PaymentConcept[]>([]);
+  const [sheetLoading, setSheetLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const { control, register, handleSubmit, reset } = useForm<FinancialPlanForm>(
+    {
+      defaultValues: { charges: [] },
+    },
+  );
+
+  const { fields, append, remove, replace } = useFieldArray({
+    control,
+    name: "charges",
+  });
+
+  const reloadStudents = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchAllStudentsForRadar();
+      setStudents(data);
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al cargar radar financiero",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      setLoading(true);
       try {
         const data = await fetchAllStudentsForRadar();
         if (!cancelled) setStudents(data);
@@ -73,6 +160,34 @@ export default function FinancialSetupRadarPage() {
     };
   }, []);
 
+  const openSetupSheet = async (student: Student) => {
+    setSelectedStudent(student);
+    reset({ charges: [] });
+    setPaymentHistory([]);
+    setSheetLoading(true);
+
+    try {
+      const [paymentsRes, conceptsRes] = await Promise.all([
+        paymentsApi.getAll({
+          studentId: String(student.id),
+          page: "1",
+          limit: "20",
+        }),
+        conceptsApi.getAll(),
+      ]);
+      setPaymentHistory(paymentsRes.data);
+      setConcepts(conceptsRes.filter((concept) => concept.isActive));
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Error al cargar contexto financiero",
+      );
+    } finally {
+      setSheetLoading(false);
+    }
+  };
+
   const metrics = useMemo(() => {
     const total = students.length;
     const configured = students.filter(
@@ -88,6 +203,78 @@ export default function FinancialSetupRadarPage() {
     if (filter === "ALL") return students;
     return students.filter((student) => getFinancialSetup(student) === filter);
   }, [filter, students]);
+
+  const loadStandardSchoolYear = () => {
+    const year = new Date().getFullYear();
+    const enrollmentConcept = concepts.find((concept) =>
+      normalizeConceptName(concept.name).includes("matricula"),
+    );
+    const monthlyConcept =
+      concepts.find((concept) =>
+        normalizeConceptName(concept.name).includes("mensualidad general"),
+      ) ??
+      concepts.find((concept) =>
+        normalizeConceptName(concept.name).includes("mensualidad"),
+      );
+
+    if (!enrollmentConcept || !monthlyConcept) {
+      toast.error(
+        "Faltan conceptos activos de Matrícula o Mensualidad General",
+      );
+      return;
+    }
+
+    replace([
+      {
+        conceptId: enrollmentConcept.id,
+        amount: enrollmentConcept.defaultAmount,
+        dueDate: buildDueDate(year, 2),
+      },
+      ...Array.from({ length: 10 }, (_, index) => {
+        const monthIndex = index + 2;
+        return {
+          conceptId: monthlyConcept.id,
+          amount: monthlyConcept.defaultAmount,
+          dueDate: buildDueDate(year, monthIndex),
+        };
+      }),
+    ]);
+  };
+
+  const submitFinancialPlan = async (data: FinancialPlanForm) => {
+    if (!selectedStudent) return;
+
+    const charges = data.charges.map((charge) => ({
+      conceptId: Number(charge.conceptId),
+      amount: Number(charge.amount),
+      dueDate: charge.dueDate,
+    }));
+
+    if (
+      charges.length === 0 ||
+      charges.some(
+        (charge) => !charge.conceptId || !charge.amount || !charge.dueDate,
+      )
+    ) {
+      toast.error("Completa concepto, vencimiento y monto en todas las filas");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await chargesApi.setupFinancialPlan(selectedStudent.id, { charges });
+      toast.success("Plan financiero configurado exitosamente");
+      setSelectedStudent(null);
+      reset({ charges: [] });
+      await reloadStudents();
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al configurar deuda",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-10 animate-fade-in">
@@ -239,7 +426,10 @@ export default function FinancialSetupRadarPage() {
                       <td className="px-6 py-4 text-right">
                         <button
                           type="button"
-                          onClick={() => console.log(student.id)}
+                          onClick={() => {
+                            console.log(student.id);
+                            void openSetupSheet(student);
+                          }}
                           className="rounded-lg border border-[var(--color-primary)]/40 px-3 py-2 text-sm font-medium text-blue-300 transition-colors hover:bg-[var(--color-primary-light)] hover:text-white"
                         >
                           Configurar
@@ -253,6 +443,205 @@ export default function FinancialSetupRadarPage() {
           </div>
         )}
       </div>
+
+      <Sheet
+        open={!!selectedStudent}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedStudent(null);
+            reset({ charges: [] });
+          }
+        }}
+      >
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>
+              Configurar deuda anual
+              {selectedStudent ? ` · ${selectedStudent.name}` : ""}
+            </SheetTitle>
+            <SheetDescription>
+              Revisa pagos históricos antes de generar los cargos de cuentas por
+              cobrar.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[0.95fr_1.25fr]">
+            <section className="min-h-0 overflow-y-auto border-b border-[var(--color-border)] p-6 lg:border-r lg:border-b-0">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-white">
+                    Historial de pagos
+                  </h3>
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    Últimos registros asociados al alumno seleccionado.
+                  </p>
+                </div>
+                <Badge variant="secondary">
+                  {paymentHistory.length} pago(s)
+                </Badge>
+              </div>
+
+              {sheetLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
+                </div>
+              ) : paymentHistory.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-muted)]">
+                  No hay pagos históricos para este alumno.
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-[var(--color-border)]">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[var(--color-bg)]/60 text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)]">
+                      <tr>
+                        <th className="px-3 py-3">Fecha</th>
+                        <th className="px-3 py-3">Concepto</th>
+                        <th className="px-3 py-3 text-right">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-border)]">
+                      {paymentHistory.map((payment) => (
+                        <tr key={payment.id}>
+                          <td className="px-3 py-3 text-[var(--color-text-secondary)]">
+                            {formatDate(payment.paymentDate)}
+                          </td>
+                          <td className="px-3 py-3 text-white">
+                            {payment.concept?.name ?? "Sin concepto"}
+                          </td>
+                          <td className="px-3 py-3 text-right font-semibold text-emerald-300 tabular-nums">
+                            {formatCurrency(payment.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="min-h-0 overflow-y-auto p-6">
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-white">
+                    Generador de cuotas
+                  </h3>
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    Crea cargos iniciales para el año escolar actual.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={loadStandardSchoolYear}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/35 px-3 py-2 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/10 hover:text-white"
+                  disabled={sheetLoading || concepts.length === 0}
+                >
+                  <Wand2 className="h-4 w-4" />
+                  Cargar Año Escolar Estándar
+                </button>
+              </div>
+
+              <form
+                onSubmit={handleSubmit(submitFinancialPlan)}
+                className="space-y-4"
+              >
+                {fields.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-muted)]">
+                    Agrega cuotas manualmente o carga el plan estándar.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {fields.map((field, index) => (
+                      <div
+                        key={field.id}
+                        className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-3 md:grid-cols-[1.4fr_0.9fr_0.9fr_auto]"
+                      >
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                            Concepto
+                          </label>
+                          <NativeSelectField>
+                            <select
+                              {...register(`charges.${index}.conceptId`, {
+                                valueAsNumber: true,
+                              })}
+                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                            >
+                              <option value="">Seleccionar...</option>
+                              {concepts.map((concept) => (
+                                <option key={concept.id} value={concept.id}>
+                                  {concept.name}
+                                </option>
+                              ))}
+                            </select>
+                          </NativeSelectField>
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                            Vencimiento
+                          </label>
+                          <input
+                            type="date"
+                            {...register(`charges.${index}.dueDate`)}
+                            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                            Monto
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            {...register(`charges.${index}.amount`, {
+                              valueAsNumber: true,
+                            })}
+                            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => remove(index)}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+                            aria-label="Eliminar cuota"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      append({
+                        conceptId: concepts[0]?.id,
+                        amount: concepts[0]?.defaultAmount,
+                        dueDate: buildDueDate(new Date().getFullYear(), 2),
+                      })
+                    }
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-white"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Añadir cuota
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting || fields.length === 0}
+                    className="rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {submitting ? "Guardando..." : "Guardar configuración"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
