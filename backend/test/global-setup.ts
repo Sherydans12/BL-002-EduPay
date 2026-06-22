@@ -25,8 +25,7 @@ async function ensureTestDatabase(databaseUrl: string): Promise<void> {
 export default async function globalSetup(): Promise<void> {
   process.env.NODE_ENV ??= 'test';
   process.env.ENABLE_EMAILS ??= 'false';
-  process.env.JWT_SECRET ??=
-    'e2e-jwt-secret-key-at-least-32-characters';
+  process.env.JWT_SECRET ??= 'e2e-jwt-secret-key-at-least-32-characters';
   process.env.DATABASE_URL ??=
     'postgresql://postgres:postgres@localhost:5432/edupay_test?schema=public';
 

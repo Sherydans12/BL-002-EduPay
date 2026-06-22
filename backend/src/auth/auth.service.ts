@@ -23,7 +23,9 @@ export class AuthService {
     });
 
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Credenciales inv\u00e1lidas o cuenta inactiva');
+      throw new UnauthorizedException(
+        'Credenciales inv\u00e1lidas o cuenta inactiva',
+      );
     }
 
     const isMatch = await bcrypt.compare(pass, user.password);
@@ -31,7 +33,7 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inv\u00e1lidas');
     }
 
-    const permissions = user.role?.permissions.map(p => p.action) || [];
+    const permissions = user.role?.permissions.map((p) => p.action) || [];
 
     const payload = {
       sub: user.id,
@@ -48,7 +50,7 @@ export class AuthService {
         name: user.name,
         role: user.role?.name,
         permissions,
-      }
+      },
     };
   }
 }

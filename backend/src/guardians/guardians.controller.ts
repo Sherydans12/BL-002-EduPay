@@ -51,7 +51,8 @@ export class GuardiansController {
     const buffer = await this.guardiansService.exportToXlsx();
     const date = new Date().toISOString().split('T')[0];
     res.set({
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename=apoderados_${date}.xlsx`,
       'Content-Length': String(buffer.length),
     });
@@ -69,7 +70,10 @@ export class GuardiansController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
-  @ApiResponse({ status: 200, description: 'Lista paginada de apoderados con conteo de alumnos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista paginada de apoderados con conteo de alumnos',
+  })
   findAll(
     @Query('search') search: string | undefined,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
@@ -83,7 +87,10 @@ export class GuardiansController {
   @RequirePermissions('view:guardians')
   @ApiOperation({ summary: 'Obtener un apoderado por ID' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del apoderado' })
-  @ApiResponse({ status: 200, description: 'Apoderado encontrado con detalle de alumnos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Apoderado encontrado con detalle de alumnos',
+  })
   @ApiResponse({ status: 404, description: 'Apoderado no encontrado' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.guardiansService.findOne(id);

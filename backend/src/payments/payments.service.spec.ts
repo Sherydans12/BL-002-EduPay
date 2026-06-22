@@ -49,8 +49,8 @@ describe('PaymentsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    prisma.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) =>
-      fn(prisma),
+    prisma.$transaction.mockImplementation(
+      async (fn: (tx: typeof prisma) => unknown) => fn(prisma),
     );
 
     const module: TestingModule = await Test.createTestingModule({
@@ -120,8 +120,12 @@ describe('PaymentsService', () => {
     it('lanza NotFoundException si falta algún alumno', async () => {
       prisma.student.findMany.mockResolvedValue([{ id: 1 }]);
 
-      await expect(service.createBatch(batchDto)).rejects.toThrow(NotFoundException);
-      await expect(service.createBatch(batchDto)).rejects.toThrow('Alumno(s) no encontrado(s): 2');
+      await expect(service.createBatch(batchDto)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.createBatch(batchDto)).rejects.toThrow(
+        'Alumno(s) no encontrado(s): 2',
+      );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });

@@ -39,7 +39,9 @@ const HEADERS = [
   'Referencia',
 ] as const;
 
-const COL_WIDTHS = [14, 16, 18, 16, 14, 28, 10, 14, 32, 16, 22, 22, 14, 28, 16, 20];
+const COL_WIDTHS = [
+  14, 16, 18, 16, 14, 28, 10, 14, 32, 16, 22, 22, 14, 28, 16, 20,
+];
 
 export type PaymentGroupExportPayload = {
   id: number;
@@ -64,7 +66,9 @@ export type PaymentGroupExportPayload = {
   }>;
 };
 
-function linePayerLabel(line: PaymentGroupExportPayload['payments'][0]): string {
+function linePayerLabel(
+  line: PaymentGroupExportPayload['payments'][0],
+): string {
   if (line.payerName?.trim()) return line.payerName.trim();
   return line.student.guardian?.name ?? 'Apoderado';
 }
@@ -80,7 +84,11 @@ function thinBorder(): Partial<ExcelJS.Borders> {
 
 function applyCellStyle(
   cell: ExcelJS.Cell,
-  opts: { fillArgb: string; numFmt?: string; align?: Partial<ExcelJS.Alignment> },
+  opts: {
+    fillArgb: string;
+    numFmt?: string;
+    align?: Partial<ExcelJS.Alignment>;
+  },
 ): void {
   cell.fill = {
     type: 'pattern',
@@ -104,7 +112,11 @@ function writeHeaderRow(sheet: ExcelJS.Worksheet): void {
       pattern: 'solid',
       fgColor: { argb: HEADER_BG },
     };
-    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+    };
     cell.border = {
       bottom: { style: 'medium', color: { argb: HEADER_BORDER } },
     };
@@ -210,7 +222,11 @@ export function fillPaymentGroupsMergedSheet(
       for (let col = 1; col <= MERGE_COL_END; col++) {
         sheet.mergeCells(startRow, col, endRow, col);
         const master = sheet.getCell(startRow, col);
-        master.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        master.alignment = {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        };
       }
     }
 
@@ -235,5 +251,5 @@ export async function buildPaymentGroupsWorkbookBuffer(
   const sheet = wb.addWorksheet(sheetName);
   fillPaymentGroupsMergedSheet(sheet, groups);
   const raw = await wb.xlsx.writeBuffer();
-  return Buffer.from(raw as ArrayBuffer);
+  return Buffer.from(raw);
 }

@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsInt, Matches, IsEnum, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsInt,
+  Matches,
+  IsEnum,
+  IsOptional,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StudentStatus } from '@prisma/client';
@@ -10,10 +17,14 @@ export class CreateStudentDto {
     description: 'RUT del alumno (único)',
     example: '23.456.789-0',
   })
-  @Transform(({ value }) => (typeof value === 'string' ? formatRut(value) : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? formatRut(value) : value,
+  )
   @IsString()
   @IsNotEmpty()
-  @Matches(/^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$/, { message: 'RUT inválido (formato: 12.345.678-9)' })
+  @Matches(/^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$/, {
+    message: 'RUT inválido (formato: 12.345.678-9)',
+  })
   @IsValidChileanRut()
   rut: string;
 

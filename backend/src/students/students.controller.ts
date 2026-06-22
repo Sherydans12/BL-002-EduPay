@@ -46,7 +46,12 @@ export class StudentsController {
   @Get('export')
   @RequirePermissions('view:students')
   @ApiOperation({ summary: 'Exportar alumnos a XLSX' })
-  @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
+  @ApiQuery({
+    name: 'courseId',
+    required: false,
+    type: Number,
+    description: 'Filtrar por ID de curso',
+  })
   @ApiResponse({ status: 200, description: 'Archivo XLSX descargado' })
   async exportXlsx(
     @Query('courseId') courseId: string | undefined,
@@ -56,7 +61,8 @@ export class StudentsController {
     const buffer = await this.studentsService.exportToXlsx(parsedCourseId);
     const date = new Date().toISOString().split('T')[0];
     res.set({
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename=alumnos_${date}.xlsx`,
       'Content-Length': String(buffer.length),
     });
@@ -65,8 +71,15 @@ export class StudentsController {
 
   @Get()
   @RequirePermissions('view:students')
-  @ApiOperation({ summary: 'Listar alumnos paginados (filtro opcional por curso)' })
-  @ApiQuery({ name: 'courseId', required: false, type: Number, description: 'Filtrar por ID de curso' })
+  @ApiOperation({
+    summary: 'Listar alumnos paginados (filtro opcional por curso)',
+  })
+  @ApiQuery({
+    name: 'courseId',
+    required: false,
+    type: Number,
+    description: 'Filtrar por ID de curso',
+  })
   @ApiQuery({
     name: 'status',
     required: false,
@@ -81,7 +94,10 @@ export class StudentsController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
-  @ApiResponse({ status: 200, description: 'Lista paginada de alumnos con curso y apoderado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista paginada de alumnos con curso y apoderado',
+  })
   findAll(
     @Query('courseId') courseId?: string,
     @Query('status') status?: string,
@@ -108,7 +124,10 @@ export class StudentsController {
   @RequirePermissions('view:students')
   @ApiOperation({ summary: 'Obtener un alumno por ID' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del alumno' })
-  @ApiResponse({ status: 200, description: 'Alumno con curso, apoderado y pagos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Alumno con curso, apoderado y pagos',
+  })
   @ApiResponse({ status: 404, description: 'Alumno no encontrado' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.studentsService.findOne(id);
@@ -122,10 +141,7 @@ export class StudentsController {
   @ApiResponse({ status: 400, description: 'Datos de entrada inválidos' })
   @ApiResponse({ status: 404, description: 'Alumno no encontrado' })
   @ApiResponse({ status: 409, description: 'RUT duplicado' })
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateStudentDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateStudentDto) {
     return this.studentsService.update(id, dto);
   }
 

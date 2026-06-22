@@ -22,7 +22,9 @@ export class CreateGuardianDto {
     typeof value === 'string' && value.trim() ? formatRut(value) : undefined,
   )
   @IsString()
-  @Matches(/^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$/, { message: 'RUT inválido (formato: 12.345.678-9)' })
+  @Matches(/^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$/, {
+    message: 'RUT inválido (formato: 12.345.678-9)',
+  })
   @IsValidChileanRut()
   rut?: string;
 

@@ -58,7 +58,9 @@ function styleTableHeader(sheet: ExcelJS.Worksheet, colCount: number): void {
       fgColor: { argb: HEADER_BG },
     };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
-    cell.border = { bottom: { style: 'medium', color: { argb: HEADER_BORDER } } };
+    cell.border = {
+      bottom: { style: 'medium', color: { argb: HEADER_BORDER } },
+    };
   }
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
 }
@@ -105,7 +107,10 @@ function fillAggregateTable(
   }
 }
 
-function fillResumenGeneralSheet(sheet: ExcelJS.Worksheet, meta: ReportExportMeta): void {
+function fillResumenGeneralSheet(
+  sheet: ExcelJS.Worksheet,
+  meta: ReportExportMeta,
+): void {
   sheet.getColumn(1).width = 36;
   sheet.getColumn(2).width = 28;
 
@@ -121,9 +126,7 @@ function fillResumenGeneralSheet(sheet: ExcelJS.Worksheet, meta: ReportExportMet
   title.alignment = { vertical: 'middle', horizontal: 'center' };
   sheet.getRow(1).height = 36;
 
-  const filters: [string, string][] = [
-    ['Período', meta.periodLabel],
-  ];
+  const filters: [string, string][] = [['Período', meta.periodLabel]];
   if (meta.courseLabel) filters.push(['Curso', meta.courseLabel]);
   if (meta.studentLabel) filters.push(['Alumno', meta.studentLabel]);
 
@@ -220,13 +223,16 @@ export async function buildReportsWorkbookBuffer(
   );
 
   const raw = await wb.xlsx.writeBuffer();
-  return Buffer.from(raw as ArrayBuffer);
+  return Buffer.from(raw);
 }
 
 export function aggregateGroupsByMethod(
   groups: PaymentGroupExportPayload[],
 ): ReportAggregateRow[] {
-  const map = new Map<string, { transactions: number; lines: number; total: number }>();
+  const map = new Map<
+    string,
+    { transactions: number; lines: number; total: number }
+  >();
   for (const g of groups) {
     const label = METHOD_LABELS[g.method] ?? g.method;
     const prev = map.get(label) ?? { transactions: 0, lines: 0, total: 0 };

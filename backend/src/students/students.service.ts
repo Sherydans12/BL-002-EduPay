@@ -31,7 +31,9 @@ export class StudentsService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException(`Student with RUT ${dto.rut} already exists`);
+        throw new ConflictException(
+          `Student with RUT ${dto.rut} already exists`,
+        );
       }
       throw error;
     }
@@ -100,7 +102,9 @@ export class StudentsService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException(`Student with RUT ${dto.rut} already exists`);
+        throw new ConflictException(
+          `Student with RUT ${dto.rut} already exists`,
+        );
       }
       throw error;
     }

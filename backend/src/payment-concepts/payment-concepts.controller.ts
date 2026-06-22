@@ -9,12 +9,7 @@ import {
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { PaymentConceptsService } from './payment-concepts.service';
 import { CreatePaymentConceptDto } from './dto/create-payment-concept.dto';
 import { UpdatePaymentConceptDto } from './dto/update-payment-concept.dto';
@@ -62,7 +57,10 @@ export class PaymentConceptsController {
   @ApiResponse({ status: 200, description: 'Concepto actualizado' })
   @ApiResponse({ status: 404, description: 'Concepto no encontrado' })
   @ApiResponse({ status: 409, description: 'Nombre duplicado' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePaymentConceptDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePaymentConceptDto,
+  ) {
     return this.service.update(id, dto);
   }
 

@@ -53,7 +53,8 @@ export class CoursesController {
     const buffer = await this.coursesService.exportToXlsx();
     const date = new Date().toISOString().split('T')[0];
     res.set({
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename=cursos_${date}.xlsx`,
       'Content-Length': String(buffer.length),
     });
@@ -71,7 +72,10 @@ export class CoursesController {
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
-  @ApiResponse({ status: 200, description: 'Lista paginada de cursos con conteo de alumnos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista paginada de cursos con conteo de alumnos',
+  })
   findAll(
     @Query('search') search: string | undefined,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
@@ -85,7 +89,10 @@ export class CoursesController {
   @RequirePermissions('view:courses')
   @ApiOperation({ summary: 'Obtener un curso por ID' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del curso' })
-  @ApiResponse({ status: 200, description: 'Curso encontrado con detalle de alumnos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Curso encontrado con detalle de alumnos',
+  })
   @ApiResponse({ status: 404, description: 'Curso no encontrado' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.coursesService.findOne(id);
@@ -98,10 +105,7 @@ export class CoursesController {
   @ApiResponse({ status: 200, description: 'Curso actualizado' })
   @ApiResponse({ status: 400, description: 'Datos de entrada inválidos' })
   @ApiResponse({ status: 404, description: 'Curso no encontrado' })
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateCourseDto,
-  ) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCourseDto) {
     return this.coursesService.update(id, dto);
   }
 

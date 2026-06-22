@@ -70,7 +70,9 @@ export class GuardiansService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException(`Guardian with RUT ${dto.rut} already exists`);
+        throw new ConflictException(
+          `Guardian with RUT ${dto.rut} already exists`,
+        );
       }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -147,7 +149,9 @@ export class GuardiansService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException(`Guardian with RUT ${dto.rut} already exists`);
+        throw new ConflictException(
+          `Guardian with RUT ${dto.rut} already exists`,
+        );
       }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

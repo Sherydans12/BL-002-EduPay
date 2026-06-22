@@ -30,9 +30,10 @@ export interface ApiResponse<T> {
  * lo propaga directamente. Caso contrario, envuelve el resultado.
  */
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
+export class TransformInterceptor<T> implements NestInterceptor<
+  T,
+  ApiResponse<T>
+> {
   intercept(
     _context: ExecutionContext,
     next: CallHandler,

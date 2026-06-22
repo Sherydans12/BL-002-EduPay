@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentConceptDto } from './dto/create-payment-concept.dto';
 import { UpdatePaymentConceptDto } from './dto/update-payment-concept.dto';
@@ -12,8 +16,13 @@ export class PaymentConceptsService {
     try {
       return await this.prisma.paymentConcept.create({ data: dto });
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException(`Ya existe un concepto con el nombre "${dto.name}"`);
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `Ya existe un concepto con el nombre "${dto.name}"`,
+        );
       }
       throw err;
     }
@@ -42,8 +51,13 @@ export class PaymentConceptsService {
         data: dto,
       });
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException(`Ya existe un concepto con el nombre "${dto.name}"`);
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `Ya existe un concepto con el nombre "${dto.name}"`,
+        );
       }
       throw err;
     }

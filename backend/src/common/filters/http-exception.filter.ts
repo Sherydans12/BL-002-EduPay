@@ -33,7 +33,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
-      } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      } else if (
+        typeof exceptionResponse === 'object' &&
+        exceptionResponse !== null
+      ) {
         const res = exceptionResponse as Record<string, unknown>;
         message = (res.message as string | string[]) || exception.message;
       }
@@ -50,7 +53,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         }
         case 'P2003': {
           statusCode = HttpStatus.BAD_REQUEST;
-          message = 'Referencia a un registro inexistente (clave foránea inválida)';
+          message =
+            'Referencia a un registro inexistente (clave foránea inválida)';
           break;
         }
         case 'P2025': {

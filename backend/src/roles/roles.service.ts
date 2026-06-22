@@ -18,7 +18,7 @@ export class RolesService {
       data: {
         name: data.name,
         permissions: {
-          connect: data.permissionIds.map(id => ({ id })),
+          connect: data.permissionIds.map((id) => ({ id })),
         },
       },
     });
@@ -30,7 +30,7 @@ export class RolesService {
       data: {
         name: data.name,
         permissions: {
-          set: data.permissionIds.map(permId => ({ id: permId })),
+          set: data.permissionIds.map((permId) => ({ id: permId })),
         },
       },
     });
