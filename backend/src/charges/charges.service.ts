@@ -31,6 +31,7 @@ export class ChargesService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
+      const planCreatedAt = new Date();
       const createdCharges = await tx.charge.createMany({
         data: dto.charges.map((charge) => ({
           studentId,
@@ -38,8 +39,84 @@ export class ChargesService {
           amount: charge.amount,
           dueDate: new Date(charge.dueDate),
           status: ChargeStatus.PENDING,
+          createdAt: planCreatedAt,
         })),
       });
+
+      const [orphanPayments, newCharges] = await Promise.all([
+        tx.payment.findMany({
+          where: { studentId, chargeId: null, deletedAt: null },
+          select: { id: true, amount: true },
+          orderBy: [{ paymentDate: 'asc' }, { id: 'asc' }],
+        }),
+        tx.charge.findMany({
+          where: { studentId, deletedAt: null, createdAt: planCreatedAt },
+          select: { id: true, amount: true, paidAmount: true, status: true },
+          orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
+        }),
+      ]);
+
+      const dirtyChargeIds = new Set<number>();
+      let chargeIndex = 0;
+
+      for (const payment of orphanPayments) {
+        let remainingPaymentAmount = payment.amount;
+        let firstAppliedChargeId: number | null = null;
+
+        while (remainingPaymentAmount > 0 && chargeIndex < newCharges.length) {
+          const charge = newCharges[chargeIndex];
+          const isLastCharge = chargeIndex === newCharges.length - 1;
+          const pendingChargeAmount = Math.max(
+            charge.amount - charge.paidAmount,
+            0,
+          );
+
+          if (pendingChargeAmount === 0 && !isLastCharge) {
+            chargeIndex += 1;
+            continue;
+          }
+
+          const appliedAmount = isLastCharge
+            ? remainingPaymentAmount
+            : Math.min(remainingPaymentAmount, pendingChargeAmount);
+
+          charge.paidAmount += appliedAmount;
+          remainingPaymentAmount -= appliedAmount;
+          firstAppliedChargeId ??= charge.id;
+          dirtyChargeIds.add(charge.id);
+
+          charge.status =
+            charge.paidAmount >= charge.amount
+              ? ChargeStatus.PAID
+              : ChargeStatus.PARTIALLY_PAID;
+
+          if (charge.status === ChargeStatus.PAID && !isLastCharge) {
+            chargeIndex += 1;
+            continue;
+          }
+
+          break;
+        }
+
+        if (firstAppliedChargeId) {
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: { chargeId: firstAppliedChargeId },
+          });
+        }
+      }
+
+      for (const charge of newCharges) {
+        if (!dirtyChargeIds.has(charge.id)) continue;
+
+        await tx.charge.update({
+          where: { id: charge.id },
+          data: {
+            paidAmount: charge.paidAmount,
+            status: charge.status,
+          },
+        });
+      }
 
       await tx.student.update({
         where: { id: studentId },

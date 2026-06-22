@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { chargesApi, conceptsApi, paymentsApi, studentsApi } from "@/lib/api";
 import type {
   FinancialSetupStatus,
@@ -51,6 +51,8 @@ const STATUS_LABELS: Record<FinancialSetupStatus, string> = {
   PENDING: "Pendiente",
   CONFIGURED: "Configurado",
 };
+
+const STANDARD_CHARGE_AMOUNT = 220000;
 
 async function fetchAllStudentsForRadar(): Promise<Student[]> {
   const all: Student[] = [];
@@ -120,6 +122,15 @@ export default function FinancialSetupRadarPage() {
     control,
     name: "charges",
   });
+  const watchedCharges = useWatch({ control, name: "charges" });
+  const projectedAnnualDebt = useMemo(
+    () =>
+      (watchedCharges ?? []).reduce(
+        (total, charge) => total + (Number(charge.amount) || 0),
+        0,
+      ),
+    [watchedCharges],
+  );
 
   const reloadStudents = useCallback(async () => {
     setLoading(true);
@@ -206,35 +217,36 @@ export default function FinancialSetupRadarPage() {
 
   const loadStandardSchoolYear = () => {
     const year = new Date().getFullYear();
-    const enrollmentConcept = concepts.find((concept) =>
-      normalizeConceptName(concept.name).includes("matricula"),
-    );
+    const fallbackConcept = concepts[0];
+    const enrollmentConcept =
+      concepts.find((concept) =>
+        normalizeConceptName(concept.name).includes("matricula"),
+      ) ?? fallbackConcept;
     const monthlyConcept =
       concepts.find((concept) =>
         normalizeConceptName(concept.name).includes("mensualidad general"),
       ) ??
       concepts.find((concept) =>
         normalizeConceptName(concept.name).includes("mensualidad"),
-      );
+      ) ??
+      fallbackConcept;
 
-    if (!enrollmentConcept || !monthlyConcept) {
-      toast.error(
-        "Faltan conceptos activos de Matrícula o Mensualidad General",
-      );
+    if (!fallbackConcept) {
+      toast.error("No hay conceptos activos para generar el año escolar");
       return;
     }
 
     replace([
       {
         conceptId: enrollmentConcept.id,
-        amount: enrollmentConcept.defaultAmount,
+        amount: STANDARD_CHARGE_AMOUNT,
         dueDate: buildDueDate(year, 2),
       },
       ...Array.from({ length: 10 }, (_, index) => {
         const monthIndex = index + 2;
         return {
           conceptId: monthlyConcept.id,
-          amount: monthlyConcept.defaultAmount,
+          amount: STANDARD_CHARGE_AMOUNT,
           dueDate: buildDueDate(year, monthIndex),
         };
       }),
@@ -544,6 +556,17 @@ export default function FinancialSetupRadarPage() {
                 onSubmit={handleSubmit(submitFinancialPlan)}
                 className="space-y-4"
               >
+                <Card className="border-emerald-500/25 bg-emerald-500/10">
+                  <CardContent className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="text-sm font-medium text-emerald-100">
+                      Deuda Anual Proyectada:
+                    </span>
+                    <span className="text-2xl font-bold tabular-nums text-emerald-300">
+                      {formatCurrency(projectedAnnualDebt)}
+                    </span>
+                  </CardContent>
+                </Card>
+
                 {fields.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-10 text-center text-sm text-[var(--color-text-muted)]">
                     Agrega cuotas manualmente o carga el plan estándar.
