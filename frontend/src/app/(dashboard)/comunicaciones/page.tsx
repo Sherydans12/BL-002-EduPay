@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MailOpen, Search, Send } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  MailOpen,
+  Search,
+  Send,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { notificationsApi } from "@/lib/api";
 import type {
@@ -10,6 +17,14 @@ import type {
   NotificationType,
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -44,6 +59,12 @@ const STATUS_CLASS: Record<NotificationStatus, string> = {
   PENDING: "border-yellow-500/30 bg-yellow-500/15 text-yellow-300",
 };
 
+const STATUS_ICON: Record<NotificationStatus, typeof CheckCircle2> = {
+  SENT: CheckCircle2,
+  FAILED: XCircle,
+  PENDING: Clock,
+};
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("es-CL", {
     dateStyle: "short",
@@ -62,33 +83,59 @@ export default function ComunicacionesPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState<NotificationStatus | "ALL">(
+    "ALL",
+  );
+  const [filterType, setFilterType] = useState<NotificationType | "ALL">("ALL");
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setPage(1);
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
       const res = await notificationsApi.getAll({
-        page: page.toString(),
-        limit: "20",
+        page,
+        limit: 20,
+        search: debouncedSearch || undefined,
+        status: filterStatus === "ALL" ? undefined : filterStatus,
+        type: filterType === "ALL" ? undefined : filterType,
       });
       setLogs(res.data);
       setTotalPages(res.meta.totalPages ?? res.meta.lastPage ?? 1);
       setTotalCount(res.meta.total);
     } catch (err: unknown) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Error al cargar comunicaciones",
+        err instanceof Error ? err.message : "Error al cargar comunicaciones",
       );
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, debouncedSearch, filterStatus, filterType]);
 
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
 
   const selectedIsHtml = selectedLog ? isHtmlBody(selectedLog.body) : false;
+  const hasActiveFilters =
+    searchTerm.length > 0 || filterStatus !== "ALL" || filterType !== "ALL";
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setDebouncedSearch("");
+    setFilterStatus("ALL");
+    setFilterType("ALL");
+    setPage(1);
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-10 animate-fade-in">
@@ -106,16 +153,72 @@ export default function ComunicacionesPage() {
       </div>
 
       <div className="glass overflow-hidden rounded-2xl shadow-xl">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
+        <div className="border-b border-[var(--color-border)] px-6 py-4">
           <div>
             <p className="font-semibold text-white">Historial de envíos</p>
             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
               Correos de boletas, recibos, cobranzas y alertas operativas
             </p>
           </div>
-          <div className="hidden items-center gap-2 rounded-lg bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-text-muted)] sm:flex">
-            <Search className="h-3.5 w-3.5" />
-            Ordenado por fecha descendente
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(260px,1fr)_220px_240px_auto]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+              <Input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Buscar por email o asunto..."
+                aria-label="Buscar comunicaciones por email o asunto"
+                className="h-10 border-[var(--color-border)] bg-[var(--color-bg)] pl-9 text-white"
+              />
+            </div>
+
+            <Select
+              value={filterStatus}
+              onValueChange={(value) => {
+                setFilterStatus(value as NotificationStatus | "ALL");
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="h-10 w-full border-[var(--color-border)] bg-[var(--color-bg)] text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start">
+                <SelectItem value="ALL">Todos los estados</SelectItem>
+                <SelectItem value="SENT">Enviado</SelectItem>
+                <SelectItem value="FAILED">Fallido</SelectItem>
+                <SelectItem value="PENDING">Pendiente</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={filterType}
+              onValueChange={(value) => {
+                setFilterType(value as NotificationType | "ALL");
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="h-10 w-full border-[var(--color-border)] bg-[var(--color-bg)] text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start">
+                <SelectItem value="ALL">Todos los tipos</SelectItem>
+                {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              className="h-10 px-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:text-white disabled:cursor-default disabled:opacity-40"
+            >
+              Limpiar Filtros
+            </button>
           </div>
         </div>
 
@@ -142,52 +245,59 @@ export default function ComunicacionesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
-                  {logs.map((log, index) => (
-                    <tr
-                      key={log.id}
-                      className="animate-fade-in transition-colors hover:bg-[var(--color-surface-hover)]"
-                      style={{ animationDelay: `${index * 20}ms` }}
-                    >
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--color-text-secondary)]">
-                        {formatDateTime(log.createdAt)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge className={TYPE_CLASS[log.type]}>
-                          {TYPE_LABELS[log.type]}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-medium text-white">
-                          {log.recipientEmail}
-                        </p>
-                        {log.student && (
-                          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                            {log.student.name}
+                  {logs.map((log, index) => {
+                    const StatusIcon = STATUS_ICON[log.status];
+
+                    return (
+                      <tr
+                        key={log.id}
+                        className="animate-fade-in transition-colors hover:bg-[var(--color-surface-hover)]"
+                        style={{ animationDelay: `${index * 20}ms` }}
+                      >
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--color-text-secondary)]">
+                          {formatDateTime(log.createdAt)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge className={TYPE_CLASS[log.type]}>
+                            {TYPE_LABELS[log.type]}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-medium text-white">
+                            {log.recipientEmail}
                           </p>
-                        )}
-                      </td>
-                      <td className="max-w-sm px-6 py-4">
-                        <p className="truncate text-sm text-white">
-                          {log.subject}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge className={STATUS_CLASS[log.status]}>
-                          {STATUS_LABELS[log.status]}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedLog(log)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-white transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
-                        >
-                          <MailOpen className="h-4 w-4" />
-                          Ver Mensaje
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          {log.student && (
+                            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                              {log.student.name}
+                            </p>
+                          )}
+                        </td>
+                        <td className="max-w-sm px-6 py-4">
+                          <p className="truncate text-sm text-white">
+                            {log.subject}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge
+                            className={`${STATUS_CLASS[log.status]} gap-1`}
+                          >
+                            <StatusIcon className="w-3 h-3 mr-1" />
+                            {STATUS_LABELS[log.status]}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLog(log)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-white transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
+                          >
+                            <MailOpen className="h-4 w-4" />
+                            Ver Mensaje
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

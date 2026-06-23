@@ -293,6 +293,14 @@ export interface NotificationLog {
   deletedAt?: string | null;
 }
 
+export interface NotificationLogFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: NotificationStatus;
+  type?: NotificationType;
+}
+
 export type AccountStatementPayment = Omit<Payment, "paymentGroup"> & {
   paymentGroup?: Pick<
     PaymentGroup,
@@ -537,8 +545,14 @@ export const paymentsApi = {
 
 // ─── Notifications ───────────────────────────────────────────
 export const notificationsApi = {
-  getAll: (params?: Record<string, string>) => {
-    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+  getAll: (filters: NotificationLogFilters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.page != null) params.set("page", String(filters.page));
+    if (filters.limit != null) params.set("limit", String(filters.limit));
+    if (filters.search) params.set("search", filters.search);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.type) params.set("type", filters.type);
+    const query = params.size > 0 ? `?${params.toString()}` : "";
     return request<PaginatedResponse<NotificationLog>>(
       `/notifications${query}`,
     );

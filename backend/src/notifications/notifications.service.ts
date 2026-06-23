@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { FindNotificationsQueryDto } from './dto/find-notifications-query.dto';
 
 type DispatchEmailData = {
   type: NotificationType;
@@ -104,8 +105,37 @@ export class NotificationsService {
     }
   }
 
-  async findAll(page = 1, limit = 50) {
-    const where: Prisma.NotificationLogWhereInput = { deletedAt: null };
+  async findAll({
+    page = 1,
+    limit = 50,
+    search,
+    status,
+    type,
+  }: FindNotificationsQueryDto = {}) {
+    const normalizedSearch = search?.trim();
+    const where: Prisma.NotificationLogWhereInput = {
+      deletedAt: null,
+      ...(normalizedSearch
+        ? {
+            OR: [
+              {
+                recipientEmail: {
+                  contains: normalizedSearch,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                subject: {
+                  contains: normalizedSearch,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+      ...(status ? { status } : {}),
+      ...(type ? { type } : {}),
+    };
 
     const [data, total] = await Promise.all([
       this.prisma.notificationLog.findMany({
