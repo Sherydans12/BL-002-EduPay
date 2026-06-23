@@ -40,6 +40,26 @@ export class NotificationsService {
   }
 
   async dispatchEmail(data: DispatchEmailData) {
+    const recipientEmail = data.recipientEmail?.trim();
+
+    if (
+      !recipientEmail ||
+      recipientEmail.toLowerCase().includes('@placeholder.com') ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)
+    ) {
+      return this.logNotification({
+        type: data.type,
+        status: NotificationStatus.FAILED,
+        recipientEmail: data.recipientEmail,
+        subject: data.subject,
+        body: data.html,
+        errorMessage:
+          'Envío abortado: Correo electrónico es un placeholder o es inválido.',
+        studentId: data.studentId,
+        paymentGroupId: data.paymentGroupId,
+      });
+    }
+
     try {
       const result = await this.resend.emails.send({
         from: 'pagos@colegio.edu.cl',
