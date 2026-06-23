@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { PaymentMethod } from '@prisma/client';
+import { NotificationType, PaymentMethod } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -34,7 +34,7 @@ describe('PaymentsService', () => {
   };
 
   const prisma = {
-    student: { findMany: jest.fn() },
+    student: { findMany: jest.fn(), findUnique: jest.fn() },
     payment: {
       findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
@@ -121,6 +121,48 @@ describe('PaymentsService', () => {
       });
       expect(prisma.payment.create).toHaveBeenCalledTimes(2);
       expect(result.id).toBe(10);
+    });
+
+    it('envía boleta por correo cuando se crea un pago manual con boleta inmediata', async () => {
+      prisma.student.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      prisma.student.findUnique.mockResolvedValue(mockStudent);
+      prisma.paymentGroup.create.mockResolvedValue({ id: 10 });
+      prisma.payment.create.mockResolvedValue({ id: 1 });
+      prisma.paymentGroup.findUniqueOrThrow.mockResolvedValue({
+        id: 10,
+        totalAmount: 150000,
+        method: PaymentMethod.CASH,
+        paymentDate: new Date('2026-06-01'),
+        payments: [],
+      });
+
+      await service.createBatch(
+        {
+          ...batchDto,
+          boletaNumber: 'BOL-001',
+          isBoletaPending: false,
+        },
+        '/uploads/boleta.pdf',
+      );
+
+      expect(prisma.student.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        include: { guardian: true },
+      });
+      expect(notificationsService.dispatchEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: NotificationType.BOLETA_DELIVERY,
+          recipientEmail: 'maria@example.com',
+          subject: 'Su boleta de pago está lista - N° BOL-001',
+          studentId: 1,
+          paymentGroupId: 10,
+          attachments: [
+            expect.objectContaining({
+              filename: 'boleta-BOL-001.pdf',
+            }),
+          ],
+        }),
+      );
     });
 
     it('lanza NotFoundException si falta algún alumno', async () => {

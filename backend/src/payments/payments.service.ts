@@ -139,7 +139,7 @@ export class PaymentsService implements OnModuleInit {
     const boletaNumber = dto.boletaNumber?.trim() || null;
     const isBoletaPending = !boletaNumber;
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const group = await tx.paymentGroup.create({
         data: {
           totalAmount: dto.totalAmount,
@@ -215,6 +215,45 @@ export class PaymentsService implements OnModuleInit {
 
       return result;
     });
+
+    if (!dto.isBoletaPending && dto.boletaNumber && boletaFileUrl) {
+      const studentId = dto.allocations[0].studentId;
+      const student = await this.prisma.student.findUnique({
+        where: { id: studentId },
+        include: { guardian: true },
+      });
+
+      if (student?.guardian?.email) {
+        void this.notificationsService
+          .dispatchEmail({
+            type: NotificationType.BOLETA_DELIVERY,
+            recipientEmail: student.guardian.email,
+            subject: `Su boleta de pago está lista - N° ${dto.boletaNumber}`,
+            html: `
+              <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+                <h2 style="margin: 0 0 16px;">Su boleta de pago está lista</h2>
+                <p>Estimado/a apoderado/a,</p>
+                <p>
+                  Informamos la recepción del pago registrado en nuestro sistema.
+                  La boleta N° ${dto.boletaNumber} se encuentra disponible y se adjunta en este correo.
+                </p>
+                <p>Saludos cordiales,<br />Equipo de Administración</p>
+              </div>
+            `,
+            studentId: student.id,
+            paymentGroupId: result.id,
+            attachments: [
+              {
+                filename: `boleta-${dto.boletaNumber}.pdf`,
+                path: path.join(process.cwd(), boletaFileUrl),
+              },
+            ],
+          })
+          .catch(() => undefined);
+      }
+    }
+
+    return result;
   }
 
   async resolvePendingBoleta(
