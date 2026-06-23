@@ -507,6 +507,18 @@ export const notificationsApi = {
   },
 };
 
+// ─── Analytics ───────────────────────────────────────────────
+export interface FinancialDashboard {
+  currentMonthRevenue: number;
+  totalOverdueDebt: number;
+  totalExpectedRevenue: number;
+  revenueByMonth: RevenueTrendItem[];
+}
+
+export const analyticsApi = {
+  getDashboard: () => request<FinancialDashboard>("/analytics/dashboard"),
+};
+
 // ─── Charges / Accounts Receivable ───────────────────────────
 export const chargesApi = {
   setupFinancialPlan: (studentId: number, data: SetupFinancialPlanDto) =>

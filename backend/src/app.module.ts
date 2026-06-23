@@ -18,6 +18,7 @@ import { AppController } from './app.controller';
 import { ChargesModule } from './charges/charges.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BillingCronService } from './billing-cron/billing-cron.service';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   controllers: [AppController],
@@ -37,6 +38,7 @@ import { BillingCronService } from './billing-cron/billing-cron.service';
     MailModule,
     ChargesModule,
     NotificationsModule,
+    AnalyticsModule,
   ],
   providers: [
     {
