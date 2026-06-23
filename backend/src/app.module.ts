@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { CoursesModule } from './courses/courses.module';
 import { GuardiansModule } from './guardians/guardians.module';
@@ -16,11 +17,13 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AppController } from './app.controller';
 import { ChargesModule } from './charges/charges.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { BillingCronService } from './billing-cron/billing-cron.service';
 
 @Module({
   controllers: [AppController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -40,6 +43,7 @@ import { NotificationsModule } from './notifications/notifications.module';
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
+    BillingCronService,
   ],
 })
 export class AppModule {}

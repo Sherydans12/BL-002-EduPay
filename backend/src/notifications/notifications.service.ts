@@ -1,10 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { NotificationStatus, NotificationType, Prisma } from '@prisma/client';
+import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 
+type DispatchEmailData = {
+  type: NotificationType;
+  recipientEmail: string;
+  subject: string;
+  html: string;
+  studentId?: number;
+  paymentGroupId?: number;
+};
+
 @Injectable()
 export class NotificationsService {
+  private resend = new Resend(process.env.RESEND_API_KEY);
+
   constructor(private readonly prisma: PrismaService) {}
 
   logNotification(dto: CreateNotificationDto) {
@@ -15,9 +27,7 @@ export class NotificationsService {
       subject: dto.subject,
       body: dto.body,
       errorMessage: dto.errorMessage,
-      ...(dto.studentId
-        ? { student: { connect: { id: dto.studentId } } }
-        : {}),
+      ...(dto.studentId ? { student: { connect: { id: dto.studentId } } } : {}),
       ...(dto.paymentGroupId
         ? { paymentGroup: { connect: { id: dto.paymentGroupId } } }
         : {}),
@@ -27,6 +37,45 @@ export class NotificationsService {
       data,
       include: { student: true, paymentGroup: true },
     });
+  }
+
+  async dispatchEmail(data: DispatchEmailData) {
+    try {
+      const result = await this.resend.emails.send({
+        from: 'pagos@colegio.edu.cl',
+        to: data.recipientEmail,
+        subject: data.subject,
+        html: data.html,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      return this.logNotification({
+        type: data.type,
+        status: NotificationStatus.SENT,
+        recipientEmail: data.recipientEmail,
+        subject: data.subject,
+        body: data.html,
+        studentId: data.studentId,
+        paymentGroupId: data.paymentGroupId,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown email dispatch error';
+
+      return this.logNotification({
+        type: data.type,
+        status: NotificationStatus.FAILED,
+        recipientEmail: data.recipientEmail,
+        subject: data.subject,
+        body: data.html,
+        errorMessage,
+        studentId: data.studentId,
+        paymentGroupId: data.paymentGroupId,
+      });
+    }
   }
 
   async findAll(page = 1, limit = 50) {
