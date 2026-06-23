@@ -537,6 +537,8 @@ export const notificationsApi = {
 
 // ─── Analytics ───────────────────────────────────────────────
 export interface FinancialDashboard {
+  totalActiveStudents: number;
+  totalCourses: number;
   currentMonthRevenue: number;
   totalOverdueDebt: number;
   totalExpectedRevenue: number;

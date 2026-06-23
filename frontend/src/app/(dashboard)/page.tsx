@@ -10,13 +10,22 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, Banknote, FileSpreadsheet, TrendingUp } from "lucide-react";
+import {
+  AlertCircle,
+  Banknote,
+  BookOpen,
+  FileSpreadsheet,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { analyticsApi, downloadBlob, reportsApi } from "@/lib/api";
 import type { FinancialDashboard } from "@/lib/api";
 
 const emptyDashboard: FinancialDashboard = {
+  totalActiveStudents: 0,
+  totalCourses: 0,
   currentMonthRevenue: 0,
   totalOverdueDebt: 0,
   totalExpectedRevenue: 0,
@@ -51,27 +60,52 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const kpis = [
+  const operationalKpis = [
+    {
+      title: "Alumnos Activos",
+      value: dashboard.totalActiveStudents.toLocaleString("es-CL"),
+      icon: Users,
+      tone: "text-violet-200",
+      iconBg: "bg-violet-500/15",
+      border: "border-violet-500/20",
+    },
+    {
+      title: "Cursos",
+      value: dashboard.totalCourses.toLocaleString("es-CL"),
+      icon: BookOpen,
+      tone: "text-amber-200",
+      iconBg: "bg-amber-500/15",
+      border: "border-amber-500/20",
+    },
+  ];
+
+  const financialKpis = [
     {
       title: "Recaudación del Mes",
       value: formatCurrency(dashboard.currentMonthRevenue),
-      icon: Banknote,
+      icon: TrendingUp,
       tone: "text-emerald-300",
       iconBg: "bg-emerald-500/15",
+      border: "border-emerald-500/25",
+      surface: "bg-emerald-500/[0.04]",
     },
     {
-      title: "Deuda Morosa (En la calle)",
+      title: "Deuda Morosa",
       value: formatCurrency(dashboard.totalOverdueDebt),
-      icon: AlertTriangle,
+      icon: AlertCircle,
       tone: "text-red-300",
       iconBg: "bg-red-500/15",
+      border: "border-red-500/30",
+      surface: "bg-red-500/[0.05]",
     },
     {
       title: "Proyección Anual",
       value: formatCurrency(dashboard.totalExpectedRevenue),
-      icon: TrendingUp,
+      icon: Banknote,
       tone: "text-sky-300",
       iconBg: "bg-sky-500/15",
+      border: "border-sky-500/25",
+      surface: "bg-sky-500/[0.04]",
     },
   ];
 
@@ -100,12 +134,12 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 pb-10">
+    <main className="mx-auto max-w-7xl space-y-8 pb-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Cerebro Financiero</h1>
+          <h1 className="text-3xl font-bold text-white">Panel de Control</h1>
           <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-            Indicadores ejecutivos de recaudación, mora y proyección anual.
+            Vista general de operación escolar, recaudación y morosidad.
           </p>
         </div>
         <Button
@@ -124,37 +158,74 @@ export default function DashboardPage() {
         </Card>
       ) : null}
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {kpis.map((kpi) => {
-          const Icon = kpi.icon;
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+          Operación Escolar
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {operationalKpis.map((kpi) => {
+            const Icon = kpi.icon;
 
-          return (
-            <Card
-              key={kpi.title}
-              className="border-[var(--color-border)] bg-[var(--color-surface)]"
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-[var(--color-text-muted)]">
-                  {kpi.title}
-                </CardTitle>
-                <div className={`rounded-md p-2 ${kpi.iconBg}`}>
-                  <Icon className={`h-5 w-5 ${kpi.tone}`} />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className={`text-2xl font-bold tracking-tight ${kpi.tone}`}>
-                  {kpi.value}
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
+            return (
+              <Card
+                key={kpi.title}
+                className={`border-[var(--color-border)] bg-[var(--color-surface)] ${kpi.border}`}
+              >
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-[var(--color-text-muted)]">
+                    {kpi.title}
+                  </CardTitle>
+                  <div className={`rounded-md p-2 ${kpi.iconBg}`}>
+                    <Icon className={`h-5 w-5 ${kpi.tone}`} />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className={`text-3xl font-bold tracking-tight ${kpi.tone}`}>
+                    {kpi.value}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+          Estado Financiero
+        </h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {financialKpis.map((kpi) => {
+            const Icon = kpi.icon;
+
+            return (
+              <Card
+                key={kpi.title}
+                className={`border-[var(--color-border)] bg-[var(--color-surface)] ${kpi.border} ${kpi.surface}`}
+              >
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-[var(--color-text-muted)]">
+                    {kpi.title}
+                  </CardTitle>
+                  <div className={`rounded-md p-2 ${kpi.iconBg}`}>
+                    <Icon className={`h-5 w-5 ${kpi.tone}`} />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className={`text-2xl font-bold tracking-tight ${kpi.tone}`}>
+                    {kpi.value}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </section>
 
       <Card className="border-[var(--color-border)] bg-[var(--color-surface)]">
         <CardHeader>
           <CardTitle className="text-base font-semibold text-white">
-            Ingresos por Mes
+            Ingresos Históricos por Mes
           </CardTitle>
         </CardHeader>
         <CardContent>

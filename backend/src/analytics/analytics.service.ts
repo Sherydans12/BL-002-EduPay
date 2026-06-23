@@ -38,11 +38,17 @@ export class AnalyticsService {
     };
 
     const [
+      totalActiveStudents,
+      totalCourses,
       currentMonthRevenueResult,
       overdueCharges,
       totalExpectedRevenueResult,
       paymentsThisYear,
     ] = await Promise.all([
+      this.prisma.student.count({
+        where: { status: 'ACTIVE', deletedAt: null },
+      }),
+      this.prisma.course.count({ where: { deletedAt: null } }),
       this.prisma.payment.aggregate({
         where: {
           ...paymentWhere,
@@ -104,6 +110,8 @@ export class AnalyticsService {
     }
 
     return {
+      totalActiveStudents,
+      totalCourses,
       currentMonthRevenue: currentMonthRevenueResult._sum.amount ?? 0,
       totalOverdueDebt,
       totalExpectedRevenue: totalExpectedRevenueResult._sum.amount ?? 0,
