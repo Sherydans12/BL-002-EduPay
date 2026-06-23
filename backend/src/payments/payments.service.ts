@@ -4,12 +4,14 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
-import { ChargeStatus, Prisma } from '@prisma/client';
+import { ChargeStatus, NotificationType, Prisma } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { buildPaymentGroupsWorkbookBuffer } from '../common/excel/payment-groups-sheet.export';
 
 const paymentLineInclude = {
@@ -30,6 +32,7 @@ export class PaymentsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -234,7 +237,7 @@ export class PaymentsService implements OnModuleInit {
       throw new NotFoundException(`PaymentGroup #${id} not found`);
     }
 
-    return this.prisma.paymentGroup.update({
+    const updatedGroup = await this.prisma.paymentGroup.update({
       where: { id },
       data: {
         boletaNumber: trimmedBoletaNumber,
@@ -243,6 +246,43 @@ export class PaymentsService implements OnModuleInit {
       },
       include: paymentGroupInclude,
     });
+
+    const guardian = updatedGroup.payments[0]?.student?.guardian;
+    const recipientEmail = guardian?.email?.trim();
+
+    if (recipientEmail && updatedGroup.boletaFileUrl) {
+      const student = updatedGroup.payments[0]?.student;
+
+      void this.notificationsService
+        .dispatchEmail({
+          type: NotificationType.BOLETA_DELIVERY,
+          recipientEmail,
+          subject: `Su boleta de pago está lista - N° ${updatedGroup.boletaNumber}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+              <h2 style="margin: 0 0 16px;">Su boleta de pago está lista</h2>
+              <p>Estimado/a apoderado/a,</p>
+              <p>
+                Informamos que la boleta N° ${updatedGroup.boletaNumber} correspondiente
+                ${student?.name ? ` al alumno/a ${student.name}` : ' al pago registrado'}
+                se encuentra disponible y se adjunta en este correo.
+              </p>
+              <p>Saludos cordiales,<br />Equipo de Administración</p>
+            </div>
+          `,
+          studentId: updatedGroup.payments[0]?.studentId,
+          paymentGroupId: updatedGroup.id,
+          attachments: [
+            {
+              filename: `boleta-${updatedGroup.boletaNumber}.pdf`,
+              path: path.join(process.cwd(), updatedGroup.boletaFileUrl),
+            },
+          ],
+        })
+        .catch(() => undefined);
+    }
+
+    return updatedGroup;
   }
 
   private buildPaymentGroupWhere(

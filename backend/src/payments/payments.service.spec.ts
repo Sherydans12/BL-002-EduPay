@@ -4,12 +4,17 @@ import { PaymentMethod } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
 
   const mailService = {
     sendPaymentConfirmation: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const notificationsService = {
+    dispatchEmail: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockStudent = {
@@ -58,6 +63,7 @@ describe('PaymentsService', () => {
         PaymentsService,
         { provide: PrismaService, useValue: prisma },
         { provide: MailService, useValue: mailService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 

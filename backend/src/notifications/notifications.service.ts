@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { NotificationStatus, NotificationType, Prisma } from '@prisma/client';
+import * as fs from 'fs';
 import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
@@ -11,6 +12,7 @@ type DispatchEmailData = {
   html: string;
   studentId?: number;
   paymentGroupId?: number;
+  attachments?: { filename: string; path: string }[];
 };
 
 @Injectable()
@@ -66,6 +68,10 @@ export class NotificationsService {
         to: data.recipientEmail,
         subject: data.subject,
         html: data.html,
+        attachments: data.attachments?.map((att) => ({
+          filename: att.filename,
+          content: fs.readFileSync(att.path),
+        })),
       });
 
       if (result.error) {
