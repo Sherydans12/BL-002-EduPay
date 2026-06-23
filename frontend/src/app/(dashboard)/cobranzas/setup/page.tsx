@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { chargesApi, conceptsApi, paymentsApi, studentsApi } from "@/lib/api";
 import type {
@@ -24,6 +25,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   CheckCircle2,
+  FileText,
   Plus,
   Search,
   Trash2,
@@ -448,7 +450,7 @@ export default function FinancialSetupRadarPage() {
                   <th className="px-6 py-4">Nombre</th>
                   <th className="px-6 py-4">Curso</th>
                   <th className="px-6 py-4">Estado Financiero</th>
-                  <th className="px-6 py-4 text-right">Acción</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
@@ -480,16 +482,25 @@ export default function FinancialSetupRadarPage() {
                         </Badge>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            console.log(student.id);
-                            void openSetupSheet(student);
-                          }}
-                          className="rounded-lg border border-[var(--color-primary)]/40 px-3 py-2 text-sm font-medium text-blue-300 transition-colors hover:bg-[var(--color-primary-light)] hover:text-white"
-                        >
-                          Configurar
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <Link
+                            href={`/alumnos/${student.id}/finanzas`}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/35 px-3 py-2 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-200"
+                            aria-label={`Ver ficha financiera de ${student.name}`}
+                          >
+                            <FileText className="h-4 w-4" />
+                            Ficha
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openSetupSheet(student);
+                            }}
+                            className="rounded-lg border border-[var(--color-primary)]/40 px-3 py-2 text-sm font-medium text-blue-300 transition-colors hover:bg-[var(--color-primary-light)] hover:text-white"
+                          >
+                            Configurar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -30,6 +30,13 @@ export class ChargesController {
     return this.chargesService.findPlanByStudent(studentId);
   }
 
+  @Get('statement/:studentId')
+  getStudentAccountStatement(
+    @Param('studentId', ParseIntPipe) studentId: number,
+  ) {
+    return this.chargesService.getStudentAccountStatement(studentId);
+  }
+
   @Put('plan/:studentId')
   updateStudentFinancialPlan(
     @Param('studentId', ParseIntPipe) studentId: number,

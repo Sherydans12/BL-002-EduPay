@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { studentsApi, downloadBlob } from "@/lib/api";
 import type { StudentStatus } from "@/lib/api";
 import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
 import type { Student, Course, Guardian } from "@/lib/api";
 import { toast } from "sonner";
-import { FileSpreadsheet, TriangleAlert } from "lucide-react";
+import { FileSpreadsheet, FileText, TriangleAlert } from "lucide-react";
 import { StudentFormDialog } from "@/components/student-form-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -303,13 +304,28 @@ export default function StudentsPage() {
                         )}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">
-                        Editar
-                      </button>
-                      <button onClick={() => setDeleteId(s.id)} className="text-sm text-red-400 hover:underline">
-                        Eliminar
-                      </button>
+                    <td className="px-6 py-4 text-right">
+                      <div className="inline-flex items-center justify-end gap-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link
+                              href={`/alumnos/${s.id}/finanzas`}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/35 px-2.5 py-1.5 text-sm font-medium text-emerald-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-200"
+                              aria-label={`Ver ficha financiera de ${s.name}`}
+                            >
+                              <FileText className="h-4 w-4" />
+                              Ficha
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent>Ver Ficha Financiera</TooltipContent>
+                        </Tooltip>
+                        <button onClick={() => openEditDialog(s)} className="text-sm text-[var(--color-primary)] hover:underline">
+                          Editar
+                        </button>
+                        <button onClick={() => setDeleteId(s.id)} className="text-sm text-red-400 hover:underline">
+                          Eliminar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

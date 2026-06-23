@@ -3,12 +3,31 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ChargeStatus, FinancialSetupStatus } from '@prisma/client';
+import {
+  ChargeStatus,
+  FinancialSetupStatus,
+  type Charge,
+  type NotificationLog,
+  type Payment,
+  type PaymentConcept,
+  type PaymentGroup,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SetupFinancialPlanDto,
   UpdateFinancialPlanDto,
 } from './dto/create-charge.dto';
+
+export interface StudentAccountStatement {
+  summary: {
+    totalInvoiced: number;
+    totalPaid: number;
+    totalOverdue: number;
+  };
+  charges: Array<Charge & { concept: PaymentConcept }>;
+  payments: Array<Payment & { paymentGroup: PaymentGroup | null }>;
+  logs: NotificationLog[];
+}
 
 @Injectable()
 export class ChargesService {
@@ -141,6 +160,62 @@ export class ChargesService {
       include: { concept: true },
       orderBy: { dueDate: 'asc' },
     });
+  }
+
+  async getStudentAccountStatement(
+    studentId: number,
+  ): Promise<StudentAccountStatement> {
+    const [charges, payments, logs] = await Promise.all([
+      this.prisma.charge.findMany({
+        where: { studentId, deletedAt: null },
+        include: { concept: true },
+        orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          studentId,
+          deletedAt: null,
+          paymentGroup: { is: { deletedAt: null } },
+        },
+        include: { paymentGroup: true },
+        orderBy: [{ paymentDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.notificationLog.findMany({
+        where: { studentId, deletedAt: null },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 5,
+      }),
+    ]);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const totalInvoiced = charges.reduce(
+      (total, charge) => total + charge.amount,
+      0,
+    );
+    const totalPaid = payments.reduce(
+      (total, payment) => total + payment.amount,
+      0,
+    );
+    const totalOverdue = charges.reduce((total, charge) => {
+      if (
+        charge.status === ChargeStatus.CANCELLED ||
+        charge.status === ChargeStatus.PAID ||
+        charge.dueDate >= today
+      ) {
+        return total;
+      }
+
+      return total + Math.max(charge.amount - charge.paidAmount, 0);
+    }, 0);
+
+    return {
+      summary: { totalInvoiced, totalPaid, totalOverdue },
+      charges,
+      payments,
+      logs,
+    };
   }
 
   async updateStudentFinancialPlan(

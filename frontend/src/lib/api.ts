@@ -291,6 +291,34 @@ export interface NotificationLog {
   deletedAt?: string | null;
 }
 
+export type AccountStatementPayment = Omit<Payment, "paymentGroup"> & {
+  paymentGroup?: Pick<
+    PaymentGroup,
+    | "id"
+    | "totalAmount"
+    | "method"
+    | "paymentDate"
+    | "boletaFileUrl"
+    | "boletaNumber"
+    | "isBoletaPending"
+    | "notes"
+    | "createdAt"
+    | "updatedAt"
+    | "deletedAt"
+  > | null;
+};
+
+export interface StudentAccountStatement {
+  summary: {
+    totalInvoiced: number;
+    totalPaid: number;
+    totalOverdue: number;
+  };
+  charges: Charge[];
+  payments: AccountStatementPayment[];
+  logs: NotificationLog[];
+}
+
 /** Serializa el payload de pago agrupado para POST /payments/batch (multipart). */
 export function buildPaymentBatchFormData(data: {
   totalAmount: number;
@@ -534,6 +562,8 @@ export const chargesApi = {
     }),
   getPendingCharges: (studentId: number) =>
     request<Charge[]>(`/charges/pending/${studentId}`),
+  getAccountStatement: (studentId: number) =>
+    request<StudentAccountStatement>(`/charges/statement/${studentId}`),
 };
 
 // ─── Payment Concepts ─────────────────────────────────────────
