@@ -15,6 +15,7 @@ import { PaymentConceptsModule } from './payment-concepts/payment-concepts.modul
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AppController } from './app.controller';
 import { ChargesModule } from './charges/charges.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   controllers: [AppController],
@@ -32,6 +33,7 @@ import { ChargesModule } from './charges/charges.module';
     PaymentConceptsModule,
     MailModule,
     ChargesModule,
+    NotificationsModule,
   ],
   providers: [
     {

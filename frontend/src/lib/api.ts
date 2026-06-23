@@ -266,6 +266,31 @@ export interface PaymentGroup {
   deletedAt?: string | null;
 }
 
+export type NotificationType =
+  | "BOLETA_DELIVERY"
+  | "PAYMENT_RECEIPT"
+  | "COBRANZA_PREVENTIVA"
+  | "COBRANZA_MORA";
+
+export type NotificationStatus = "PENDING" | "SENT" | "FAILED";
+
+export interface NotificationLog {
+  id: number;
+  type: NotificationType;
+  status: NotificationStatus;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  errorMessage?: string | null;
+  studentId?: number | null;
+  student?: Student | null;
+  paymentGroupId?: number | null;
+  paymentGroup?: PaymentGroup | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
 /** Serializa el payload de pago agrupado para POST /payments/batch (multipart). */
 export function buildPaymentBatchFormData(data: {
   totalAmount: number;
@@ -469,6 +494,16 @@ export const paymentsApi = {
   export: (params?: Record<string, string>) => {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return requestBlob(`/payments/export${query}`);
+  },
+};
+
+// ─── Notifications ───────────────────────────────────────────
+export const notificationsApi = {
+  getAll: (params?: Record<string, string>) => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : "";
+    return request<PaginatedResponse<NotificationLog>>(
+      `/notifications${query}`,
+    );
   },
 };
 

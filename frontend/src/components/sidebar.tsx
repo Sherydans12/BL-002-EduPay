@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useSyncExternalStore } from "react";
-import { Calculator } from "lucide-react";
+import { Calculator, Mail } from "lucide-react";
 
 type SessionUser = {
   email?: string;
@@ -43,6 +43,11 @@ const nav = [
     label: "Setup Financiero",
     href: "/cobranzas/setup",
     icon: <Calculator className="w-5 h-5" />,
+  },
+  {
+    label: "Comunicaciones",
+    href: "/comunicaciones",
+    icon: <Mail className="w-5 h-5" />,
   },
   {
     label: "Reportes",

@@ -42,6 +42,19 @@ enum FinancialSetupStatus {
   CONFIGURED
 }
 
+enum NotificationType {
+  BOLETA_DELIVERY
+  PAYMENT_RECEIPT
+  COBRANZA_PREVENTIVA
+  COBRANZA_MORA
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 // ─── Models ──────────────────────────────────────────────────
 
 model Course {
@@ -74,24 +87,25 @@ model Guardian {
 }
 
 model Student {
-  id             Int                  @id @default(autoincrement())
-  rut            String               @unique
+  id               Int                  @id @default(autoincrement())
+  rut              String               @unique
   /**
    * Derivado en BD para búsqueda sin puntos/guiones
    */
-  rutNormalized  String?              @default(dbgenerated()) @map("rut_normalized")
-  name           String
-  status         StudentStatus        @default(ACTIVE)
-  financialSetup FinancialSetupStatus @default(PENDING)
-  courseId       Int
-  guardianId     Int
-  course         Course               @relation(fields: [courseId], references: [id])
-  guardian       Guardian             @relation(fields: [guardianId], references: [id])
-  payments       Payment[]
-  charges        Charge[]
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  deletedAt      DateTime?
+  rutNormalized    String?              @default(dbgenerated()) @map("rut_normalized")
+  name             String
+  status           StudentStatus        @default(ACTIVE)
+  financialSetup   FinancialSetupStatus @default(PENDING)
+  courseId         Int
+  guardianId       Int
+  course           Course               @relation(fields: [courseId], references: [id])
+  guardian         Guardian             @relation(fields: [guardianId], references: [id])
+  payments         Payment[]
+  charges          Charge[]
+  notificationLogs NotificationLog[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  deletedAt        DateTime?
 
   @@map("students")
 }
@@ -111,19 +125,20 @@ model PaymentConcept {
 }
 
 model PaymentGroup {
-  id              Int           @id @default(autoincrement())
-  totalAmount     Int
-  method          PaymentMethod
-  paymentDate     DateTime
-  boletaFileUrl   String?
-  boletaNumber    String?
-  notes           String?
-  source          PaymentSource @default(MANUAL)
-  isBoletaPending Boolean       @default(false)
-  payments        Payment[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
+  id               Int               @id @default(autoincrement())
+  totalAmount      Int
+  method           PaymentMethod
+  paymentDate      DateTime
+  boletaFileUrl    String?
+  boletaNumber     String?
+  notes            String?
+  source           PaymentSource     @default(MANUAL)
+  isBoletaPending  Boolean           @default(false)
+  payments         Payment[]
+  notificationLogs NotificationLog[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  deletedAt        DateTime?
 
   @@map("payment_groups")
 }
@@ -182,6 +197,25 @@ model Charge {
   deletedAt  DateTime?
 
   @@map("charges")
+}
+
+model NotificationLog {
+  id             Int                @id @default(autoincrement())
+  type           NotificationType
+  status         NotificationStatus @default(PENDING)
+  recipientEmail String
+  subject        String
+  body           String
+  errorMessage   String?
+  studentId      Int?
+  student        Student?           @relation(fields: [studentId], references: [id])
+  paymentGroupId Int?
+  paymentGroup   PaymentGroup?      @relation(fields: [paymentGroupId], references: [id])
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  deletedAt      DateTime?
+
+  @@map("notification_logs")
 }
 
 model User {
