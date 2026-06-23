@@ -12,6 +12,7 @@ import type {
   Student,
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Sheet,
@@ -20,12 +21,15 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { toast } from "sonner";
 import {
   AlertTriangle,
   CheckCircle2,
   FileText,
+  Info,
+  Lock,
   Plus,
   Search,
   Trash2,
@@ -134,6 +138,7 @@ export default function FinancialSetupRadarPage() {
     keyName: "fieldId",
   });
   const watchedCharges = useWatch({ control, name: "charges" });
+  const isEditing = selectedStudent?.financialSetup === "CONFIGURED";
   const projectedAnnualDebt = useMemo(
     () =>
       (watchedCharges ?? []).reduce(
@@ -415,22 +420,20 @@ export default function FinancialSetupRadarPage() {
               Filtra rápido para detectar pendientes de configuración.
             </p>
           </div>
-          <div className="inline-flex rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-1">
-            {FILTERS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setFilter(item.value)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  filter === item.value
-                    ? "bg-[var(--color-primary)] text-white"
-                    : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-white"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            defaultValue="PENDING"
+            onValueChange={(value) => setFilter(value as FilterMode)}
+            value={filter}
+            className="w-auto"
+          >
+            <TabsList>
+              {FILTERS.map((item) => (
+                <TabsTrigger key={item.value} value={item.value}>
+                  {item.value === "PENDING" ? "Pendientes" : item.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
 
         {loading ? (
@@ -523,12 +526,15 @@ export default function FinancialSetupRadarPage() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>
-              Configurar deuda anual
+              {isEditing
+                ? "Reestructurar Deuda Anual"
+                : "Configurar Nueva Deuda"}
               {selectedStudent ? ` · ${selectedStudent.name}` : ""}
             </SheetTitle>
             <SheetDescription>
-              Revisa pagos históricos antes de generar los cargos de cuentas por
-              cobrar.
+              {isEditing
+                ? "Modifica las cuotas futuras. Las cuotas ya pagadas están bloqueadas por seguridad."
+                : "Crea la estructura de cobros anuales para este alumno."}
             </SheetDescription>
           </SheetHeader>
 
@@ -587,6 +593,22 @@ export default function FinancialSetupRadarPage() {
             </section>
 
             <section className="min-h-0 overflow-y-auto p-6">
+              {isEditing ? (
+                <Alert
+                  variant="default"
+                  className="mb-6 border-amber-200 bg-amber-50 text-amber-800"
+                >
+                  <Info className="h-4 w-4" />
+                  <div>
+                    <AlertTitle>Setup financiero activo</AlertTitle>
+                    <AlertDescription className="text-amber-700">
+                      Estás reestructurando una deuda vigente. Las cuotas pagadas
+                      permanecen bloqueadas y no pueden eliminarse ni reducirse.
+                    </AlertDescription>
+                  </div>
+                </Alert>
+              ) : null}
+
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-white">
@@ -645,6 +667,8 @@ export default function FinancialSetupRadarPage() {
                       const isPaid =
                         field.status === "PAID" ||
                         (amount > 0 && paidAmount >= amount);
+                      const hasPayments = paidAmount > 0;
+                      const isLocked = isPaid || hasPayments;
 
                       return (
                         <div
@@ -652,15 +676,25 @@ export default function FinancialSetupRadarPage() {
                           className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-3 md:grid-cols-[1.4fr_0.9fr_0.9fr_auto]"
                         >
                           <div>
-                            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                              Concepto
-                            </label>
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                              <label className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                                Concepto
+                              </label>
+                              {isLocked ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="border-emerald-200 bg-emerald-100 text-emerald-800"
+                                >
+                                  {isPaid ? "Pagada" : "Abonada"}
+                                </Badge>
+                              ) : null}
+                            </div>
                             <NativeSelectField>
                               <select
                                 {...register(`charges.${index}.conceptId`, {
                                   valueAsNumber: true,
                                 })}
-                                disabled={isPaid}
+                                disabled={isLocked}
                                 className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
                               >
                                 <option value="">Seleccionar...</option>
@@ -679,7 +713,7 @@ export default function FinancialSetupRadarPage() {
                             <input
                               type="date"
                               {...register(`charges.${index}.dueDate`)}
-                              disabled={isPaid}
+                              disabled={isLocked}
                               className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
                             />
                           </div>
@@ -694,7 +728,7 @@ export default function FinancialSetupRadarPage() {
                               {...register(`charges.${index}.amount`, {
                                 valueAsNumber: true,
                               })}
-                              disabled={isPaid}
+                              disabled={isLocked}
                               className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
                             />
                             {paidAmount > 0 ? (
@@ -704,7 +738,7 @@ export default function FinancialSetupRadarPage() {
                             ) : null}
                           </div>
                           <div className="flex items-end">
-                            {!isPaid ? (
+                            {!isLocked ? (
                               <button
                                 type="button"
                                 onClick={() => remove(index)}
@@ -713,7 +747,15 @@ export default function FinancialSetupRadarPage() {
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
-                            ) : null}
+                            ) : (
+                              <div
+                                className="inline-flex h-10 w-10 items-center justify-center"
+                                title="Cuota con pagos y bloqueada"
+                                aria-label="Cuota con pagos y bloqueada"
+                              >
+                                <Lock className="h-4 w-4 text-slate-400" />
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -743,7 +785,11 @@ export default function FinancialSetupRadarPage() {
                     disabled={submitting || fields.length === 0}
                     className="rounded-lg bg-[var(--color-primary)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitting ? "Guardando..." : "Guardar configuración"}
+                    {submitting
+                      ? "Guardando..."
+                      : isEditing
+                        ? "Guardar Reestructuración"
+                        : "Crear Setup Financiero"}
                   </button>
                 </div>
               </form>
