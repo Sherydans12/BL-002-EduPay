@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import * as exceljs from 'exceljs';
+import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
 import { FilterPaymentsDto } from '../payments/dto/filter-payments.dto';
@@ -146,5 +148,111 @@ export class ReportsService {
       aggregateGroupsByConcept(groups),
       groups,
     );
+  }
+
+  async generateMonthlyReport(res: Response): Promise<void> {
+    const workbook = new exceljs.Workbook();
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const incomeSheet = workbook.addWorksheet('Ingresos del Mes');
+    incomeSheet.columns = [
+      { header: 'Fecha', key: 'fecha', width: 14 },
+      { header: 'N° Boleta', key: 'boleta', width: 18 },
+      { header: 'Alumno', key: 'alumno', width: 32 },
+      { header: 'Monto', key: 'monto', width: 16 },
+      { header: 'Método', key: 'metodo', width: 16 },
+    ];
+
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        deletedAt: null,
+        paymentDate: {
+          gte: monthStart,
+          lt: nextMonthStart,
+        },
+      },
+      include: {
+        student: true,
+        paymentGroup: true,
+      },
+      orderBy: { paymentDate: 'asc' },
+    });
+
+    payments.forEach((payment) => {
+      incomeSheet.addRow({
+        fecha: payment.paymentDate,
+        boleta:
+          payment.paymentGroup?.boletaNumber ?? payment.boletaNumber ?? '',
+        alumno: payment.student.name,
+        monto: payment.amount,
+        metodo: payment.paymentGroup?.method ?? payment.method,
+      });
+    });
+
+    const overdueSheet = workbook.addWorksheet('Morosidad Actual');
+    overdueSheet.columns = [
+      { header: 'Alumno', key: 'alumno', width: 32 },
+      { header: 'Apoderado', key: 'apoderado', width: 32 },
+      { header: 'Teléfono (para cobranza)', key: 'telefono', width: 24 },
+      { header: 'Concepto', key: 'concepto', width: 28 },
+      { header: 'Fecha Vencimiento', key: 'fechaVencimiento', width: 20 },
+      { header: 'Saldo Pendiente', key: 'saldoPendiente', width: 18 },
+    ];
+
+    const overdueCharges = await this.prisma.charge.findMany({
+      where: {
+        deletedAt: null,
+        status: 'OVERDUE',
+      },
+      include: {
+        student: {
+          include: {
+            guardian: true,
+          },
+        },
+        concept: true,
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    overdueCharges.forEach((charge) => {
+      overdueSheet.addRow({
+        alumno: charge.student.name,
+        apoderado: charge.student.guardian.name,
+        telefono: charge.student.guardian.phone ?? '',
+        concepto: charge.concept.name,
+        fechaVencimiento: charge.dueDate,
+        saldoPendiente: charge.amount - charge.paidAmount,
+      });
+    });
+
+    [incomeSheet, overdueSheet].forEach((worksheet) => {
+      worksheet.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE5E7EB' },
+        };
+      });
+    });
+
+    incomeSheet.getColumn('fecha').numFmt = 'dd-mm-yyyy';
+    incomeSheet.getColumn('monto').numFmt = '"$"#,##0';
+    overdueSheet.getColumn('fechaVencimiento').numFmt = 'dd-mm-yyyy';
+    overdueSheet.getColumn('saldoPendiente').numFmt = '"$"#,##0';
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=Reporte_Financiero_Mes.xlsx',
+    );
+    await workbook.xlsx.write(res);
+    res.end();
   }
 }

@@ -630,6 +630,7 @@ export const reportsApi = {
     request<RevenueTrendItem[]>(
       `/reports/dashboard/revenue-trend?months=${months}`,
     ),
+  monthly: () => requestBlob("/reports/monthly"),
 };
 
 // ─── Roles & Permissions ──────────────────────────────────────

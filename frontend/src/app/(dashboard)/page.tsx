@@ -10,9 +10,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, Banknote, TrendingUp } from "lucide-react";
+import { AlertTriangle, Banknote, FileSpreadsheet, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { analyticsApi } from "@/lib/api";
+import { analyticsApi, downloadBlob, reportsApi } from "@/lib/api";
 import type { FinancialDashboard } from "@/lib/api";
 
 const emptyDashboard: FinancialDashboard = {
@@ -34,6 +35,7 @@ export default function DashboardPage() {
   const [dashboard, setDashboard] =
     useState<FinancialDashboard>(emptyDashboard);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,6 +75,22 @@ export default function DashboardPage() {
     },
   ];
 
+  const handleDownloadMonthlyReport = async () => {
+    try {
+      setDownloading(true);
+      const blob = await reportsApi.monthly();
+      downloadBlob(blob, "Reporte_Financiero_Mes.xlsx");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo descargar el cierre del mes.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -83,11 +101,21 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 pb-10">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Cerebro Financiero</h1>
-        <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-          Indicadores ejecutivos de recaudación, mora y proyección anual.
-        </p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Cerebro Financiero</h1>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+            Indicadores ejecutivos de recaudación, mora y proyección anual.
+          </p>
+        </div>
+        <Button
+          className="h-10 w-full gap-2 bg-emerald-500 px-4 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 md:w-auto"
+          disabled={downloading}
+          onClick={handleDownloadMonthlyReport}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          {downloading ? "Preparando cierre..." : "Descargar Cierre del Mes"}
+        </Button>
       </div>
 
       {error ? (

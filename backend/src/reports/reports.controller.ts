@@ -30,6 +30,17 @@ export class ReportsController {
     return this.reportsService.getRevenueTrend(months ? Number(months) : 12);
   }
 
+  @Get('monthly')
+  @RequirePermissions('view:reports')
+  @ApiOperation({ summary: 'Exportar cierre financiero mensual a XLSX' })
+  @ApiResponse({
+    status: 200,
+    description: 'Archivo XLSX con ingresos del mes y morosidad actual',
+  })
+  async exportMonthly(@Res() res: Response) {
+    return this.reportsService.generateMonthlyReport(res);
+  }
+
   @Get('export')
   @RequirePermissions('view:reports')
   @ApiOperation({ summary: 'Exportar reporte analítico a XLSX (multi-hoja)' })
