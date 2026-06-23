@@ -34,6 +34,14 @@ import {
   DropdownChevron,
   NativeSelectField,
 } from "@/components/ui/dropdown-chevron";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { cmdkPersonFilter } from "@/lib/flexible-search";
 import { useDropzone } from "react-dropzone";
 import {
@@ -44,6 +52,7 @@ import {
   Trash2,
   Users,
   Plus,
+  Zap,
 } from "lucide-react";
 
 const METHODS = [
@@ -162,6 +171,21 @@ export default function NewPaymentPage() {
     const firstId = allocations?.[0]?.studentId;
     return firstId ? studentById.get(firstId) : undefined;
   }, [allocations, studentById]);
+
+  const primaryStudentId = primaryStudent?.id;
+  const primaryPendingCharges = primaryStudentId
+    ? (pendingCharges[primaryStudentId] ?? [])
+    : [];
+  const primaryDebtRows = primaryPendingCharges
+    .map((charge) => ({
+      charge,
+      balance: getChargeBalance(charge),
+    }))
+    .filter((row) => row.balance > 0);
+  const primaryDebtTotal = primaryDebtRows.reduce(
+    (total, row) => total + row.balance,
+    0,
+  );
 
   useEffect(() => {
     Promise.all([
@@ -335,6 +359,34 @@ export default function NewPaymentPage() {
     [getValues, pendingCharges, setValue],
   );
 
+  const handleLiquidateStudentDebt = useCallback(() => {
+    if (!primaryStudent) return;
+
+    const rows = primaryDebtRows.map(({ charge, balance }) => ({
+      studentId: primaryStudent.id,
+      chargeId: charge.id,
+      conceptId: charge.conceptId,
+      amount: balance,
+    }));
+
+    if (rows.length === 0) {
+      toast.warning(`${primaryStudent.name} no tiene deuda pendiente`);
+      return;
+    }
+
+    remove();
+    rows.forEach((row) => append(row));
+    setValue("totalAmount", primaryDebtTotal, { shouldValidate: true });
+    toast.success(`Deuda de ${primaryStudent.name} cargada al pago`);
+  }, [
+    append,
+    primaryDebtRows,
+    primaryDebtTotal,
+    primaryStudent,
+    remove,
+    setValue,
+  ]);
+
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       if (acceptedFiles.length > 0) {
@@ -428,116 +480,117 @@ export default function NewPaymentPage() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-        {/* ── Paso 1: Búsqueda híbrida ─────────────────────── */}
-        <div className="glass rounded-2xl p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center text-white text-sm font-bold">
-              1
-            </span>
-            Alumnos del pago
-          </h2>
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+      >
+        <input type="hidden" {...register("totalAmount", { valueAsNumber: true })} />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Buscar por Apoderado
-              </label>
-              <Popover open={guardianOpen} onOpenChange={setGuardianOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className={`${inputOk} flex items-center gap-2 text-left`}
-                  >
-                    <Users className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
-                    <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
-                      Cargar todos los hijos de un apoderado...
-                    </span>
-                    <DropdownChevron />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
-                  align="start"
-                >
-                  <Command filter={cmdkPersonFilter} className="bg-transparent">
-                    <CommandInput placeholder="Nombre o RUT del apoderado..." />
-                    <CommandList>
-                      <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
-                      <CommandGroup>
-                        {guardians.map((g) => (
-                          <CommandItem
-                            key={g.id}
-                            value={`${g.name}\t${g.rut ?? ""}`}
-                            onSelect={() => void handleSelectGuardian(g)}
-                            className="cursor-pointer"
-                          >
-                            <div className="flex flex-col">
-                              <span>{g.name}</span>
-                              <span className="text-xs text-[var(--color-text-muted)]">
-                                {g.rut ?? "Sin RUT"}
-                                {g._count?.students != null
-                                  ? ` · ${g._count.students} alumno(s)`
-                                  : ""}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
+        <div className="lg:col-span-4 space-y-6">
+          <div className="glass rounded-2xl p-6 space-y-5">
+            <h2 className="text-lg font-semibold text-white">Controles TPV</h2>
 
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Buscar por Alumno
-              </label>
-              <Popover open={studentOpen} onOpenChange={setStudentOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className={`${inputOk} flex items-center gap-2 text-left`}
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Buscar por Alumno
+                </label>
+                <Popover open={studentOpen} onOpenChange={setStudentOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={`${inputOk} flex items-center gap-2 text-left`}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
+                        Añadir un alumno al pago...
+                      </span>
+                      <DropdownChevron />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
+                    align="start"
                   >
-                    <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
-                      Añadir un alumno al pago...
-                    </span>
-                    <DropdownChevron />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
-                  align="start"
-                >
-                  <Command filter={cmdkPersonFilter} className="bg-transparent">
-                    <CommandInput placeholder="Buscar por nombre o RUT..." />
-                    <CommandList>
-                      <CommandEmpty>No se encontró el alumno.</CommandEmpty>
-                      <CommandGroup>
-                        {students.map((s) => (
-                          <CommandItem
-                            key={s.id}
-                            value={`${s.name}\t${s.rut}`}
-                            onSelect={() => void handleAddStudent(s)}
-                            className="cursor-pointer"
-                          >
-                            <div className="flex flex-col">
-                              <span>{s.name}</span>
-                              <span className="text-xs text-[var(--color-text-muted)]">
-                                {s.rut} — {s.course.name}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+                    <Command filter={cmdkPersonFilter} className="bg-transparent">
+                      <CommandInput placeholder="Buscar por nombre o RUT..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró el alumno.</CommandEmpty>
+                        <CommandGroup>
+                          {students.map((s) => (
+                            <CommandItem
+                              key={s.id}
+                              value={`${s.name}\t${s.rut}`}
+                              onSelect={() => void handleAddStudent(s)}
+                              className="cursor-pointer"
+                            >
+                              <div className="flex flex-col">
+                                <span>{s.name}</span>
+                                <span className="text-xs text-[var(--color-text-muted)]">
+                                  {s.rut} — {s.course.name}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Buscar por Apoderado
+                </label>
+                <Popover open={guardianOpen} onOpenChange={setGuardianOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={`${inputOk} flex items-center gap-2 text-left`}
+                    >
+                      <Users className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
+                      <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
+                        Cargar todos los hijos de un apoderado...
+                      </span>
+                      <DropdownChevron />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
+                    align="start"
+                  >
+                    <Command filter={cmdkPersonFilter} className="bg-transparent">
+                      <CommandInput placeholder="Nombre o RUT del apoderado..." />
+                      <CommandList>
+                        <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
+                        <CommandGroup>
+                          {guardians.map((g) => (
+                            <CommandItem
+                              key={g.id}
+                              value={`${g.name}\t${g.rut ?? ""}`}
+                              onSelect={() => void handleSelectGuardian(g)}
+                              className="cursor-pointer"
+                            >
+                              <div className="flex flex-col">
+                                <span>{g.name}</span>
+                                <span className="text-xs text-[var(--color-text-muted)]">
+                                  {g.rut ?? "Sin RUT"}
+                                  {g._count?.students != null
+                                    ? ` · ${g._count.students} alumno(s)`
+                                    : ""}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
 
               {siblingSuggestions.length > 0 && (
-                <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 animate-fade-in space-y-2">
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 animate-fade-in space-y-2">
                   <div className="flex items-start gap-2 text-sm text-amber-100/90">
                     <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                     <span>
@@ -546,7 +599,7 @@ export default function NewPaymentPage() {
                         : "Este alumno tiene hermanos registrados:"}
                     </span>
                   </div>
-                  <ul className="space-y-2 pl-6">
+                  <ul className="space-y-2">
                     {siblingSuggestions.map((sibling) => (
                       <li
                         key={sibling.id}
@@ -563,350 +616,56 @@ export default function NewPaymentPage() {
                           onClick={() => void handleAddSibling(sibling)}
                           className="px-3 py-1 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-500/30 transition-colors"
                         >
-                          Añadir al pago
+                          Añadir
                         </button>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
+
+              <FieldError
+                message={errors.allocations?.message as string | undefined}
+              />
             </div>
-          </div>
 
-          <FieldError
-            message={errors.allocations?.message as string | undefined}
-          />
-
-          {fields.length === 0 ? (
-            <p className="text-sm text-[var(--color-text-muted)] text-center py-6 border border-dashed border-[var(--color-border)] rounded-xl">
-              Usá los buscadores para añadir alumnos. Podés cargar todos los
-              hijos de un apoderado o ir sumando alumnos uno a uno.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {fields.map((field, index) => {
-                const student = studentById.get(
-                  allocations?.[index]?.studentId,
-                );
-                const rowStudentId = allocations?.[index]?.studentId;
-                const rowCharges = rowStudentId
-                  ? (pendingCharges[rowStudentId] ?? [])
-                  : [];
-                const rowChargeId = allocations?.[index]?.chargeId;
-                const rowErrors = errors.allocations?.[index];
-
-                return (
-                  <div
-                    key={field.id}
-                    className="p-4 rounded-xl bg-[var(--color-bg)]/60 border border-[var(--color-border)] space-y-3"
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Fecha de Pago *
+                </label>
+                <input
+                  type="date"
+                  {...register("paymentDate")}
+                  className={errors.paymentDate ? inputErr : inputOk}
+                />
+                <FieldError message={errors.paymentDate?.message} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Método de Pago *
+                </label>
+                <NativeSelectField>
+                  <select
+                    {...register("method")}
+                    className={errors.method ? inputErr : inputOk}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium text-white truncate">
-                          {student?.name ??
-                            `Alumno #${allocations?.[index]?.studentId}`}
-                        </p>
-                        <p className="text-xs text-[var(--color-text-muted)]">
-                          {student?.rut ?? "—"} · {student?.course.name ?? "—"}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (student) append(buildAllocationRow(student));
-                          }}
-                          disabled={!student}
-                          className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40"
-                          title="Añadir otra glosa a este alumno"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            remove(index);
-                            setSiblingSuggestions([]);
-                          }}
-                          className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Quitar fila"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                          Cuota *
-                        </label>
-                        <NativeSelectField>
-                          <select
-                            value={rowChargeId ?? ""}
-                            onChange={(e) =>
-                              handleChargeSelect(index, e.target.value)
-                            }
-                            className={`${rowErrors?.chargeId ? inputErr : inputOk} py-2.5`}
-                            disabled={rowCharges.length === 0}
-                          >
-                            <option value="">Seleccionar cuota...</option>
-                            {rowCharges.map((charge) => (
-                              <option key={charge.id} value={charge.id}>
-                                {charge.concept.name} (Vence:{" "}
-                                {formatChargeDate(charge.dueDate)}) - Saldo:{" "}
-                                {formatCLP(getChargeBalance(charge))}
-                              </option>
-                            ))}
-                          </select>
-                        </NativeSelectField>
-                        {rowCharges.length === 0 && (
-                          <p className="mt-1.5 text-xs text-amber-300">
-                            No hay cuotas pendientes para este alumno.
-                          </p>
-                        )}
-                        <FieldError message={rowErrors?.chargeId?.message} />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                          Monto ($) *
-                        </label>
-                        <Controller
-                          control={control}
-                          name={`allocations.${index}.amount`}
-                          render={({ field: amountField }) => (
-                            <input
-                              type="number"
-                              min={1}
-                              step={1}
-                              name={amountField.name}
-                              ref={amountField.ref}
-                              onBlur={amountField.onBlur}
-                              value={amountField.value ?? ""}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                amountField.onChange(
-                                  raw === "" ? undefined : Number(raw),
-                                );
-                              }}
-                              className={`${rowErrors?.amount ? inputErr : inputOk} py-2.5`}
-                            />
-                          )}
-                        />
-                        <FieldError message={rowErrors?.amount?.message} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* ── Paso 2: Datos del cobro ──────────────────────── */}
-        <div className="glass rounded-2xl p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white text-sm font-bold">
-              2
-            </span>
-            Datos del Pago
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Monto total ($) *
-              </label>
-              <input
-                type="number"
-                min="0"
-                readOnly
-                {...register("totalAmount", { valueAsNumber: true })}
-                className={`${errors.totalAmount ? inputErr : inputOk} text-lg font-semibold bg-[var(--color-surface)]/50 cursor-default`}
-              />
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                Calculado automáticamente desde las filas de alumnos
-              </p>
-              <FieldError message={errors.totalAmount?.message} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Método de Pago *
-              </label>
-              <NativeSelectField>
-                <select
-                  {...register("method")}
-                  className={errors.method ? inputErr : inputOk}
-                >
-                  {METHODS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </NativeSelectField>
-              <FieldError message={errors.method?.message} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Fecha de Pago *
-              </label>
-              <input
-                type="date"
-                {...register("paymentDate")}
-                className={errors.paymentDate ? inputErr : inputOk}
-              />
-              <FieldError message={errors.paymentDate?.message} />
+                    {METHODS.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </NativeSelectField>
+                <FieldError message={errors.method?.message} />
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Código de Referencia
-              </label>
-              <input
-                type="text"
-                placeholder="Opcional"
-                {...register("referenceCode")}
-                className={errors.referenceCode ? inputErr : inputOk}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Notas del cobro
-              </label>
-              <input
-                type="text"
-                placeholder="Opcional"
-                {...register("notes")}
-                className={errors.notes ? inputErr : inputOk}
-              />
-            </div>
-          </div>
-        </div>
 
-        {/* ── Paso 3: Pagador ──────────────────────────────── */}
-        <div className="glass rounded-2xl p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <span className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-white text-sm font-bold">
-                3
-              </span>
-              Pagador
+          <div className="glass rounded-2xl p-6 space-y-5">
+            <h2 className="text-lg font-semibold text-white">
+              Boleta / Comprobante
             </h2>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                {...register("useAltPayer")}
-                className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)] bg-[var(--color-bg)]"
-              />
-              <span className="text-sm text-[var(--color-text-secondary)]">
-                ¿Paga un tercero?
-              </span>
-            </label>
-          </div>
-          {!useAltPayer ? (
-            fields.length === 0 ? (
-              <p className="text-sm text-amber-200/90">
-                Añadí al menos un alumno para cargar los datos del apoderado.
-              </p>
-            ) : (
-              <div className="space-y-4 animate-fade-in">
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Datos del apoderado
-                  {primaryStudent ? ` (${primaryStudent.guardian.name})` : ""}.
-                  Se guardarán al registrar el pago.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                      Nombre del apoderado *
-                    </label>
-                    <input
-                      type="text"
-                      autoComplete="name"
-                      {...register("guardianName")}
-                      className={errors.guardianName ? inputErr : inputOk}
-                    />
-                    <FieldError message={errors.guardianName?.message} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                      RUT
-                    </label>
-                    <input
-                      type="text"
-                      {...register("guardianRut")}
-                      className={errors.guardianRut ? inputErr : inputOk}
-                    />
-                    <FieldError message={errors.guardianRut?.message} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                      Teléfono
-                    </label>
-                    <input
-                      type="tel"
-                      {...register("guardianPhone")}
-                      className={errors.guardianPhone ? inputErr : inputOk}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                      Correo
-                    </label>
-                    <input
-                      type="email"
-                      {...register("guardianEmail")}
-                      className={errors.guardianEmail ? inputErr : inputOk}
-                    />
-                    <FieldError message={errors.guardianEmail?.message} />
-                  </div>
-                </div>
-              </div>
-            )
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Nombre del Pagador *
-                </label>
-                <input
-                  type="text"
-                  {...register("payerName")}
-                  className={errors.payerName ? inputErr : inputOk}
-                />
-                <FieldError message={errors.payerName?.message} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  RUT del Pagador
-                </label>
-                <input
-                  type="text"
-                  {...register("payerRut")}
-                  className={errors.payerRut ? inputErr : inputOk}
-                />
-                <FieldError message={errors.payerRut?.message} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Paso 4: Boleta ───────────────────────────────── */}
-        <div className="glass rounded-2xl p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-violet-500 flex items-center justify-center text-white text-sm font-bold">
-              4
-            </span>
-            Boleta / Comprobante (única para todo el cobro)
-          </h2>
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            Si dejas la boleta en blanco, el pago quedará en la Bandeja de
-            Pendientes.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                 N° de Boleta
@@ -925,7 +684,7 @@ export default function NewPaymentPage() {
               </label>
               <div
                 {...getRootProps()}
-                className={`w-full px-4 py-6 rounded-xl bg-[var(--color-bg)] border-2 border-dashed cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
+                className={`w-full px-4 py-8 rounded-xl bg-[var(--color-bg)] border-2 border-dashed cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
                   isDragActive
                     ? "border-[var(--color-primary)] bg-[var(--color-primary-light)]"
                     : errors.boleta
@@ -975,27 +734,366 @@ export default function NewPaymentPage() {
               <FieldError message={errors.boleta?.message} />
             </div>
           </div>
+
+          <div className="glass rounded-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold text-white">Pagador</h2>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  {...register("useAltPayer")}
+                  className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)] bg-[var(--color-bg)]"
+                />
+                <span className="text-sm text-[var(--color-text-secondary)]">
+                  ¿Paga un tercero?
+                </span>
+              </label>
+            </div>
+            {!useAltPayer ? (
+              fields.length === 0 ? (
+                <p className="text-sm text-amber-200/90">
+                  Añadí al menos un alumno para cargar los datos del apoderado.
+                </p>
+              ) : (
+                <div className="space-y-4 animate-fade-in">
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    Datos del apoderado
+                    {primaryStudent ? ` (${primaryStudent.guardian.name})` : ""}.
+                  </p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                        Nombre del apoderado *
+                      </label>
+                      <input
+                        type="text"
+                        autoComplete="name"
+                        {...register("guardianName")}
+                        className={errors.guardianName ? inputErr : inputOk}
+                      />
+                      <FieldError message={errors.guardianName?.message} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                          RUT
+                        </label>
+                        <input
+                          type="text"
+                          {...register("guardianRut")}
+                          className={errors.guardianRut ? inputErr : inputOk}
+                        />
+                        <FieldError message={errors.guardianRut?.message} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                          Teléfono
+                        </label>
+                        <input
+                          type="tel"
+                          {...register("guardianPhone")}
+                          className={errors.guardianPhone ? inputErr : inputOk}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                        Correo
+                      </label>
+                      <input
+                        type="email"
+                        {...register("guardianEmail")}
+                        className={errors.guardianEmail ? inputErr : inputOk}
+                      />
+                      <FieldError message={errors.guardianEmail?.message} />
+                    </div>
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="space-y-4 animate-fade-in">
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                    Nombre del Pagador *
+                  </label>
+                  <input
+                    type="text"
+                    {...register("payerName")}
+                    className={errors.payerName ? inputErr : inputOk}
+                  />
+                  <FieldError message={errors.payerName?.message} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                    RUT del Pagador
+                  </label>
+                  <input
+                    type="text"
+                    {...register("payerRut")}
+                    className={errors.payerRut ? inputErr : inputOk}
+                  />
+                  <FieldError message={errors.payerRut?.message} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="glass rounded-2xl p-6 space-y-5">
+            <h2 className="text-lg font-semibold text-white">Notas</h2>
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                Código de Referencia
+              </label>
+              <input
+                type="text"
+                placeholder="Opcional"
+                {...register("referenceCode")}
+                className={errors.referenceCode ? inputErr : inputOk}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                Notas del cobro
+              </label>
+              <input
+                type="text"
+                placeholder="Opcional"
+                {...register("notes")}
+                className={errors.notes ? inputErr : inputOk}
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="px-6 py-3 rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-all"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={submitting || fields.length === 0}
-            className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-          >
-            {submitting
-              ? "Registrando..."
-              : fields.length > 1
-                ? `Registrar pago (${fields.length} alumnos)`
-                : "Registrar Pago"}
-          </button>
+        <div className="lg:col-span-8 space-y-6">
+          {primaryStudent && (
+            <Card className="border border-emerald-400/20 bg-emerald-950/20 text-white ring-emerald-400/20">
+              <CardHeader className="border-b border-emerald-400/10">
+                <CardTitle>Resumen de Deuda Pendiente</CardTitle>
+                <CardDescription className="text-emerald-100/75">
+                  {primaryStudent.name} · {primaryStudent.course.name}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {primaryDebtRows.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-emerald-300/25 px-4 py-6 text-center text-sm text-emerald-100/75">
+                    No hay cuotas pendientes para este alumno.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-emerald-300/10 rounded-xl border border-emerald-300/10 bg-black/10">
+                    {primaryDebtRows.map(({ charge, balance }) => (
+                      <div
+                        key={charge.id}
+                        className="flex items-center justify-between gap-4 px-4 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">
+                            {charge.concept.name}
+                          </p>
+                          <p className="text-xs text-emerald-100/60">
+                            Vence: {formatChargeDate(charge.dueDate)}
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-sm font-semibold text-emerald-100">
+                          {formatCLP(balance)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between rounded-xl bg-emerald-400/10 px-4 py-3">
+                  <span className="text-sm font-medium text-emerald-100/80">
+                    Total Adeudado
+                  </span>
+                  <span className="text-xl font-bold text-white">
+                    {formatCLP(primaryDebtTotal)}
+                  </span>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={handleLiquidateStudentDebt}
+                  disabled={primaryDebtRows.length === 0}
+                >
+                  <Zap className="w-4 h-4" />
+                  Liquidar toda la deuda (Auto-completar)
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="glass rounded-2xl p-6 space-y-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Asignaciones del pago
+                </h2>
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                  Cuotas que se pagarán en esta transacción.
+                </p>
+              </div>
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-right">
+                <p className="text-xs uppercase text-[var(--color-text-muted)]">
+                  Total a cobrar
+                </p>
+                <p className="text-2xl font-bold text-white">
+                  {formatCLP(Number(watch("totalAmount")) || 0)}
+                </p>
+              </div>
+            </div>
+
+            <FieldError message={errors.totalAmount?.message} />
+
+            {fields.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-muted)] text-center py-10 border border-dashed border-[var(--color-border)] rounded-xl">
+                Usá los buscadores para añadir alumnos. Al seleccionar uno,
+                podés liquidar toda su deuda en un clic.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {fields.map((field, index) => {
+                  const student = studentById.get(
+                    allocations?.[index]?.studentId,
+                  );
+                  const rowStudentId = allocations?.[index]?.studentId;
+                  const rowCharges = rowStudentId
+                    ? (pendingCharges[rowStudentId] ?? [])
+                    : [];
+                  const rowChargeId = allocations?.[index]?.chargeId;
+                  const rowErrors = errors.allocations?.[index];
+
+                  return (
+                    <div
+                      key={field.id}
+                      className="p-4 rounded-xl bg-[var(--color-bg)]/60 border border-[var(--color-border)] space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-white truncate">
+                            {student?.name ??
+                              `Alumno #${allocations?.[index]?.studentId}`}
+                          </p>
+                          <p className="text-xs text-[var(--color-text-muted)]">
+                            {student?.rut ?? "—"} · {student?.course.name ?? "—"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (student) append(buildAllocationRow(student));
+                            }}
+                            disabled={!student}
+                            className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40"
+                            title="Añadir otra glosa a este alumno"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              remove(index);
+                              setSiblingSuggestions([]);
+                            }}
+                            className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Quitar fila"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                            Cuota *
+                          </label>
+                          <NativeSelectField>
+                            <select
+                              value={rowChargeId ?? ""}
+                              onChange={(e) =>
+                                handleChargeSelect(index, e.target.value)
+                              }
+                              className={`${rowErrors?.chargeId ? inputErr : inputOk} py-2.5`}
+                              disabled={rowCharges.length === 0}
+                            >
+                              <option value="">Seleccionar cuota...</option>
+                              {rowCharges.map((charge) => (
+                                <option key={charge.id} value={charge.id}>
+                                  {charge.concept.name} (Vence:{" "}
+                                  {formatChargeDate(charge.dueDate)}) - Saldo:{" "}
+                                  {formatCLP(getChargeBalance(charge))}
+                                </option>
+                              ))}
+                            </select>
+                          </NativeSelectField>
+                          {rowCharges.length === 0 && (
+                            <p className="mt-1.5 text-xs text-amber-300">
+                              No hay cuotas pendientes para este alumno.
+                            </p>
+                          )}
+                          <FieldError message={rowErrors?.chargeId?.message} />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                            Monto ($) *
+                          </label>
+                          <Controller
+                            control={control}
+                            name={`allocations.${index}.amount`}
+                            render={({ field: amountField }) => (
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                name={amountField.name}
+                                ref={amountField.ref}
+                                onBlur={amountField.onBlur}
+                                value={amountField.value ?? ""}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  amountField.onChange(
+                                    raw === "" ? undefined : Number(raw),
+                                  );
+                                }}
+                                className={`${rowErrors?.amount ? inputErr : inputOk} py-2.5`}
+                              />
+                            )}
+                          />
+                          <FieldError message={rowErrors?.amount?.message} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-6 py-3 rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || fields.length === 0}
+              className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {submitting
+                ? "Registrando..."
+                : fields.length > 1
+                  ? `Registrar pago (${fields.length} alumnos)`
+                  : "Registrar Pago"}
+            </button>
+          </div>
         </div>
       </form>
     </div>
