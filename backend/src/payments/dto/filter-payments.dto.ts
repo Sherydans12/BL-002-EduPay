@@ -1,4 +1,11 @@
-import { IsOptional, IsDateString, IsInt, Min } from 'class-validator';
+import { PaymentMethod } from '@prisma/client';
+import {
+  IsOptional,
+  IsDateString,
+  IsInt,
+  Min,
+  IsEnum,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -36,6 +43,15 @@ export class FilterPaymentsDto {
   @Type(() => Number)
   @IsInt()
   studentId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Filtrar por método de pago',
+    enum: PaymentMethod,
+    example: PaymentMethod.TRANSFER,
+  })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  method?: PaymentMethod;
 
   @ApiPropertyOptional({
     description: 'Número de página (paginación)',

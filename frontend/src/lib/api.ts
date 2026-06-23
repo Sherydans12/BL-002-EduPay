@@ -212,6 +212,8 @@ export type ChargeStatus =
   | "OVERDUE"
   | "CANCELLED";
 
+export type PaymentMethod = "CASH" | "DEBIT" | "CREDIT" | "CHECK" | "TRANSFER";
+
 export interface Charge {
   id: number;
   studentId: number;
@@ -481,7 +483,15 @@ export const paymentsApi = {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return request<PaginatedResponse<Payment>>(`/payments${query}`);
   },
-  getGroups: (params?: Record<string, string>) => {
+  getGroups: (params?: {
+    page?: string;
+    limit?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    studentId?: string;
+    courseId?: string;
+    method?: PaymentMethod;
+  }) => {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return request<PaginatedResponse<PaymentGroup>>(`/payments/groups${query}`);
   },

@@ -10,7 +10,7 @@ import {
 } from "react";
 import { paymentsApi, downloadBlob, resolveUploadUrl } from "@/lib/api";
 import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
-import type { PaymentGroup, Student, Course } from "@/lib/api";
+import type { PaymentGroup, Student, Course, PaymentMethod } from "@/lib/api";
 import {
   getGroupBoletaFileUrl,
   getGroupBoletaNumber,
@@ -52,6 +52,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -74,6 +81,14 @@ import { METHOD_LABELS } from "@/lib/payment-method-labels";
 const fieldClass =
   "w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all";
 
+const METHOD_FILTER_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
+  { value: "CASH", label: "Efectivo" },
+  { value: "TRANSFER", label: "Transferencia" },
+  { value: "DEBIT", label: "Débito" },
+  { value: "CREDIT", label: "Crédito" },
+  { value: "CHECK", label: "Cheque" },
+];
+
 function toggleExpandedRow(prev: Set<number>, groupId: number): Set<number> {
   const next = new Set(prev);
   if (next.has(groupId)) next.delete(groupId);
@@ -90,6 +105,9 @@ export default function PagosMasterPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
   const [courseFilter, setCourseFilter] = useState("");
+  const [filterMethod, setFilterMethod] = useState<PaymentMethod | "ALL">(
+    "ALL",
+  );
   const [studentOpen, setStudentOpen] = useState(false);
 
   const [filters, setFilters] = useState<{
@@ -97,11 +115,13 @@ export default function PagosMasterPage() {
     dateTo: string;
     studentId?: number;
     courseId?: number;
+    method?: PaymentMethod;
   }>({
     dateFrom: "",
     dateTo: "",
     studentId: undefined,
     courseId: undefined,
+    method: undefined,
   });
   const [appliedFilters, setAppliedFilters] = useState(filters);
 
@@ -149,6 +169,7 @@ export default function PagosMasterPage() {
         params.studentId = String(appliedFilters.studentId);
       if (appliedFilters.courseId != null)
         params.courseId = String(appliedFilters.courseId);
+      if (appliedFilters.method) params.method = appliedFilters.method;
 
       const res = await paymentsApi.getGroups(params);
       setGroups(res.data);
@@ -169,6 +190,7 @@ export default function PagosMasterPage() {
     setAppliedFilters({
       ...filters,
       courseId: courseFilter ? Number(courseFilter) : undefined,
+      method: filterMethod === "ALL" ? undefined : filterMethod,
     });
     setPage(1);
   };
@@ -179,10 +201,12 @@ export default function PagosMasterPage() {
       dateTo: "",
       studentId: undefined as number | undefined,
       courseId: undefined as number | undefined,
+      method: undefined as PaymentMethod | undefined,
     };
     setFilters(empty);
     setAppliedFilters(empty);
     setCourseFilter("");
+    setFilterMethod("ALL");
     setPage(1);
   };
 
@@ -298,85 +322,85 @@ export default function PagosMasterPage() {
         </div>
       </div>
 
-      <div className="glass rounded-2xl p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                Curso (filtro opcional)
-              </label>
-              <NativeSelectField>
-                <select
-                  value={courseFilter}
-                  onChange={(e) => {
-                    setCourseFilter(e.target.value);
-                    setFilters((f) => ({ ...f, studentId: undefined }));
-                  }}
-                  className={fieldClass}
+      <div className="glass rounded-2xl p-5">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[1.25fr_1fr_0.9fr_0.9fr_0.95fr]">
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+              Alumno
+            </label>
+            <Popover open={studentOpen} onOpenChange={setStudentOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={`${fieldClass} flex items-center gap-2 text-left`}
                 >
-                  <option value="">Todos los cursos</option>
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </NativeSelectField>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                Alumno
-              </label>
-              <Popover open={studentOpen} onOpenChange={setStudentOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className={`${fieldClass} flex items-center gap-2 text-left`}
+                  <span
+                    className={`min-w-0 flex-1 truncate ${selectedStudent ? "text-white" : "text-[var(--color-text-muted)]"}`}
                   >
-                    <span
-                      className={`min-w-0 flex-1 truncate ${selectedStudent ? "text-white" : "text-[var(--color-text-muted)]"}`}
-                    >
-                      {selectedStudent
-                        ? selectedStudent.name
-                        : "Buscar por nombre o RUT..."}
-                    </span>
-                    <DropdownChevron />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
-                  align="start"
-                >
-                  <Command filter={cmdkPersonFilter} className="bg-transparent">
-                    <CommandInput placeholder="Buscar por nombre o RUT..." />
-                    <CommandList>
-                      <CommandEmpty>No se encontró el alumno.</CommandEmpty>
-                      <CommandGroup>
-                        {filteredStudents.map((s) => (
-                          <CommandItem
-                            key={s.id}
-                            value={`${s.name}\t${s.rut}`}
-                            onSelect={() => {
-                              setFilters((f) => ({ ...f, studentId: s.id }));
-                              setStudentOpen(false);
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <div className="flex flex-col">
-                              <span>{s.name}</span>
-                              <span className="text-xs text-[var(--color-text-muted)]">
-                                {s.rut} — {s.course.name}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
+                    {selectedStudent
+                      ? selectedStudent.name
+                      : "Buscar por nombre o RUT..."}
+                  </span>
+                  <DropdownChevron />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
+                align="start"
+              >
+                <Command filter={cmdkPersonFilter} className="bg-transparent">
+                  <CommandInput placeholder="Buscar por nombre o RUT..." />
+                  <CommandList>
+                    <CommandEmpty>No se encontró el alumno.</CommandEmpty>
+                    <CommandGroup>
+                      {filteredStudents.map((s) => (
+                        <CommandItem
+                          key={s.id}
+                          value={`${s.name}\t${s.rut}`}
+                          onSelect={() => {
+                            setFilters((f) => ({ ...f, studentId: s.id }));
+                            setStudentOpen(false);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <div className="flex flex-col">
+                            <span>{s.name}</span>
+                            <span className="text-xs text-[var(--color-text-muted)]">
+                              {s.rut} - {s.course.name}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
+
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+              Curso
+            </label>
+            <NativeSelectField>
+              <select
+                value={courseFilter}
+                onChange={(e) => {
+                  setCourseFilter(e.target.value);
+                  setFilters((f) => ({ ...f, studentId: undefined }));
+                }}
+                className={fieldClass}
+              >
+                <option value="">Todos los cursos</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </NativeSelectField>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
               Fecha Inicio
@@ -390,6 +414,7 @@ export default function PagosMasterPage() {
               className={fieldClass}
             />
           </div>
+
           <div>
             <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
               Fecha Fin
@@ -404,17 +429,44 @@ export default function PagosMasterPage() {
               onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
             />
           </div>
+
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+              Método de Pago
+            </label>
+            <Select
+              value={filterMethod}
+              onValueChange={(value) =>
+                setFilterMethod(value as PaymentMethod | "ALL")
+              }
+            >
+              <SelectTrigger
+                className={`${fieldClass} h-auto min-h-[42px] w-full rounded-xl px-4 py-2.5`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start">
+                <SelectItem value="ALL">Todos</SelectItem>
+                {METHOD_FILTER_OPTIONS.map((method) => (
+                  <SelectItem key={method.value} value={method.value}>
+                    {method.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-[var(--color-border)]">
+
+        <div className="flex flex-col gap-3 mt-5 pt-4 border-t border-[var(--color-border)] sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm text-[var(--color-text-muted)]">
             {totalCount} transacciones encontradas
           </span>
           <div className="flex gap-3">
             <button
               onClick={handleClearFilters}
-              className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors"
+              className="px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors"
             >
-              Limpiar
+              Limpiar Filtros
             </button>
             <button
               onClick={handleApplyFilters}
@@ -464,6 +516,7 @@ export default function PagosMasterPage() {
                         <th className="px-6 py-4">Pagador</th>
                         <th className="px-6 py-4">Monto total</th>
                         <th className="px-6 py-4">Método</th>
+                        <th className="px-6 py-4">Estado Documento</th>
                         <th className="px-6 py-4 text-center">Comprobante</th>
                       </tr>
                     </thead>
@@ -508,15 +561,6 @@ export default function PagosMasterPage() {
                                   <span className="text-sm font-medium text-white">
                                     #{group.id}
                                   </span>
-                                  {group.isBoletaPending && (
-                                    <Badge
-                                      variant="destructive"
-                                      className="gap-1"
-                                    >
-                                      <AlertTriangle className="w-3 h-3" />
-                                      Boleta pendiente
-                                    </Badge>
-                                  )}
                                 </div>
                                 <div className="text-xs text-[var(--color-text-muted)]">
                                   {formatPaymentDate(group.paymentDate)}
@@ -540,6 +584,30 @@ export default function PagosMasterPage() {
                                 <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--color-primary-light)] text-blue-300">
                                   {METHOD_LABELS[group.method] || group.method}
                                 </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-col items-start gap-1.5">
+                                  {group.isBoletaPending ? (
+                                    <Badge
+                                      variant="destructive"
+                                      className="gap-1"
+                                    >
+                                      <AlertTriangle className="w-3 h-3" />
+                                      Boleta Pendiente
+                                    </Badge>
+                                  ) : (
+                                    <>
+                                      <Badge className="bg-emerald-500 text-white hover:bg-emerald-600">
+                                        Boleta Emitida
+                                      </Badge>
+                                      {boletaNum && (
+                                        <span className="text-xs text-[var(--color-text-muted)]">
+                                          N° {boletaNum}
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-4">
                                 <div className="flex justify-center items-center gap-2">
@@ -585,7 +653,7 @@ export default function PagosMasterPage() {
                                 key={`${group.id}-detail`}
                                 className="bg-[var(--color-bg)]/80"
                               >
-                                <td colSpan={7} className="px-0 py-0">
+                                <td colSpan={8} className="px-0 py-0">
                                   <div className="px-8 py-4 border-t border-[var(--color-border)]/60">
                                     <table className="w-full text-sm">
                                       <thead>
