@@ -145,7 +145,19 @@ export interface Guardian {
   name: string;
   email?: string | null;
   phone?: string | null;
-  _count?: { students: number };
+  familyOverdueDebt: number;
+  students: Array<{
+    id: string;
+    name: string;
+    course: { name: string };
+    overdueDebt: number;
+  }>;
+}
+
+export interface GuardianDetail extends Omit<
+  Guardian,
+  "familyOverdueDebt" | "students"
+> {
   students?: Array<{
     id: number;
     rut: string;
@@ -431,14 +443,14 @@ export const guardiansApi = {
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<PaginatedResponse<Guardian>>(`/guardians${query}`);
   },
-  getOne: (id: number) => request<Guardian>(`/guardians/${id}`),
+  getOne: (id: number) => request<GuardianDetail>(`/guardians/${id}`),
   create: (data: GuardianPayload) =>
-    request<Guardian>("/guardians", {
+    request<GuardianDetail>("/guardians", {
       method: "POST",
       body: JSON.stringify(data),
     }),
   update: (id: number, data: GuardianPayload) =>
-    request<Guardian>(`/guardians/${id}`, {
+    request<GuardianDetail>(`/guardians/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),

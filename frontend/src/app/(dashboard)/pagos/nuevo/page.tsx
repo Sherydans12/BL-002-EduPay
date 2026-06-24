@@ -575,9 +575,7 @@ export default function NewPaymentPage() {
                                 <span>{g.name}</span>
                                 <span className="text-xs text-[var(--color-text-muted)]">
                                   {g.rut ?? "Sin RUT"}
-                                  {g._count?.students != null
-                                    ? ` · ${g._count.students} alumno(s)`
-                                    : ""}
+                                  {` · ${g.students.length} alumno(s)`}
                                 </span>
                               </div>
                             </CommandItem>

@@ -98,15 +98,55 @@ export class GuardiansService {
       this.prisma.guardian.findMany({
         where,
         orderBy: { name: 'asc' },
-        include: { _count: { select: { students: true } } },
+        include: {
+          students: {
+            where: { deletedAt: null },
+            include: {
+              course: true,
+              charges: {
+                where: { status: 'OVERDUE', deletedAt: null },
+                select: { amount: true, paidAmount: true },
+              },
+            },
+          },
+        },
         skip,
         take: limit,
       }),
       this.prisma.guardian.count({ where }),
     ]);
 
+    const dataWithFamilyDebt = data.map(({ students, ...guardian }) => {
+      const optimizedStudents = students.map(
+        ({ charges, course, ...student }) => {
+          const overdueDebt = charges.reduce(
+            (total, charge) =>
+              total + Math.max(charge.amount - charge.paidAmount, 0),
+            0,
+          );
+
+          return {
+            id: String(student.id),
+            name: student.name,
+            course: { name: course.name },
+            overdueDebt,
+          };
+        },
+      );
+      const familyOverdueDebt = optimizedStudents.reduce(
+        (total, student) => total + student.overdueDebt,
+        0,
+      );
+
+      return {
+        ...guardian,
+        students: optimizedStudents,
+        familyOverdueDebt,
+      };
+    });
+
     return {
-      data,
+      data: dataWithFamilyDebt,
       meta: {
         total,
         page,

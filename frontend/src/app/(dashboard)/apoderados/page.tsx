@@ -1,20 +1,51 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { guardiansApi, downloadBlob } from "@/lib/api";
 import type { Guardian, Student } from "@/lib/api";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { FileSpreadsheet, X } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { DropdownChevron } from "@/components/ui/dropdown-chevron";
+import { Badge } from "@/components/ui/badge";
 import { formatRut, sanitizeRutInput } from "@/lib/rut";
-import { guardianSchema, type GuardianFormData } from "@/lib/schemas/guardian.schema";
+import {
+  guardianSchema,
+  type GuardianFormData,
+} from "@/lib/schemas/guardian.schema";
 import { fetchAllStudents } from "@/lib/fetch-all-pages";
 import { cmdkPersonFilter } from "@/lib/flexible-search";
 
@@ -27,7 +58,12 @@ export default function GuardiansPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const prevDebouncedSearch = useRef<string | null>(null);
-  const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
+  const [meta, setMeta] = useState({
+    total: 0,
+    page: 1,
+    limit: LIMIT,
+    lastPage: 1,
+  });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<Guardian | null>(null);
@@ -38,7 +74,14 @@ export default function GuardiansPage() {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentPickerOpen, setStudentPickerOpen] = useState(false);
 
-  const { register, control, handleSubmit, reset, setValue, formState: { errors } } = useForm<GuardianFormData>({
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<GuardianFormData>({
     resolver: zodResolver(guardianSchema),
     defaultValues: { rut: "", name: "", email: "", phone: "", studentIds: [] },
   });
@@ -64,7 +107,11 @@ export default function GuardiansPage() {
     (async () => {
       setLoading(true);
       try {
-        const res = await guardiansApi.getAll(page, LIMIT, debouncedSearch || undefined);
+        const res = await guardiansApi.getAll(
+          page,
+          LIMIT,
+          debouncedSearch || undefined,
+        );
         if (cancelled) return;
         setGuardians(res.data);
         setMeta({
@@ -75,7 +122,9 @@ export default function GuardiansPage() {
         });
       } catch (err: unknown) {
         if (!cancelled) {
-          toast.error(err instanceof Error ? err.message : "Error al cargar apoderados");
+          toast.error(
+            err instanceof Error ? err.message : "Error al cargar apoderados",
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -90,7 +139,11 @@ export default function GuardiansPage() {
   const reloadCurrent = async () => {
     setLoading(true);
     try {
-      const res = await guardiansApi.getAll(page, LIMIT, debouncedSearch || undefined);
+      const res = await guardiansApi.getAll(
+        page,
+        LIMIT,
+        debouncedSearch || undefined,
+      );
       setGuardians(res.data);
       setMeta({
         total: res.meta.total,
@@ -99,7 +152,9 @@ export default function GuardiansPage() {
         lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
       });
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al cargar apoderados");
+      toast.error(
+        err instanceof Error ? err.message : "Error al cargar apoderados",
+      );
     } finally {
       setLoading(false);
     }
@@ -121,7 +176,9 @@ export default function GuardiansPage() {
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          toast.error(err instanceof Error ? err.message : "Error al cargar alumnos");
+          toast.error(
+            err instanceof Error ? err.message : "Error al cargar alumnos",
+          );
         }
       } finally {
         if (!cancelled) setStudentsLoading(false);
@@ -195,7 +252,11 @@ export default function GuardiansPage() {
       toast.success("Apoderado eliminado exitosamente");
       await reloadCurrent();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al eliminar. Puede tener alumnos asociados.");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Error al eliminar. Puede tener alumnos asociados.",
+      );
     } finally {
       setDeleteId(null);
     }
@@ -206,7 +267,10 @@ export default function GuardiansPage() {
     const toastId = toast.loading("Generando Excel...");
     try {
       const blob = await guardiansApi.export();
-      downloadBlob(blob, `apoderados_${new Date().toISOString().split("T")[0]}.xlsx`);
+      downloadBlob(
+        blob,
+        `apoderados_${new Date().toISOString().split("T")[0]}.xlsx`,
+      );
       toast.success("Descarga completada", { id: toastId });
     } catch {
       toast.error("Error al exportar", { id: toastId });
@@ -216,11 +280,13 @@ export default function GuardiansPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Apoderados</h1>
-          <p className="text-[var(--color-text-secondary)] mt-1">Gestión de apoderados / tutores</p>
+          <p className="text-[var(--color-text-secondary)] mt-1">
+            Gestión de apoderados / tutores
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -248,7 +314,9 @@ export default function GuardiansPage() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full md:w-1/2 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
         />
-        <span className="text-sm text-[var(--color-text-muted)]">{meta.total} apoderados en total</span>
+        <span className="text-sm text-[var(--color-text-muted)]">
+          {meta.total} apoderados en total
+        </span>
       </div>
 
       <div className="glass rounded-2xl overflow-hidden">
@@ -257,33 +325,105 @@ export default function GuardiansPage() {
             <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : guardians.length === 0 ? (
-          <div className="text-center py-16 text-[var(--color-text-muted)]">No hay apoderados que coincidan con la búsqueda</div>
+          <div className="text-center py-16 text-[var(--color-text-muted)]">
+            No hay apoderados que coincidan con la búsqueda
+          </div>
         ) : (
           <>
             <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                  <th className="px-6 py-4 whitespace-nowrap">RUT</th><th className="px-6 py-4">Nombre</th><th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Teléfono</th><th className="px-6 py-4">Alumnos</th><th className="px-6 py-4 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-border)]">
-                {guardians.map((g) => (
-                  <tr key={g.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
-                    <td className="px-6 py-4 text-sm font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">{g.rut || "—"}</td>
-                    <td className="px-6 py-4 font-medium text-white">{g.name}</td>
-                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.email || "—"}</td>
-                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">{g.phone || "—"}</td>
-                    <td className="px-6 py-4"><span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400">{g._count?.students ?? 0}</span></td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      <button onClick={() => openEditDialog(g)} className="text-sm text-[var(--color-primary)] hover:underline">Editar</button>
-                      <button onClick={() => setDeleteId(g.id)} className="text-sm text-red-400 hover:underline">Eliminar</button>
-                    </td>
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
+                    <th className="px-6 py-4 whitespace-nowrap">RUT</th>
+                    <th className="px-6 py-4">Nombre</th>
+                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">Teléfono</th>
+                    <th className="px-6 py-4">Grupo Familiar</th>
+                    <th className="px-6 py-4">Deuda Familiar</th>
+                    <th className="px-6 py-4 text-right">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {guardians.map((g) => (
+                    <tr
+                      key={g.id}
+                      className="hover:bg-[var(--color-surface-hover)] transition-colors"
+                    >
+                      <td className="px-6 py-4 text-sm font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">
+                        {g.rut || "—"}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-white">
+                        {g.name}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">
+                        {g.email || "—"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">
+                        {g.phone || "—"}
+                      </td>
+                      <td className="px-6 py-4 min-w-[280px]">
+                        {g.students.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            {g.students.map((student) => (
+                              <Link
+                                key={student.id}
+                                href={`/alumnos/${student.id}/finanzas`}
+                                className="block"
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className="flex justify-between w-full gap-3 hover:bg-[var(--color-surface-hover)]"
+                                >
+                                  <span className="truncate">
+                                    {student.name} - {student.course.name}
+                                  </span>
+                                  {student.overdueDebt > 0 && (
+                                    <span className="shrink-0 font-semibold text-red-500">
+                                      $
+                                      {student.overdueDebt.toLocaleString(
+                                        "es-CL",
+                                      )}
+                                    </span>
+                                  )}
+                                </Badge>
+                              </Link>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-[var(--color-text-muted)]">
+                            Sin alumnos asociados
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {g.familyOverdueDebt > 0 ? (
+                          <span className="text-lg text-red-600 font-bold">
+                            ${g.familyOverdueDebt.toLocaleString("es-CL")}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-[var(--color-text-muted)]">
+                            Familia al día
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button
+                          onClick={() => openEditDialog(g)}
+                          className="text-sm text-[var(--color-primary)] hover:underline"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(g.id)}
+                          className="text-sm text-red-400 hover:underline"
+                        >
+                          Eliminar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             <TablePagination
               page={meta.page}
@@ -300,12 +440,16 @@ export default function GuardiansPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">{editingGuardian ? "Editar Apoderado" : "Nuevo Apoderado"}</DialogTitle>
+            <DialogTitle className="text-xl font-bold">
+              {editingGuardian ? "Editar Apoderado" : "Nuevo Apoderado"}
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT</label>
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  RUT
+                </label>
                 <input
                   {...register("rut")}
                   placeholder="12.345.678-9"
@@ -316,25 +460,62 @@ export default function GuardiansPage() {
                   }}
                   onBlur={(e) => {
                     const val = e.target.value.trim();
-                    setValue("rut", val ? formatRut(val) : "", { shouldValidate: true });
+                    setValue("rut", val ? formatRut(val) : "", {
+                      shouldValidate: true,
+                    });
                   }}
                 />
-                {errors.rut && <p className="text-red-400 text-xs mt-1">{errors.rut.message}</p>}
+                {errors.rut && (
+                  <p className="text-red-400 text-xs mt-1">
+                    {errors.rut.message}
+                  </p>
+                )}
               </div>
               <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Nombre *</label>
-                <input {...register("name")} placeholder="Nombre completo" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
-                {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Nombre *
+                </label>
+                <input
+                  {...register("name")}
+                  placeholder="Nombre completo"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+                />
+                {errors.name && (
+                  <p className="text-red-400 text-xs mt-1">
+                    {errors.name.message}
+                  </p>
+                )}
               </div>
               <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Email</label>
-                <input {...register("email")} type="email" placeholder="correo@ejemplo.cl" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
-                {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>}
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Email
+                </label>
+                <input
+                  {...register("email")}
+                  type="email"
+                  placeholder="correo@ejemplo.cl"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+                />
+                {errors.email && (
+                  <p className="text-red-400 text-xs mt-1">
+                    {errors.email.message}
+                  </p>
+                )}
               </div>
               <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Teléfono</label>
-                <input {...register("phone")} placeholder="+56 9 1234 5678" className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none" />
-                {errors.phone && <p className="text-red-400 text-xs mt-1">{errors.phone.message}</p>}
+                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  Teléfono
+                </label>
+                <input
+                  {...register("phone")}
+                  placeholder="+56 9 1234 5678"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+                />
+                {errors.phone && (
+                  <p className="text-red-400 text-xs mt-1">
+                    {errors.phone.message}
+                  </p>
+                )}
               </div>
               <div className="col-span-full">
                 <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
@@ -346,11 +527,16 @@ export default function GuardiansPage() {
                   render={({ field }) => {
                     const selectedIds = field.value ?? [];
                     const selectedSet = new Set(selectedIds);
-                    const studentById = new Map(allStudents.map((s) => [s.id, s]));
+                    const studentById = new Map(
+                      allStudents.map((s) => [s.id, s]),
+                    );
 
                     return (
                       <div className="space-y-2">
-                        <Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
+                        <Popover
+                          open={studentPickerOpen}
+                          onOpenChange={setStudentPickerOpen}
+                        >
                           <PopoverTrigger asChild>
                             <button
                               type="button"
@@ -365,11 +551,19 @@ export default function GuardiansPage() {
                               <DropdownChevron />
                             </button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[min(450px,calc(100vw-2rem))] p-0 z-[60]" align="start">
-                            <Command filter={cmdkPersonFilter} className="bg-transparent">
+                          <PopoverContent
+                            className="w-[min(450px,calc(100vw-2rem))] p-0 z-[60]"
+                            align="start"
+                          >
+                            <Command
+                              filter={cmdkPersonFilter}
+                              className="bg-transparent"
+                            >
                               <CommandInput placeholder="Nombre o RUT del alumno..." />
                               <CommandList>
-                                <CommandEmpty>No se encontró el alumno.</CommandEmpty>
+                                <CommandEmpty>
+                                  No se encontró el alumno.
+                                </CommandEmpty>
                                 <CommandGroup>
                                   {allStudents.map((s) => (
                                     <CommandItem
@@ -379,7 +573,10 @@ export default function GuardiansPage() {
                                       className="cursor-pointer"
                                       onSelect={() => {
                                         if (!selectedSet.has(s.id)) {
-                                          field.onChange([...selectedIds, s.id]);
+                                          field.onChange([
+                                            ...selectedIds,
+                                            s.id,
+                                          ]);
                                         }
                                         setStudentPickerOpen(false);
                                       }}
@@ -388,7 +585,9 @@ export default function GuardiansPage() {
                                         <span>{s.name}</span>
                                         <span className="text-xs text-[var(--color-text-muted)]">
                                           {s.rut} — {s.course.name}
-                                          {selectedSet.has(s.id) ? " (ya asociado)" : ""}
+                                          {selectedSet.has(s.id)
+                                            ? " (ya asociado)"
+                                            : ""}
                                         </span>
                                       </div>
                                     </CommandItem>
@@ -408,12 +607,16 @@ export default function GuardiansPage() {
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
                                 >
                                   <span className="max-w-[200px] truncate">
-                                    {student ? `${student.name} (${student.rut})` : `Alumno #${id}`}
+                                    {student
+                                      ? `${student.name} (${student.rut})`
+                                      : `Alumno #${id}`}
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      field.onChange(selectedIds.filter((sid) => sid !== id))
+                                      field.onChange(
+                                        selectedIds.filter((sid) => sid !== id),
+                                      )
                                     }
                                     className="p-0.5 rounded hover:bg-emerald-500/20 text-emerald-300 transition-colors"
                                     title="Quitar alumno"
@@ -432,8 +635,18 @@ export default function GuardiansPage() {
               </div>
             </div>
             <DialogFooter className="mt-6">
-              <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors">Cancelar</button>
-              <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-50">
+              <button
+                type="button"
+                onClick={() => setIsDialogOpen(false)}
+                className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-50"
+              >
                 {isSubmitting ? "Guardando..." : "Guardar"}
               </button>
             </DialogFooter>
@@ -441,15 +654,28 @@ export default function GuardiansPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+      <AlertDialog
+        open={!!deleteId}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
-            <AlertDialogDescription className="text-[var(--color-text-secondary)]">Esta acción no se puede deshacer. Se eliminará permanentemente este apoderado.</AlertDialogDescription>
+            <AlertDialogDescription className="text-[var(--color-text-secondary)]">
+              Esta acción no se puede deshacer. Se eliminará permanentemente
+              este apoderado.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white border-0">Sí, eliminar</AlertDialogAction>
+            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white border-0"
+            >
+              Sí, eliminar
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
