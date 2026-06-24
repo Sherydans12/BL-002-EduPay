@@ -54,19 +54,34 @@ export class StudentsService {
       ...(buildStudentSearchWhere(search) ?? {}),
     };
 
-    const [data, total] = await Promise.all([
+    const [students, total] = await Promise.all([
       this.prisma.student.findMany({
         where,
         orderBy: { name: 'asc' },
-        include: { course: true, guardian: true },
+        include: {
+          course: true,
+          guardian: true,
+          charges: {
+            where: { status: 'OVERDUE', deletedAt: null },
+            select: { amount: true, paidAmount: true },
+          },
+        },
         skip,
         take: limit,
       }),
       this.prisma.student.count({ where }),
     ]);
 
+    const dataWithDebt = students.map(({ charges, ...student }) => {
+      const overdueDebt = charges.reduce(
+        (sum, charge) => sum + (charge.amount - charge.paidAmount),
+        0,
+      );
+      return { ...student, overdueDebt };
+    });
+
     return {
-      data,
+      data: dataWithDebt,
       meta: {
         total,
         page,

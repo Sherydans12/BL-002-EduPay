@@ -182,6 +182,7 @@ export interface Student {
   name: string;
   status: StudentStatus;
   financialSetup: FinancialSetupStatus;
+  overdueDebt: number;
   courseId: number;
   guardianId: number;
   course: Course;

@@ -271,6 +271,7 @@ export default function StudentsPage() {
                   <th className="px-6 py-4">Estado</th>
                   <th className="px-6 py-4">Curso</th>
                   <th className="px-6 py-4">Apoderado</th>
+                  <th className="px-6 py-4">Finanzas</th>
                   <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -303,6 +304,23 @@ export default function StudentsPage() {
                           </Tooltip>
                         )}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col gap-1.5 items-start">
+                        <Badge
+                          variant={s.financialSetup === "CONFIGURED" ? "success" : "warning"}
+                          className="px-2 py-0 text-[10px]"
+                        >
+                          {s.financialSetup === "CONFIGURED" ? "Setup OK" : "Setup Pendiente"}
+                        </Badge>
+                        {s.overdueDebt > 0 ? (
+                          <span className="text-red-600 font-semibold text-xs">
+                            ${s.overdueDebt.toLocaleString("es-CL")}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--color-text-muted)] text-xs">Al día</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="inline-flex items-center justify-end gap-2">
