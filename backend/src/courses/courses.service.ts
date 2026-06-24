@@ -21,16 +21,55 @@ export class CoursesService {
       ...(buildCourseSearchWhere(search) ?? {}),
     };
 
-    const [data, total] = await Promise.all([
+    const [courses, total] = await Promise.all([
       this.prisma.course.findMany({
         where,
         orderBy: { id: 'asc' },
-        include: { _count: { select: { students: true } } },
+        include: {
+          students: {
+            where: { status: 'ACTIVE', deletedAt: null },
+            include: {
+              charges: { where: { deletedAt: null } },
+            },
+          },
+        },
         skip,
         take: limit,
       }),
       this.prisma.course.count({ where }),
     ]);
+
+    const data = courses.map(({ students, ...course }) => {
+      const expectedRevenue = students.reduce(
+        (courseTotal, student) =>
+          courseTotal +
+          student.charges.reduce(
+            (studentTotal, charge) => studentTotal + charge.amount,
+            0,
+          ),
+        0,
+      );
+
+      const overdueDebt = students.reduce(
+        (courseTotal, student) =>
+          courseTotal +
+          student.charges
+            .filter((charge) => charge.status === 'OVERDUE')
+            .reduce(
+              (studentTotal, charge) =>
+                studentTotal + (charge.amount - charge.paidAmount),
+              0,
+            ),
+        0,
+      );
+
+      return {
+        ...course,
+        activeStudents: students.length,
+        expectedRevenue,
+        overdueDebt,
+      };
+    });
 
     return {
       data,

@@ -3,12 +3,12 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { coursesApi, downloadBlob } from "@/lib/api";
-import type { Course } from "@/lib/api";
+import type { CourseWithStats } from "@/lib/api";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -21,8 +21,16 @@ type CourseFormData = z.infer<typeof courseSchema>;
 
 const LIMIT = 20;
 
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
 export default function CoursesPage() {
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [courses, setCourses] = useState<CourseWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -31,7 +39,7 @@ export default function CoursesPage() {
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: LIMIT, lastPage: 1 });
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [editingCourse, setEditingCourse] = useState<CourseWithStats | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -108,7 +116,7 @@ export default function CoursesPage() {
     setIsDialogOpen(true);
   };
 
-  const openEditDialog = (c: Course) => {
+  const openEditDialog = (c: CourseWithStats) => {
     setEditingCourse(c);
     reset({ name: c.name });
     setIsDialogOpen(true);
@@ -163,7 +171,7 @@ export default function CoursesPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Cursos</h1>
@@ -214,7 +222,9 @@ export default function CoursesPage() {
                 <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
                   <th className="px-6 py-4">ID</th>
                   <th className="px-6 py-4 whitespace-nowrap">Curso</th>
-                  <th className="px-6 py-4">Alumnos</th>
+                  <th className="px-6 py-4">Alumnos Activos</th>
+                  <th className="px-6 py-4">Proyección Anual</th>
+                  <th className="px-6 py-4">Deuda Morosa</th>
                   <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -226,9 +236,24 @@ export default function CoursesPage() {
                       <span className="inline-flex font-medium text-white whitespace-nowrap">{c.name}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400">
-                        {c._count?.students ?? 0}
+                      <span className="inline-flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
+                        <Users className="w-4 h-4" />
+                        {c.activeStudents}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">
+                      {formatCurrency(c.expectedRevenue)}
+                    </td>
+                    <td className="px-6 py-4">
+                      {c.overdueDebt > 0 ? (
+                        <span className="font-bold text-red-600">
+                          {formatCurrency(c.overdueDebt)}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-[var(--color-text-muted)]">
+                          Sano
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right space-x-2">
                       <Link

@@ -133,6 +133,12 @@ export interface Course {
   _count?: { students: number };
 }
 
+export interface CourseWithStats extends Course {
+  activeStudents: number;
+  expectedRevenue: number;
+  overdueDebt: number;
+}
+
 export interface Guardian {
   id: number;
   rut?: string | null;
@@ -396,7 +402,7 @@ export const coursesApi = {
     if (limit) params.set("limit", limit.toString());
     if (search?.trim()) params.set("search", search.trim());
     const query = params.toString() ? `?${params.toString()}` : "";
-    return request<PaginatedResponse<Course>>(`/courses${query}`);
+    return request<PaginatedResponse<CourseWithStats>>(`/courses${query}`);
   },
   getOne: (id: number) => request<CourseWithStudents>(`/courses/${id}`),
   create: (data: { name: string }) =>
