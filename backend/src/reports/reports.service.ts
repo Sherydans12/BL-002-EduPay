@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import * as exceljs from 'exceljs';
-import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
 import { FilterPaymentsDto } from '../payments/dto/filter-payments.dto';
@@ -28,8 +27,7 @@ export class ReportsService {
 
     if (startDate || endDate) {
       where.paymentDate = {};
-      if (startDate)
-        where.paymentDate.gte = new Date(startDate);
+      if (startDate) where.paymentDate.gte = new Date(startDate);
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
@@ -150,13 +148,28 @@ export class ReportsService {
     );
   }
 
-  async generateMonthlyReport(res: Response): Promise<void> {
+  async generateMonthlyReport(
+    startDate?: string,
+    endDate?: string,
+  ): Promise<Buffer> {
     const workbook = new exceljs.Workbook();
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const paymentDateFilter: Prisma.DateTimeFilter =
+      startDate || endDate
+        ? {
+            ...(startDate
+              ? { gte: new Date(`${startDate}T00:00:00.000Z`) }
+              : {}),
+            ...(endDate ? { lte: new Date(`${endDate}T23:59:59.999Z`) } : {}),
+          }
+        : {
+            gte: monthStart,
+            lt: nextMonthStart,
+          };
 
-    const incomeSheet = workbook.addWorksheet('Ingresos del Mes');
+    const incomeSheet = workbook.addWorksheet('Ingresos');
     incomeSheet.columns = [
       { header: 'Fecha', key: 'fecha', width: 14 },
       { header: 'N° Boleta', key: 'boleta', width: 18 },
@@ -168,10 +181,8 @@ export class ReportsService {
     const payments = await this.prisma.payment.findMany({
       where: {
         deletedAt: null,
-        paymentDate: {
-          gte: monthStart,
-          lt: nextMonthStart,
-        },
+        paymentGroup: { is: { deletedAt: null } },
+        paymentDate: paymentDateFilter,
       },
       include: {
         student: true,
@@ -244,15 +255,6 @@ export class ReportsService {
     overdueSheet.getColumn('fechaVencimiento').numFmt = 'dd-mm-yyyy';
     overdueSheet.getColumn('saldoPendiente').numFmt = '"$"#,##0';
 
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    res.setHeader(
-      'Content-Disposition',
-      'attachment; filename=Reporte_Financiero_Mes.xlsx',
-    );
-    await workbook.xlsx.write(res);
-    res.end();
+    return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 }

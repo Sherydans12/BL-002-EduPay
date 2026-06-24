@@ -6,6 +6,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { FilterPaymentsDto } from '../payments/dto/filter-payments.dto';
+import { MonthlyReportQueryDto } from './dto/monthly-report-query.dto';
 
 @ApiTags('reports')
 @Controller('reports')
@@ -32,13 +33,29 @@ export class ReportsController {
 
   @Get('monthly')
   @RequirePermissions('view:reports')
-  @ApiOperation({ summary: 'Exportar cierre financiero mensual a XLSX' })
+  @ApiOperation({
+    summary: 'Exportar reporte financiero por rango de fechas a XLSX',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Archivo XLSX con ingresos del mes y morosidad actual',
+    description: 'Archivo XLSX con ingresos filtrados y morosidad actual',
   })
-  async exportMonthly(@Res() res: Response) {
-    return this.reportsService.generateMonthlyReport(res);
+  async exportMonthly(
+    @Query() query: MonthlyReportQueryDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.reportsService.generateMonthlyReport(
+      query.startDate,
+      query.endDate,
+    );
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition':
+        'attachment; filename=Reporte_Financiero_Personalizado.xlsx',
+      'Content-Length': String(buffer.length),
+    });
+    res.end(buffer);
   }
 
   @Get('export')

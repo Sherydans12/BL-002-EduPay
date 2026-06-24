@@ -7,8 +7,9 @@ import type { Payment, Course, Student, CourseSummary, ReportSummary } from "@/l
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DownloadCloud, Search, FileSpreadsheet, ChevronRight } from "lucide-react";
+import { Search, FileSpreadsheet, ChevronRight, Loader2 } from "lucide-react";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
+import { Button } from "@/components/ui/button";
 import { formatPaymentDate } from "@/lib/format-payment-date";
 import { METHOD_LABELS } from "@/lib/payment-method-labels";
 import {
@@ -99,44 +100,14 @@ export default function ReportsPage() {
       const blob = await reportsApi.export({
         dateFrom: appliedFilters.dateFrom || undefined,
         dateTo: appliedFilters.dateTo || undefined,
-        courseId: appliedFilters.courseId || undefined,
-        studentId: appliedFilters.studentId || undefined,
       });
-      downloadBlob(blob, `reporte_${new Date().toISOString().split("T")[0]}.xlsx`);
+      downloadBlob(blob, "Reporte_Financiero_Personalizado.xlsx");
       toast.success("Descarga completada", { id: toastId });
     } catch {
       toast.error("Error al exportar", { id: toastId });
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const exportToCsv = () => {
-    if (!globalSummary) {
-      toast.error("No hay datos para exportar");
-      return;
-    }
-    
-    const headers = ["Metodo de Pago", "Transacciones", "Total Recaudado"];
-    const rows = globalSummary.byMethod.map(m => [
-      METHOD_LABELS[m.method] || m.method,
-      m.count.toString(),
-      m.total.toString()
-    ]);
-    
-    // Total row
-    rows.push(["TOTAL", globalSummary.totalTransactions.toString(), globalSummary.totalCollected.toString()]);
-    
-    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" }); // UTF-8 BOM
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `reporte_pagos_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success("Archivo CSV exportado exitosamente");
   };
 
   const pieData = globalSummary?.byMethod.map(m => ({
@@ -151,14 +122,24 @@ export default function ReportsPage() {
           <h1 className="text-3xl font-bold text-white">Reportes de Pagos</h1>
           <p className="text-[var(--color-text-secondary)] mt-1">Busca, filtra y analiza los pagos registrados</p>
         </div>
-        <button
+        <Button
           onClick={handleExportExcel}
           disabled={isExporting}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
+          size="lg"
+          className="bg-emerald-600 text-white hover:bg-emerald-500"
         >
-          <FileSpreadsheet className="w-4 h-4" />
-          {isExporting ? "Exportando..." : "Exportar Excel"}
-        </button>
+          {isExporting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Procesando Excel...
+            </>
+          ) : (
+            <>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Exportar a Excel
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Filters */}
@@ -228,7 +209,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center">
         <div className="flex gap-1 p-1 rounded-xl bg-[var(--color-surface)] w-fit">
           <button onClick={() => setTab("table")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === "table" ? "bg-[var(--color-primary)] text-white shadow" : "text-[var(--color-text-muted)] hover:text-white"}`}>
             Tabla de Pagos
@@ -237,11 +218,6 @@ export default function ReportsPage() {
             Resumen Analítico
           </button>
         </div>
-        {tab === "summary" && (
-          <button onClick={exportToCsv} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-all">
-            <DownloadCloud className="w-4 h-4" /> Exportar CSV
-          </button>
-        )}
       </div>
 
       {/* Table View */}
