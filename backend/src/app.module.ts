@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -19,6 +24,8 @@ import { ChargesModule } from './charges/charges.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BillingCronService } from './billing-cron/billing-cron.service';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { PortalModule } from './portal/portal.module';
+import { TenantMiddleware } from './core/tenant/tenant.middleware';
 
 @Module({
   controllers: [AppController],
@@ -39,6 +46,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     ChargesModule,
     NotificationsModule,
     AnalyticsModule,
+    PortalModule,
   ],
   providers: [
     {
@@ -46,6 +54,13 @@ import { AnalyticsModule } from './analytics/analytics.module';
       useClass: JwtAuthGuard,
     },
     BillingCronService,
+    TenantMiddleware,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(TenantMiddleware)
+      .forRoutes({ path: '*path', method: RequestMethod.ALL });
+  }
+}

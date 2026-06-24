@@ -16,6 +16,7 @@ enum PaymentMethod {
   CREDIT
   CHECK
   TRANSFER
+  WEBPAY
 }
 
 enum StudentStatus {
@@ -57,20 +58,46 @@ enum NotificationStatus {
 
 // ─── Models ──────────────────────────────────────────────────
 
+model Tenant {
+  id               String            @id
+  name             String
+  slug             String            @unique
+  isActive         Boolean           @default(true)
+  courses          Course[]
+  guardians        Guardian[]
+  students         Student[]
+  paymentConcepts  PaymentConcept[]
+  paymentGroups    PaymentGroup[]
+  payments         Payment[]
+  charges          Charge[]
+  notificationLogs NotificationLog[]
+  users            User[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@map("tenants")
+}
+
 model Course {
   id        Int       @id @default(autoincrement())
+  tenantId  String    @default("colegio-conquistadores")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   name      String
   students  Student[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  @@unique([tenantId, name])
+  @@index([tenantId])
   @@map("courses")
 }
 
 model Guardian {
   id            Int       @id @default(autoincrement())
-  rut           String?   @unique
+  tenantId      String    @default("colegio-conquistadores")
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  rut           String?
   /**
    * Derivado en BD para búsqueda sin puntos/guiones
    */
@@ -83,12 +110,16 @@ model Guardian {
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
 
+  @@unique([tenantId, rut])
+  @@index([tenantId])
   @@map("guardians")
 }
 
 model Student {
   id               Int                  @id @default(autoincrement())
-  rut              String               @unique
+  tenantId         String               @default("colegio-conquistadores")
+  tenant           Tenant               @relation(fields: [tenantId], references: [id])
+  rut              String
   /**
    * Derivado en BD para búsqueda sin puntos/guiones
    */
@@ -107,12 +138,16 @@ model Student {
   updatedAt        DateTime             @updatedAt
   deletedAt        DateTime?
 
+  @@unique([tenantId, rut])
+  @@index([tenantId])
   @@map("students")
 }
 
 model PaymentConcept {
   id            Int       @id @default(autoincrement())
-  name          String    @unique
+  tenantId      String    @default("colegio-conquistadores")
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  name          String
   defaultAmount Int
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
@@ -121,11 +156,16 @@ model PaymentConcept {
   payments      Payment[]
   charges       Charge[]
 
+  @@unique([tenantId, name])
+  @@index([tenantId])
   @@map("payment_concepts")
 }
 
 model PaymentGroup {
   id               Int               @id @default(autoincrement())
+  tenantId         String            @default("colegio-conquistadores")
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  buyOrder         String?
   totalAmount      Int
   method           PaymentMethod
   paymentDate      DateTime
@@ -140,11 +180,15 @@ model PaymentGroup {
   updatedAt        DateTime          @updatedAt
   deletedAt        DateTime?
 
+  @@unique([tenantId, buyOrder])
+  @@index([tenantId])
   @@map("payment_groups")
 }
 
 model Payment {
   id          Int           @id @default(autoincrement())
+  tenantId    String        @default("colegio-conquistadores")
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
   amount      Int
   method      PaymentMethod
   paymentDate DateTime
@@ -177,11 +221,14 @@ model Payment {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  @@index([tenantId])
   @@map("payments")
 }
 
 model Charge {
   id         Int            @id @default(autoincrement())
+  tenantId   String         @default("colegio-conquistadores")
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
   studentId  Int
   student    Student        @relation(fields: [studentId], references: [id])
   conceptId  Int
@@ -196,11 +243,14 @@ model Charge {
   updatedAt  DateTime       @updatedAt
   deletedAt  DateTime?
 
+  @@index([tenantId])
   @@map("charges")
 }
 
 model NotificationLog {
   id             Int                @id @default(autoincrement())
+  tenantId       String             @default("colegio-conquistadores")
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
   type           NotificationType
   status         NotificationStatus @default(PENDING)
   recipientEmail String
@@ -215,11 +265,14 @@ model NotificationLog {
   updatedAt      DateTime           @updatedAt
   deletedAt      DateTime?
 
+  @@index([tenantId])
   @@map("notification_logs")
 }
 
 model User {
   id        String   @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
   email     String   @unique
   password  String
   name      String
@@ -229,6 +282,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tenantId])
   @@map("users")
 }
 

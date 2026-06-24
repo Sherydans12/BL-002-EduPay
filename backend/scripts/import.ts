@@ -24,7 +24,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 /** Ruta al archivo Excel, relativa a la raíz del backend */
-const EXCEL_FILE_PATH = path.resolve(__dirname, '..', 'uploads', 'importacion.xlsx');
+const EXCEL_FILE_PATH = path.resolve(
+  __dirname,
+  '..',
+  'uploads',
+  'importacion.xlsx',
+);
+const PRIMARY_TENANT_ID = 'colegio-conquistadores';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -185,10 +191,7 @@ function analyzeSheet(worksheet: ExcelJS.Worksheet): SheetLayout | null {
  *   - Formato B: primer nombre + apellido paterno + apellido materno en celdas separadas
  *     (aunque los apellidos no tengan encabezado propio, como en la Hoja 1)
  */
-function extractStudentName(
-  row: ExcelJS.Row,
-  layout: SheetLayout,
-): string {
+function extractStudentName(row: ExcelJS.Row, layout: SheetLayout): string {
   // Determinar el límite derecho: primera columna "especial" que esté a la DERECHA de colNombre
   const rightBoundary = Math.min(
     layout.colRut > layout.colNombre ? layout.colRut : Infinity,
@@ -250,7 +253,9 @@ async function main() {
   let totalErrors = 0;
 
   for (const worksheet of workbook.worksheets) {
-    console.log(`\n── Hoja: "${worksheet.name}" (${worksheet.rowCount} filas) ─────────────`);
+    console.log(
+      `\n── Hoja: "${worksheet.name}" (${worksheet.rowCount} filas) ─────────────`,
+    );
 
     // ── Analizar el layout de la hoja ────────────────────────────────────────
     const layout = analyzeSheet(worksheet);
@@ -264,26 +269,30 @@ async function main() {
     console.log(
       `  Encabezado en fila ${layout.headerRowIndex} | ` +
         `RUT=col${layout.colRut} | NOMBRE=col${layout.colNombre}` +
-        (layout.colCorreo ? ` | CORREO=col${layout.colCorreo}` : ' | CORREO=N/A'),
+        (layout.colCorreo
+          ? ` | CORREO=col${layout.colCorreo}`
+          : ' | CORREO=N/A'),
     );
     console.log(`  Datos desde fila ${layout.headerRowIndex + 1}`);
 
     // ── Upsert del Curso ──────────────────────────────────────────────────────
     let courseId: number;
     const existingCourse = await prisma.course.findFirst({
-      where: { name: layout.nombreCurso },
+      where: { tenantId: PRIMARY_TENANT_ID, name: layout.nombreCurso },
       select: { id: true },
     });
     if (existingCourse) {
       courseId = existingCourse.id;
     } else {
       const newCourse = await prisma.course.create({
-        data: { name: layout.nombreCurso },
+        data: { tenantId: PRIMARY_TENANT_ID, name: layout.nombreCurso },
         select: { id: true },
       });
       courseId = newCourse.id;
       totalCoursesCreated++;
-      console.log(`  Curso creado en BD: "${layout.nombreCurso}" (id=${courseId})`);
+      console.log(
+        `  Curso creado en BD: "${layout.nombreCurso}" (id=${courseId})`,
+      );
     }
 
     let sheetCreated = 0;
@@ -342,17 +351,28 @@ async function main() {
         const nombreApoderado = `Apoderado de ${nombreAlumno}`;
 
         const guardianBefore = await prisma.guardian.findUnique({
-          where: { rut: rutApoderadoPlaceholder },
+          where: {
+            tenantId_rut: {
+              tenantId: PRIMARY_TENANT_ID,
+              rut: rutApoderadoPlaceholder,
+            },
+          },
           select: { id: true },
         });
 
         const guardian = await prisma.guardian.upsert({
-          where: { rut: rutApoderadoPlaceholder },
+          where: {
+            tenantId_rut: {
+              tenantId: PRIMARY_TENANT_ID,
+              rut: rutApoderadoPlaceholder,
+            },
+          },
           update: {
             email: emailApoderado,
             ...(telefonoApoderado && { phone: telefonoApoderado }),
           },
           create: {
+            tenantId: PRIMARY_TENANT_ID,
             rut: rutApoderadoPlaceholder,
             name: nombreApoderado,
             email: emailApoderado,
@@ -365,13 +385,23 @@ async function main() {
 
         // ── Upsert Alumno ─────────────────────────────────────────────────────
         const existingStudent = await prisma.student.findUnique({
-          where: { rut: rutAlumno },
+          where: {
+            tenantId_rut: {
+              tenantId: PRIMARY_TENANT_ID,
+              rut: rutAlumno,
+            },
+          },
           select: { id: true },
         });
 
         if (existingStudent) {
           await prisma.student.update({
-            where: { rut: rutAlumno },
+            where: {
+              tenantId_rut: {
+                tenantId: PRIMARY_TENANT_ID,
+                rut: rutAlumno,
+              },
+            },
             data: { name: nombreAlumno, courseId, guardianId: guardian.id },
           });
           sheetUpdated++;
@@ -379,6 +409,7 @@ async function main() {
         } else {
           await prisma.student.create({
             data: {
+              tenantId: PRIMARY_TENANT_ID,
               rut: rutAlumno,
               name: nombreAlumno,
               courseId,
@@ -389,9 +420,7 @@ async function main() {
           totalStudentsCreated++;
         }
 
-        console.log(
-          `  Fila ${rowNumber} OK — ${nombreAlumno} (${rutAlumno})`,
-        );
+        console.log(`  Fila ${rowNumber} OK — ${nombreAlumno} (${rutAlumno})`);
       } catch (error) {
         totalErrors++;
         console.error(

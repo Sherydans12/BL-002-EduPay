@@ -48,6 +48,7 @@ async function bootstrap() {
       : [
           'http://localhost:3000',
           'http://localhost:3001',
+          'http://localhost:3002',
           ...(frontendUrl ? [frontendUrl] : []),
         ],
     credentials: true,
@@ -74,6 +75,15 @@ async function bootstrap() {
         { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
         'access-token',
       )
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'API Key',
+          description: 'Valor de EDUPAY_API_KEY para comunicación S2S',
+        },
+        'portal-api-key',
+      )
       .addTag('auth', 'Autenticación y login')
       .addTag('users', 'Gestión de usuarios')
       .addTag('roles', 'Gestión de roles y permisos')
@@ -82,6 +92,7 @@ async function bootstrap() {
       .addTag('students', 'Gestión de alumnos')
       .addTag('payments', 'Registro y consulta de pagos')
       .addTag('reports', 'Reportes y resúmenes')
+      .addTag('portal', 'Integración Server-to-Server con el Portal de Pagos')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

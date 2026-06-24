@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { tenantContext } from '../../core/tenant/tenant.context';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -38,11 +39,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const permissions = user.role?.permissions.map((p) => p.action) ?? [];
+    const context = tenantContext.getStore();
+    if (context) {
+      context.tenantId = user.tenantId ?? '';
+      context.isSuperAdmin = user.role?.name === 'SUPER_ADMIN';
+    }
 
     return {
       id: user.id,
       email: user.email,
       name: user.name,
+      tenantId: user.tenantId,
       role: user.role?.name,
       permissions,
     };
