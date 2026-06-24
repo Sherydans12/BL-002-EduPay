@@ -28,11 +28,32 @@ export class PaymentConceptsService {
     }
   }
 
-  findAll() {
-    return this.prisma.paymentConcept.findMany({
+  async findAll() {
+    const concepts = await this.prisma.paymentConcept.findMany({
       where: { deletedAt: null },
+      include: {
+        charges: {
+          where: { deletedAt: null },
+          select: { amount: true, paidAmount: true },
+        },
+      },
       orderBy: { name: 'asc' },
     });
+
+    const dataWithKPIs = concepts.map(({ charges, ...concept }) => {
+      const totalBilled = charges.reduce(
+        (sum, charge) => sum + charge.amount,
+        0,
+      );
+      const totalCollected = charges.reduce(
+        (sum, charge) => sum + charge.paidAmount,
+        0,
+      );
+
+      return { ...concept, totalBilled, totalCollected };
+    });
+
+    return dataWithKPIs;
   }
 
   async findOne(id: number) {

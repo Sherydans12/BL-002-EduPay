@@ -218,6 +218,8 @@ export interface PaymentConcept {
   id: number;
   name: string;
   defaultAmount: number;
+  totalBilled: number;
+  totalCollected: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

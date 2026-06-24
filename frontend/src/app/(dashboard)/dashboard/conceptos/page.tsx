@@ -164,7 +164,7 @@ export default function ConceptosPage() {
             <thead className="bg-[var(--color-bg)]/50 text-xs uppercase tracking-wider text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
               <tr>
                 <th className="px-6 py-4 font-medium">Nombre</th>
-                <th className="px-6 py-4 font-medium">Monto por Defecto</th>
+                <th className="px-6 py-4 font-medium">Rendimiento Histórico</th>
                 <th className="px-6 py-4 font-medium">Estado</th>
                 <th className="px-6 py-4 font-medium text-right">Acciones</th>
               </tr>
@@ -176,8 +176,45 @@ export default function ConceptosPage() {
                   className="hover:bg-[var(--color-surface-hover)] transition-colors"
                 >
                   <td className="px-6 py-4 font-medium text-white">{concept.name}</td>
-                  <td className="px-6 py-4 text-[var(--color-success)] font-semibold tabular-nums">
-                    {fmt(concept.defaultAmount)}
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-1.5 tabular-nums">
+                      <span className="text-xs text-[var(--color-text-muted)]">
+                        {fmt(concept.defaultAmount)} base
+                      </span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-sm font-semibold text-emerald-600">
+                          {fmt(concept.totalCollected)}
+                        </span>
+                        <span className="text-xs text-[var(--color-text-muted)]">
+                          de {fmt(concept.totalBilled)}
+                        </span>
+                      </div>
+                      {concept.totalBilled > 0 && (
+                        <div
+                          role="progressbar"
+                          aria-label={`Porcentaje recaudado de ${concept.name}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={Math.min(
+                            100,
+                            Math.round(
+                              (concept.totalCollected / concept.totalBilled) * 100,
+                            ),
+                          )}
+                          className="h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-[var(--color-border)]"
+                        >
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                (concept.totalCollected / concept.totalBilled) * 100,
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <span
