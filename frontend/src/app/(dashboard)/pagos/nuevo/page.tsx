@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -112,8 +112,12 @@ function getChargeBalance(charge: Charge): number {
 
 export default function NewPaymentPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedStudentId = Number(searchParams.get("studentId"));
+  const autoSelectedStudentIdRef = useRef<number | null>(null);
 
   const [students, setStudents] = useState<Student[]>([]);
+  const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [pendingCharges, setPendingCharges] = useState<
     Record<number, Charge[]>
@@ -191,7 +195,9 @@ export default function NewPaymentPage() {
     Promise.all([
       fetchAllStudents().then(setStudents),
       fetchAllGuardians().then(setGuardians),
-    ]).catch(() => {});
+    ])
+      .catch(() => {})
+      .finally(() => setStudentsLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -302,6 +308,41 @@ export default function NewPaymentPage() {
       updateSiblingSuggestions,
     ],
   );
+
+  useEffect(() => {
+    if (
+      !studentsLoaded ||
+      !Number.isInteger(requestedStudentId) ||
+      requestedStudentId <= 0 ||
+      autoSelectedStudentIdRef.current === requestedStudentId
+    ) {
+      return;
+    }
+
+    const requestedStudent = students.find(
+      (student) => student.id === requestedStudentId,
+    );
+
+    autoSelectedStudentIdRef.current = requestedStudentId;
+
+    if (!requestedStudent) {
+      toast.error("No se encontró el alumno indicado en el enlace");
+      return;
+    }
+
+    void handleAddStudent(requestedStudent).catch((err: unknown) => {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "No fue posible cargar la deuda del alumno",
+      );
+    });
+  }, [
+    handleAddStudent,
+    requestedStudentId,
+    students,
+    studentsLoaded,
+  ]);
 
   const handleAddSibling = useCallback(
     async (sibling: Student) => {

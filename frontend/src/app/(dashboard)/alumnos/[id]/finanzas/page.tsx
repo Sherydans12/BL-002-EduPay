@@ -3,10 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Bell, CheckCircle2, ReceiptText, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  Bell,
+  CheckCircle2,
+  CreditCard,
+  FileText,
+  ReceiptText,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { chargesApi, studentsApi } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { chargesApi, resolveUploadUrl, studentsApi } from "@/lib/api";
 import type {
   AccountStatementPayment,
   Charge,
@@ -37,6 +46,7 @@ type Movement =
       credit: number;
       status: AccountStatementPayment["method"];
       balance: number;
+      boletaFileUrl: string | null;
     };
 
 const CHARGE_STATUS_LABELS: Record<ChargeStatus, string> = {
@@ -111,6 +121,10 @@ function buildMovements(
       debit: null,
       credit: payment.amount,
       status: payment.method,
+      boletaFileUrl:
+        payment.paymentGroup?.boletaFileUrl ??
+        payment.boletaFileUrl ??
+        null,
     })),
   ].sort((a, b) => {
     const dateDiff =
@@ -206,13 +220,40 @@ export default function StudentFinancialStatementPage() {
             <ArrowLeft className="h-4 w-4" />
             Volver a alumnos
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-white">{student.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-secondary)]">
-              <Badge variant="secondary">{student.course?.name ?? "Sin curso"}</Badge>
-              <span className="font-mono tabular-nums">{student.rut}</span>
-              <span>{student.guardian?.name ?? "Sin apoderado"}</span>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-bold text-white">{student.name}</h1>
+                <Badge
+                  variant={
+                    student.financialSetup === "CONFIGURED"
+                      ? "success"
+                      : "warning"
+                  }
+                  className="px-2 py-0 text-[10px]"
+                >
+                  {student.financialSetup === "CONFIGURED"
+                    ? "Setup OK"
+                    : "Setup Pendiente"}
+                </Badge>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+                <Badge variant="secondary">
+                  {student.course?.name ?? "Sin curso"}
+                </Badge>
+                <span className="font-mono tabular-nums">{student.rut}</span>
+                <span>{student.guardian?.name ?? "Sin apoderado"}</span>
+              </div>
             </div>
+            <Button
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              render={
+                <Link href={`/pagos/nuevo?studentId=${student.id}`} />
+              }
+            >
+              <CreditCard className="mr-2 h-4 w-4" />
+              Registrar Pago
+            </Button>
           </div>
         </div>
 
@@ -279,6 +320,7 @@ export default function StudentFinancialStatementPage() {
                     <th className="px-5 py-4 text-right">Abono</th>
                     <th className="px-5 py-4 text-right">Saldo</th>
                     <th className="px-5 py-4 text-right">Estado</th>
+                    <th className="px-5 py-4 text-right">Documento</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
@@ -346,6 +388,31 @@ export default function StudentFinancialStatementPage() {
                           </Badge>
                         ) : (
                           <Badge variant="success">{movement.status}</Badge>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        {movement.kind === "payment" &&
+                        movement.boletaFileUrl ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-emerald-400 hover:text-emerald-300"
+                            onClick={() =>
+                              window.open(
+                                resolveUploadUrl(movement.boletaFileUrl!),
+                                "_blank",
+                                "noopener,noreferrer",
+                              )
+                            }
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            Ver Boleta
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-[var(--color-text-muted)]">
+                            -
+                          </span>
                         )}
                       </td>
                     </tr>
