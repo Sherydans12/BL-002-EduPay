@@ -5,14 +5,18 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import * as path from 'path';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
-import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { ChargeStatus, NotificationType, Prisma } from '@prisma/client';
+import { tenantContext } from '../core/tenant/tenant.context';
+import { buildPaymentGroupsWorkbookBuffer } from '../common/excel/payment-groups-sheet.export';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { buildPaymentGroupsWorkbookBuffer } from '../common/excel/payment-groups-sheet.export';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { FilterPaymentsDto } from './dto/filter-payments.dto';
+
+const RELATED_RECORD_NOT_FOUND =
+  'Registro relacionado no encontrado o pertenece a otro colegio';
 
 const paymentLineInclude = {
   student: { include: { course: true, guardian: true } },
@@ -29,6 +33,8 @@ const paymentGroupInclude = {
 
 @Injectable()
 export class PaymentsService implements OnModuleInit {
+  private readonly tenantContext = tenantContext;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
@@ -41,33 +47,89 @@ export class PaymentsService implements OnModuleInit {
 
   /** Migra pagos sin grupo a un PaymentGroup 1:1 (idempotente). */
   async migrateLegacyPayments(): Promise<void> {
-    const orphans = await this.prisma.payment.findMany({
-      where: { paymentGroupId: null, deletedAt: null },
-      orderBy: { id: 'asc' },
+    const tenants = await this.prisma.tenant.findMany({
+      where: { isActive: true },
     });
-    if (orphans.length === 0) return;
 
-    await this.prisma.$transaction(async (tx) => {
-      for (const p of orphans) {
-        const group = await tx.paymentGroup.create({
-          data: {
-            totalAmount: p.amount,
-            method: p.method,
-            paymentDate: p.paymentDate,
-            boletaFileUrl: p.boletaFileUrl,
-            boletaNumber: p.boletaNumber,
-            notes: p.notes,
-          },
-        });
-        await tx.payment.update({
-          where: { id: p.id },
-          data: { paymentGroupId: group.id },
-        });
-      }
-    });
+    for (const tenant of tenants) {
+      await this.tenantContext.run(
+        { tenantId: tenant.id, isSuperAdmin: false },
+        async () => {
+          const orphans = await this.prisma.payment.findMany({
+            where: { paymentGroupId: null, deletedAt: null },
+            orderBy: { id: 'asc' },
+          });
+          if (orphans.length === 0) return;
+
+          await this.prisma.$transaction(async (tx) => {
+            for (const p of orphans) {
+              const group = await tx.paymentGroup.create({
+                data: {
+                  totalAmount: p.amount,
+                  method: p.method,
+                  paymentDate: p.paymentDate,
+                  boletaFileUrl: p.boletaFileUrl,
+                  boletaNumber: p.boletaNumber,
+                  notes: p.notes,
+                },
+              });
+              await tx.payment.update({
+                where: { id: p.id },
+                data: { paymentGroupId: group.id },
+              });
+            }
+          });
+        },
+      );
+    }
+  }
+
+  private async assertPaymentRelationsExist(
+    studentId: number,
+    conceptId?: number | null,
+    chargeId?: number | null,
+  ): Promise<void> {
+    const [student, concept, charge] = await Promise.all([
+      this.prisma.student.findFirst({
+        where: { id: studentId, deletedAt: null },
+        select: { id: true },
+      }),
+      conceptId
+        ? this.prisma.paymentConcept.findFirst({
+            where: { id: conceptId, deletedAt: null },
+            select: { id: true },
+          })
+        : Promise.resolve({ id: null }),
+      chargeId
+        ? this.prisma.charge.findFirst({
+            where: { id: chargeId, studentId, deletedAt: null },
+            select: { id: true },
+          })
+        : Promise.resolve({ id: null }),
+    ]);
+
+    if (!student || !concept || !charge) {
+      throw new NotFoundException(RELATED_RECORD_NOT_FOUND);
+    }
+  }
+
+  private async assertBatchPaymentRelationsExist(
+    allocations: CreatePaymentBatchDto['allocations'],
+  ): Promise<void> {
+    await Promise.all(
+      allocations.map((allocation) =>
+        this.assertPaymentRelationsExist(
+          allocation.studentId,
+          allocation.conceptId,
+          allocation.chargeId,
+        ),
+      ),
+    );
   }
 
   async create(dto: CreatePaymentDto, boletaFileUrl?: string) {
+    await this.assertPaymentRelationsExist(dto.studentId, dto.conceptId);
+
     const paymentDate = new Date(dto.paymentDate);
     const resolvedBoletaUrl = boletaFileUrl ?? null;
     const boletaNumber = dto.boletaNumber?.trim() || null;
@@ -120,19 +182,7 @@ export class PaymentsService implements OnModuleInit {
   }
 
   async createBatch(dto: CreatePaymentBatchDto, boletaFileUrl?: string) {
-    const studentIds = [...new Set(dto.allocations.map((a) => a.studentId))];
-    const students = await this.prisma.student.findMany({
-      where: { id: { in: studentIds }, deletedAt: null },
-      select: { id: true },
-    });
-
-    if (students.length !== studentIds.length) {
-      const found = new Set(students.map((s) => s.id));
-      const missing = studentIds.filter((id) => !found.has(id));
-      throw new NotFoundException(
-        `Alumno(s) no encontrado(s): ${missing.join(', ')}`,
-      );
-    }
+    await this.assertBatchPaymentRelationsExist(dto.allocations);
 
     const paymentDate = new Date(dto.paymentDate);
     const resolvedBoletaUrl = boletaFileUrl ?? dto.boletaFileUrl ?? null;
@@ -179,9 +229,7 @@ export class PaymentsService implements OnModuleInit {
           });
 
           if (!charge) {
-            throw new NotFoundException(
-              `Charge #${allocation.chargeId} not found for student #${allocation.studentId}`,
-            );
+            throw new NotFoundException(RELATED_RECORD_NOT_FOUND);
           }
 
           const nextPaidAmount = charge.paidAmount + allocation.amount;
@@ -200,26 +248,16 @@ export class PaymentsService implements OnModuleInit {
         }
       }
 
-      const result = await tx.paymentGroup.findUniqueOrThrow({
+      return tx.paymentGroup.findUniqueOrThrow({
         where: { id: group.id },
-        include: {
-          payments: {
-            where: { deletedAt: null },
-            include: {
-              student: { include: { course: true, guardian: true } },
-              concept: true,
-            },
-          },
-        },
+        include: paymentGroupInclude,
       });
-
-      return result;
     });
 
     if (!dto.isBoletaPending && dto.boletaNumber && boletaFileUrl) {
       const studentId = dto.allocations[0].studentId;
-      const student = await this.prisma.student.findUnique({
-        where: { id: studentId },
+      const student = await this.prisma.student.findFirst({
+        where: { id: studentId, deletedAt: null },
         include: { guardian: true },
       });
 
@@ -344,15 +382,16 @@ export class PaymentsService implements OnModuleInit {
       }
     }
 
-    if (studentId || courseId) {
-      where.payments = {
-        some: {
-          ...(studentId ? { studentId } : {}),
-          ...(courseId ? { student: { courseId } } : {}),
+    where.payments = {
+      some: {
+        ...(studentId ? { studentId } : {}),
+        deletedAt: null,
+        student: {
           deletedAt: null,
+          ...(courseId ? { courseId } : {}),
         },
-      };
-    }
+      },
+    };
 
     return where;
   }
@@ -396,9 +435,13 @@ export class PaymentsService implements OnModuleInit {
     const where: Prisma.PaymentWhereInput = {
       deletedAt: null,
       paymentGroup: { is: { deletedAt: null } },
+      student: {
+        deletedAt: null,
+        ...(courseId ? { courseId } : {}),
+      },
+      ...(studentId ? { studentId } : {}),
     };
 
-    // Filtro por rango de fechas
     if (dateFrom || dateTo) {
       where.paymentDate = {};
       if (dateFrom) where.paymentDate.gte = new Date(dateFrom);
@@ -407,16 +450,6 @@ export class PaymentsService implements OnModuleInit {
         end.setHours(23, 59, 59, 999);
         where.paymentDate.lte = end;
       }
-    }
-
-    // Filtro por curso (a través de Student)
-    if (courseId) {
-      where.student = { courseId };
-    }
-
-    // Filtro por alumno
-    if (studentId) {
-      where.studentId = studentId;
     }
 
     const [data, total] = await Promise.all([
@@ -446,15 +479,20 @@ export class PaymentsService implements OnModuleInit {
   }
 
   async findOne(id: number) {
-    const payment = await this.prisma.payment.findUnique({
-      where: { id },
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        paymentGroup: { is: { deletedAt: null } },
+        student: { deletedAt: null },
+      },
       include: {
         student: { include: { course: true, guardian: true } },
         concept: true,
         paymentGroup: true,
       },
     });
-    if (!payment || payment.deletedAt || payment.paymentGroup?.deletedAt) {
+    if (!payment) {
       throw new NotFoundException(`Payment #${id} not found`);
     }
     return payment;
@@ -508,6 +546,7 @@ export class PaymentsService implements OnModuleInit {
     const where: Prisma.PaymentWhereInput = {
       deletedAt: null,
       paymentGroup: { is: { deletedAt: null } },
+      student: { deletedAt: null },
     };
     if (dateFrom || dateTo) {
       where.paymentDate = {};

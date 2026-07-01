@@ -37,8 +37,11 @@ export class ReportsService {
 
     if (courseId) {
       where.student = {
+        deletedAt: null,
         courseId: Number(courseId),
       };
+    } else {
+      where.student = { deletedAt: null };
     }
 
     const aggregations = await this.prisma.payment.aggregate({
@@ -80,6 +83,7 @@ export class ReportsService {
         deletedAt: null,
         paymentGroup: { is: { deletedAt: null } },
         paymentDate: { gte: startDate },
+        student: { deletedAt: null },
       },
       select: { paymentDate: true, amount: true },
     });
@@ -115,8 +119,8 @@ export class ReportsService {
 
     let courseLabel: string | undefined;
     if (courseId) {
-      const course = await this.prisma.course.findUnique({
-        where: { id: courseId },
+      const course = await this.prisma.course.findFirst({
+        where: { id: courseId, deletedAt: null },
         select: { name: true },
       });
       courseLabel = course?.name;
@@ -124,8 +128,8 @@ export class ReportsService {
 
     let studentLabel: string | undefined;
     if (studentId) {
-      const student = await this.prisma.student.findUnique({
-        where: { id: studentId },
+      const student = await this.prisma.student.findFirst({
+        where: { id: studentId, deletedAt: null },
         select: { name: true },
       });
       studentLabel = student?.name;
@@ -183,6 +187,7 @@ export class ReportsService {
         deletedAt: null,
         paymentGroup: { is: { deletedAt: null } },
         paymentDate: paymentDateFilter,
+        student: { deletedAt: null },
       },
       include: {
         student: true,
@@ -216,6 +221,10 @@ export class ReportsService {
       where: {
         deletedAt: null,
         status: 'OVERDUE',
+        student: {
+          deletedAt: null,
+          guardian: { deletedAt: null },
+        },
       },
       include: {
         student: {
@@ -235,7 +244,7 @@ export class ReportsService {
         telefono: charge.student.guardian.phone ?? '',
         concepto: charge.concept.name,
         fechaVencimiento: charge.dueDate,
-        saldoPendiente: charge.amount - charge.paidAmount,
+        saldoPendiente: Math.max(0, charge.amount - charge.paidAmount),
       });
     });
 

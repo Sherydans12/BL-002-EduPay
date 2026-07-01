@@ -63,7 +63,12 @@ export class GuardiansService {
     try {
       return await this.prisma.guardian.create({
         data,
-        include: { students: { include: { course: true } } },
+        include: {
+          students: {
+            where: { deletedAt: null },
+            include: { course: true },
+          },
+        },
       });
     } catch (error) {
       if (
@@ -121,7 +126,7 @@ export class GuardiansService {
         ({ charges, course, ...student }) => {
           const overdueDebt = charges.reduce(
             (total, charge) =>
-              total + Math.max(charge.amount - charge.paidAmount, 0),
+              total + Math.max(0, charge.amount - charge.paidAmount),
             0,
           );
 
@@ -157,10 +162,13 @@ export class GuardiansService {
   }
 
   async findOne(id: number) {
-    const guardian = await this.prisma.guardian.findUnique({
-      where: { id },
+    const guardian = await this.prisma.guardian.findFirst({
+      where: { id, deletedAt: null },
       include: {
-        students: { include: { course: true } },
+        students: {
+          where: { deletedAt: null },
+          include: { course: true },
+        },
       },
     });
     if (!guardian) throw new NotFoundException(`Guardian #${id} not found`);
@@ -182,7 +190,12 @@ export class GuardiansService {
       return await this.prisma.guardian.update({
         where: { id },
         data,
-        include: { students: { include: { course: true } } },
+        include: {
+          students: {
+            where: { deletedAt: null },
+            include: { course: true },
+          },
+        },
       });
     } catch (error) {
       if (

@@ -16,11 +16,40 @@ const STUDENT_STATUS_LABELS: Record<StudentStatus, string> = {
   GRADUATED: 'Egresado',
 };
 
+const RELATED_RECORD_NOT_FOUND =
+  'Registro relacionado no encontrado o pertenece a otro colegio';
+
 @Injectable()
 export class StudentsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async assertStudentRelationsExist(
+    courseId?: number,
+    guardianId?: number,
+  ): Promise<void> {
+    const [course, guardian] = await Promise.all([
+      courseId
+        ? this.prisma.course.findFirst({
+            where: { id: courseId, deletedAt: null },
+            select: { id: true },
+          })
+        : Promise.resolve({ id: null }),
+      guardianId
+        ? this.prisma.guardian.findFirst({
+            where: { id: guardianId, deletedAt: null },
+            select: { id: true },
+          })
+        : Promise.resolve({ id: null }),
+    ]);
+
+    if (!course || !guardian) {
+      throw new NotFoundException(RELATED_RECORD_NOT_FOUND);
+    }
+  }
+
   async create(dto: CreateStudentDto) {
+    await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
+
     try {
       return await this.prisma.student.create({
         data: dto,
@@ -74,7 +103,8 @@ export class StudentsService {
 
     const dataWithDebt = students.map(({ charges, ...student }) => {
       const overdueDebt = charges.reduce(
-        (sum, charge) => sum + (charge.amount - charge.paidAmount),
+        (sum, charge) =>
+          sum + Math.max(0, charge.amount - charge.paidAmount),
         0,
       );
       return { ...student, overdueDebt };
@@ -92,12 +122,18 @@ export class StudentsService {
   }
 
   async findOne(id: number) {
-    const student = await this.prisma.student.findUnique({
-      where: { id },
+    const student = await this.prisma.student.findFirst({
+      where: { id, deletedAt: null },
       include: {
         course: true,
         guardian: true,
-        payments: { orderBy: { paymentDate: 'desc' } },
+        payments: {
+          where: {
+            deletedAt: null,
+            paymentGroup: { is: { deletedAt: null } },
+          },
+          orderBy: { paymentDate: 'desc' },
+        },
       },
     });
     if (!student) throw new NotFoundException(`Student #${id} not found`);
@@ -106,6 +142,8 @@ export class StudentsService {
 
   async update(id: number, dto: UpdateStudentDto) {
     await this.findOne(id);
+    await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
+
     try {
       return await this.prisma.student.update({
         where: { id },

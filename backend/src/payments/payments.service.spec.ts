@@ -34,13 +34,17 @@ describe('PaymentsService', () => {
   };
 
   const prisma = {
-    student: { findMany: jest.fn(), findUnique: jest.fn() },
+    tenant: { findMany: jest.fn() },
+    student: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() },
+    paymentConcept: { findFirst: jest.fn() },
+    charge: { findFirst: jest.fn(), update: jest.fn() },
     payment: {
       findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       findUnique: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
+      update: jest.fn(),
     },
     paymentGroup: {
       create: jest.fn(),
@@ -57,6 +61,14 @@ describe('PaymentsService', () => {
     prisma.$transaction.mockImplementation(
       async (fn: (tx: typeof prisma) => unknown) => fn(prisma),
     );
+    prisma.tenant.findMany.mockResolvedValue([{ id: 'colegio-test' }]);
+    prisma.student.findFirst.mockResolvedValue({ id: 1 });
+    prisma.paymentConcept.findFirst.mockResolvedValue({ id: 1 });
+    prisma.charge.findFirst.mockResolvedValue({
+      id: 1,
+      amount: 75000,
+      paidAmount: 0,
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -82,7 +94,6 @@ describe('PaymentsService', () => {
     };
 
     it('crea PaymentGroup y un Payment por cada allocation', async () => {
-      prisma.student.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
       prisma.paymentGroup.create.mockResolvedValue({ id: 10 });
       prisma.payment.create.mockResolvedValue({ id: 1 });
       prisma.paymentGroup.findUniqueOrThrow.mockResolvedValue({
@@ -108,8 +119,12 @@ describe('PaymentsService', () => {
 
       const result = await service.createBatch(batchDto, '/uploads/boleta.pdf');
 
-      expect(prisma.student.findMany).toHaveBeenCalledWith({
-        where: { id: { in: [1, 2] }, deletedAt: null },
+      expect(prisma.student.findFirst).toHaveBeenCalledWith({
+        where: { id: 1, deletedAt: null },
+        select: { id: true },
+      });
+      expect(prisma.paymentConcept.findFirst).toHaveBeenCalledWith({
+        where: { id: 1, deletedAt: null },
         select: { id: true },
       });
       expect(prisma.paymentGroup.create).toHaveBeenCalledWith({
@@ -124,8 +139,7 @@ describe('PaymentsService', () => {
     });
 
     it('envía boleta por correo cuando se crea un pago manual con boleta inmediata', async () => {
-      prisma.student.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
-      prisma.student.findUnique.mockResolvedValue(mockStudent);
+      prisma.student.findFirst.mockResolvedValue(mockStudent);
       prisma.paymentGroup.create.mockResolvedValue({ id: 10 });
       prisma.payment.create.mockResolvedValue({ id: 1 });
       prisma.paymentGroup.findUniqueOrThrow.mockResolvedValue({
@@ -145,8 +159,8 @@ describe('PaymentsService', () => {
         '/uploads/boleta.pdf',
       );
 
-      expect(prisma.student.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(prisma.student.findFirst).toHaveBeenCalledWith({
+        where: { id: 1, deletedAt: null },
         include: { guardian: true },
       });
       expect(notificationsService.dispatchEmail).toHaveBeenCalledWith(
@@ -166,13 +180,15 @@ describe('PaymentsService', () => {
     });
 
     it('lanza NotFoundException si falta algún alumno', async () => {
-      prisma.student.findMany.mockResolvedValue([{ id: 1 }]);
+      prisma.student.findFirst.mockImplementation(({ where }) =>
+        where.id === 2 ? Promise.resolve(null) : Promise.resolve({ id: 1 }),
+      );
 
       await expect(service.createBatch(batchDto)).rejects.toThrow(
         NotFoundException,
       );
       await expect(service.createBatch(batchDto)).rejects.toThrow(
-        'Alumno(s) no encontrado(s): 2',
+        'Registro relacionado no encontrado o pertenece a otro colegio',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -249,10 +265,13 @@ describe('PaymentsService', () => {
       };
       prisma.payment.findMany.mockResolvedValue([orphan]);
       prisma.paymentGroup.create.mockResolvedValue({ id: 20 });
-      prisma.payment.update = jest.fn().mockResolvedValue({});
+      prisma.payment.update.mockResolvedValue({});
 
       await service.migrateLegacyPayments();
 
+      expect(prisma.tenant.findMany).toHaveBeenCalledWith({
+        where: { isActive: true },
+      });
       expect(prisma.paymentGroup.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ totalAmount: 30000 }),
       });
