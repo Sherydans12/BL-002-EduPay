@@ -4,4 +4,5 @@ export const METHOD_LABELS: Record<string, string> = {
   CREDIT: "Crédito",
   CHECK: "Cheque",
   TRANSFER: "Transferencia",
+  WEBPAY: "Webpay",
 };

@@ -267,7 +267,13 @@ export type ChargeStatus =
   | "OVERDUE"
   | "CANCELLED";
 
-export type PaymentMethod = "CASH" | "DEBIT" | "CREDIT" | "CHECK" | "TRANSFER";
+export type PaymentMethod =
+  | "CASH"
+  | "DEBIT"
+  | "CREDIT"
+  | "CHECK"
+  | "TRANSFER"
+  | "WEBPAY";
 
 export interface Charge {
   id: number;
@@ -635,7 +641,8 @@ export const chargesApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  getPlan: (studentId: number) => request<Charge[]>(`/charges/plan/${studentId}`),
+  getPlan: (studentId: number) =>
+    request<Charge[]>(`/charges/plan/${studentId}`),
   updateFinancialPlan: (studentId: number, data: UpdateFinancialPlanDto) =>
     request<Charge[]>(`/charges/plan/${studentId}`, {
       method: "PUT",

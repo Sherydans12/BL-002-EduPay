@@ -1,11 +1,5 @@
 import { PaymentMethod } from '@prisma/client';
-import {
-  IsOptional,
-  IsDateString,
-  IsInt,
-  Min,
-  IsEnum,
-} from 'class-validator';
+import { IsOptional, IsDateString, IsInt, Min, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 

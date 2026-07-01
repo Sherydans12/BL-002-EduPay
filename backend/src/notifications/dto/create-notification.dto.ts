@@ -1,10 +1,4 @@
-import {
-  IsEmail,
-  IsEnum,
-  IsInt,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsEmail, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { NotificationStatus, NotificationType } from '@prisma/client';
 

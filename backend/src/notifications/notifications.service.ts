@@ -18,7 +18,10 @@ type DispatchEmailData = {
 
 @Injectable()
 export class NotificationsService {
-  private resend = new Resend(process.env.RESEND_API_KEY);
+  private resend = new Resend(
+    process.env.RESEND_API_KEY || 're_placeholder_dev_no_email',
+  );
+  private isEmailEnabled = !!process.env.RESEND_API_KEY;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -64,6 +67,23 @@ export class NotificationsService {
     }
 
     try {
+      if (!this.isEmailEnabled) {
+        console.warn(
+          `[DEV] Email no enviado (RESEND_API_KEY no configurada): ${data.subject} → ${data.recipientEmail}`,
+        );
+        return this.logNotification({
+          type: data.type,
+          status: NotificationStatus.FAILED,
+          recipientEmail: data.recipientEmail,
+          subject: data.subject,
+          body: data.html,
+          errorMessage:
+            'Email deshabilitado en entorno local (sin RESEND_API_KEY).',
+          studentId: data.studentId,
+          paymentGroupId: data.paymentGroupId,
+        });
+      }
+
       const result = await this.resend.emails.send({
         from: 'pagos@colegio.edu.cl',
         to: data.recipientEmail,
