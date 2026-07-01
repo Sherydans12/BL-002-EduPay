@@ -71,6 +71,30 @@ describe('TenantMiddleware', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
+  it('permite al SUPER_ADMIN seleccionar tenant desde x-tenant-id', () => {
+    const token = new JwtService({ secret }).sign({
+      tenantId: 'colegio-conquistadores',
+      role: 'SUPER_ADMIN',
+    });
+    const request = {
+      header: jest.fn((name: string) => {
+        if (name === 'authorization') return `Bearer ${token}`;
+        if (name === 'x-tenant-id') return 'colegio-pruebas';
+        return undefined;
+      }),
+    } as unknown as Request;
+    const next = jest.fn(() => {
+      expect(tenantContext.getStore()).toEqual({
+        tenantId: 'colegio-pruebas',
+        isSuperAdmin: true,
+      });
+    }) as NextFunction;
+
+    new TenantMiddleware(config).use(request, response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
   it('falla cerrado para un usuario tenant sin tenantId', () => {
     const token = new JwtService({ secret }).sign({ role: 'ADMIN' });
     const request = {

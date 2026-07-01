@@ -27,7 +27,11 @@ export class TenantMiddleware implements NestMiddleware {
     const headerTenantId = request.header('x-tenant-id')?.trim();
     const payload = this.verifyPanelToken(request);
     const isSuperAdmin = payload?.role === 'SUPER_ADMIN';
-    const tenantId = payload?.tenantId?.trim() || headerTenantId || '';
+    const tenantId = payload
+      ? isSuperAdmin
+        ? headerTenantId || ''
+        : payload.tenantId?.trim() || ''
+      : headerTenantId || '';
 
     if (payload && !isSuperAdmin && !tenantId) {
       throw new UnauthorizedException(

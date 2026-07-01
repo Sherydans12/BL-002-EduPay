@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useSyncExternalStore } from "react";
 import { Calculator, Mail } from "lucide-react";
+import { TenantSwitcher } from "@/components/tenant-switcher";
 
 type SessionUser = {
   email?: string;
@@ -176,6 +177,8 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-[var(--color-border)]">
+        {sessionUser?.role === "SUPER_ADMIN" && <TenantSwitcher />}
+
         <div className="mb-3 px-4 py-3 rounded-xl bg-[var(--color-bg)]">
           <p className="text-xs text-[var(--color-text-muted)]">Sesión activa</p>
           <p className="mt-1 truncate text-sm font-semibold text-white">

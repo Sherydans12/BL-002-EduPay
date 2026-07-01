@@ -22,8 +22,7 @@ function currentTenantId(model: string | undefined): string | null {
   if (
     !model ||
     !TENANT_MODELS.has(model) ||
-    !context?.tenantId ||
-    context.isSuperAdmin
+    !context?.tenantId
   ) {
     return null;
   }

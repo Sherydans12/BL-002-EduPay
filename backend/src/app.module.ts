@@ -26,6 +26,7 @@ import { BillingCronService } from './billing-cron/billing-cron.service';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { PortalModule } from './portal/portal.module';
 import { TenantMiddleware } from './core/tenant/tenant.middleware';
+import { TenantsModule } from './tenants/tenants.module';
 
 @Module({
   controllers: [AppController],
@@ -47,6 +48,7 @@ import { TenantMiddleware } from './core/tenant/tenant.middleware';
     NotificationsModule,
     AnalyticsModule,
     PortalModule,
+    TenantsModule,
   ],
   providers: [
     {

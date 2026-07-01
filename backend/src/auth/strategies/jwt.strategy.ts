@@ -25,14 +25,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * de inmediato sin requerir que el usuario vuelva a iniciar sesión.
    */
   async validate(payload: any) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: {
-        role: {
-          include: { permissions: true },
+    const loadUser = () =>
+      this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        include: {
+          role: {
+            include: { permissions: true },
+          },
         },
-      },
-    });
+      });
+    const user =
+      payload?.role === 'SUPER_ADMIN'
+        ? await tenantContext.run(
+            { tenantId: '', isSuperAdmin: true },
+            loadUser,
+          )
+        : await loadUser();
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Sesión inválida o usuario inactivo');
@@ -40,9 +48,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const permissions = user.role?.permissions.map((p) => p.action) ?? [];
     const context = tenantContext.getStore();
+    const isSuperAdmin = user.role?.name === 'SUPER_ADMIN';
     if (context) {
-      context.tenantId = user.tenantId ?? '';
-      context.isSuperAdmin = user.role?.name === 'SUPER_ADMIN';
+      context.tenantId = isSuperAdmin ? context.tenantId : (user.tenantId ?? '');
+      context.isSuperAdmin = isSuperAdmin;
     }
 
     return {

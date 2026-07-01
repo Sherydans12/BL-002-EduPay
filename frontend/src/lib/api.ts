@@ -1,3 +1,5 @@
+import { getActiveTenantId } from "@/lib/tenant-store";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 /** URL absoluta de un PDF guardado en el backend (boletaFileUrl = `/uploads/…`). */
@@ -36,6 +38,36 @@ function getAuthToken(): string | null {
   return match ? match[2] : null;
 }
 
+function decodeJwtPayload(token: string | null): { role?: string } | null {
+  if (!token) return null;
+
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "=",
+    );
+
+    return JSON.parse(globalThis.atob(padded)) as { role?: string };
+  } catch {
+    return null;
+  }
+}
+
+function getTenantContextHeaders(token: string | null): Record<string, string> {
+  const activeTenantId = getActiveTenantId();
+  const payload = decodeJwtPayload(token);
+
+  if (payload?.role === "SUPER_ADMIN" && activeTenantId) {
+    return { "x-tenant-id": activeTenantId };
+  }
+
+  return {};
+}
+
 // ─── Binary Request Wrapper ───────────────────────────────────
 /**
  * Like `request`, but returns a raw Blob for binary responses (e.g. XLSX downloads).
@@ -45,6 +77,7 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
   const headers: Record<string, string> = {};
   const token = getAuthToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  const tenantHeaders = getTenantContextHeaders(token);
 
   const callerHeaders = options?.headers
     ? Object.fromEntries(
@@ -56,7 +89,7 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { ...headers, ...callerHeaders },
+    headers: { ...headers, ...callerHeaders, ...tenantHeaders },
   });
 
   if (!res.ok) {
@@ -87,6 +120,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
+  const tenantHeaders = getTenantContextHeaders(token);
 
   // Content-Type (no para FormData, el browser lo pone con boundary)
   if (!(options?.body instanceof FormData)) {
@@ -104,7 +138,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { ...headers, ...callerHeaders },
+    headers: { ...headers, ...callerHeaders, ...tenantHeaders },
   });
 
   if (!res.ok) {
@@ -671,6 +705,16 @@ export const reportsApi = {
       `/reports/dashboard/revenue-trend?months=${months}`,
     ),
   monthly: () => requestBlob("/reports/monthly"),
+};
+
+// ─── Tenants ──────────────────────────────────────────────────
+export interface Tenant {
+  id: string;
+  name: string;
+}
+
+export const tenantsApi = {
+  getAll: () => request<Tenant[]>("/tenants"),
 };
 
 // ─── Roles & Permissions ──────────────────────────────────────
