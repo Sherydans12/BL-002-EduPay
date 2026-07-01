@@ -27,7 +27,6 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { PortalModule } from './portal/portal.module';
 import { TenantMiddleware } from './core/tenant/tenant.middleware';
 import { TenantsModule } from './tenants/tenants.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   controllers: [AppController],
@@ -50,7 +49,6 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     AnalyticsModule,
     PortalModule,
     TenantsModule,
-    WebhooksModule,
   ],
   providers: [
     {
