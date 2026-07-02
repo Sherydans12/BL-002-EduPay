@@ -766,4 +766,13 @@ export const usersApi = {
     }),
   toggleActive: (id: number) =>
     request<User>(`/users/${id}/toggle`, { method: "PATCH" }),
+  changePassword: (data: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) =>
+    request<{ message: string }>("/users/me/password", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
 };
