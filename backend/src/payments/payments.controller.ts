@@ -28,6 +28,8 @@ import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
+import { MarkChargePaidDto } from './dto/mark-charge-paid.dto';
+import { UpdatePaymentGroupDto } from './dto/update-payment-group.dto';
 import { multerConfig } from './multer.config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -190,6 +192,52 @@ export class PaymentsController {
   ) {
     const fileUrl = file ? `/uploads/${file.filename}` : undefined;
     return this.paymentsService.createBatch(dto, fileUrl);
+  }
+
+  @Post('charges/:chargeId/mark-paid')
+  @RequirePermissions('create:payment')
+  @ApiOperation({
+    summary: 'Marcar una cuota como pagada con registro contable rápido',
+    description:
+      'Crea un PaymentGroup y un Payment asociados a la cuota por el saldo pendiente. ' +
+      'La boleta queda pendiente para completarla posteriormente.',
+  })
+  @ApiParam({
+    name: 'chargeId',
+    type: Number,
+    description: 'ID de la cuota/cargo a marcar como pagada',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Pago rápido creado y cuota actualizada',
+  })
+  markChargePaid(
+    @Param('chargeId', ParseIntPipe) chargeId: number,
+    @Body() dto: MarkChargePaidDto,
+  ) {
+    return this.paymentsService.markChargePaid(chargeId, dto);
+  }
+
+  @Patch('groups/:id')
+  @RequirePermissions('manage:payments')
+  @ApiOperation({
+    summary: 'Editar datos administrativos de una transacción de pago',
+  })
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    description: 'ID del grupo/transacción de pago',
+  })
+  @ApiResponse({ status: 200, description: 'Transacción actualizada' })
+  @UseInterceptors(FileInterceptor('boleta', multerConfig))
+  updateGroupDetails(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdatePaymentGroupDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const fileUrl = file ? `/uploads/${file.filename}` : undefined;
+    return this.paymentsService.updateGroupDetails(id, dto, fileUrl);
   }
 
   @Patch('groups/:id/boleta')

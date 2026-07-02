@@ -6,6 +6,7 @@ import {
 import {
   ChargeStatus,
   FinancialSetupStatus,
+  Prisma,
   type Charge,
   type NotificationLog,
   type Payment,
@@ -14,6 +15,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  FinancialPlanPaymentAllocationDto,
   SetupFinancialPlanDto,
   UpdateFinancialPlanDto,
 } from './dto/create-charge.dto';
@@ -32,6 +34,111 @@ export interface StudentAccountStatement {
 @Injectable()
 export class ChargesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private resolveStatusFromPaidAmount(
+    amount: number,
+    paidAmount: number,
+  ): ChargeStatus {
+    if (paidAmount >= amount) return ChargeStatus.PAID;
+    if (paidAmount > 0) return ChargeStatus.PARTIALLY_PAID;
+    return ChargeStatus.PENDING;
+  }
+
+  private async recalculateCharges(
+    tx: Prisma.TransactionClient,
+    chargeIds: number[],
+  ): Promise<void> {
+    const uniqueChargeIds = [...new Set(chargeIds.filter(Boolean))];
+    if (uniqueChargeIds.length === 0) return;
+
+    const charges = await tx.charge.findMany({
+      where: { id: { in: uniqueChargeIds }, deletedAt: null },
+      select: { id: true, amount: true },
+    });
+
+    for (const charge of charges) {
+      const aggregate = await tx.payment.aggregate({
+        where: {
+          chargeId: charge.id,
+          deletedAt: null,
+          paymentGroup: { is: { deletedAt: null } },
+        },
+        _sum: { amount: true },
+      });
+
+      const paidAmount = aggregate._sum.amount ?? 0;
+      await tx.charge.update({
+        where: { id: charge.id },
+        data: {
+          paidAmount,
+          status: this.resolveStatusFromPaidAmount(charge.amount, paidAmount),
+        },
+      });
+    }
+  }
+
+  private async applyPaymentAllocations(
+    tx: Prisma.TransactionClient,
+    studentId: number,
+    allocations: FinancialPlanPaymentAllocationDto[] | undefined,
+    chargeIdsByIndex: number[],
+  ): Promise<void> {
+    if (!allocations || allocations.length === 0) return;
+
+    const paymentIds = allocations.map((allocation) => allocation.paymentId);
+    if (new Set(paymentIds).size !== paymentIds.length) {
+      throw new BadRequestException(
+        'No se puede asignar el mismo pago más de una vez',
+      );
+    }
+
+    const payments = await tx.payment.findMany({
+      where: {
+        id: { in: paymentIds },
+        studentId,
+        deletedAt: null,
+        paymentGroup: { is: { deletedAt: null } },
+      },
+      select: { id: true, chargeId: true },
+    });
+
+    if (payments.length !== paymentIds.length) {
+      throw new BadRequestException(
+        'Uno o más pagos no pertenecen al alumno o fueron eliminados',
+      );
+    }
+
+    const paymentsById = new Map(
+      payments.map((payment) => [payment.id, payment]),
+    );
+    const touchedChargeIds = new Set<number>();
+
+    for (const allocation of allocations) {
+      const payment = paymentsById.get(allocation.paymentId);
+      if (!payment) continue;
+
+      const targetChargeId =
+        allocation.chargeIndex == null
+          ? null
+          : chargeIdsByIndex[allocation.chargeIndex];
+
+      if (allocation.chargeIndex != null && !targetChargeId) {
+        throw new BadRequestException(
+          'La cuota seleccionada para un pago no existe',
+        );
+      }
+
+      if (payment.chargeId) touchedChargeIds.add(payment.chargeId);
+      if (targetChargeId) touchedChargeIds.add(targetChargeId);
+
+      await tx.payment.update({
+        where: { id: allocation.paymentId },
+        data: { chargeId: targetChargeId },
+      });
+    }
+
+    await this.recalculateCharges(tx, [...touchedChargeIds]);
+  }
 
   async setupStudentFinancialPlan(
     studentId: number,
@@ -53,104 +160,40 @@ export class ChargesService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const planCreatedAt = new Date();
-      const createdCharges = await tx.charge.createMany({
-        data: dto.charges.map((charge) => ({
-          studentId,
-          conceptId: charge.conceptId,
-          amount: charge.amount,
-          dueDate: new Date(charge.dueDate),
-          status: ChargeStatus.PENDING,
-          createdAt: planCreatedAt,
-        })),
-      });
+      const createdChargeIds: number[] = [];
 
-      const [orphanPayments, newCharges] = await Promise.all([
-        tx.payment.findMany({
-          where: { studentId, chargeId: null, deletedAt: null },
-          select: { id: true, amount: true },
-          orderBy: [{ paymentDate: 'asc' }, { id: 'asc' }],
-        }),
-        tx.charge.findMany({
-          where: { studentId, deletedAt: null, createdAt: planCreatedAt },
-          select: { id: true, amount: true, paidAmount: true, status: true },
-          orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
-        }),
-      ]);
-
-      const dirtyChargeIds = new Set<number>();
-      let chargeIndex = 0;
-
-      for (const payment of orphanPayments) {
-        let remainingPaymentAmount = payment.amount;
-        let firstAppliedChargeId: number | null = null;
-
-        while (remainingPaymentAmount > 0 && chargeIndex < newCharges.length) {
-          const charge = newCharges[chargeIndex];
-          const isLastCharge = chargeIndex === newCharges.length - 1;
-          const pendingChargeAmount = Math.max(
-            charge.amount - charge.paidAmount,
-            0,
-          );
-
-          if (pendingChargeAmount === 0 && !isLastCharge) {
-            chargeIndex += 1;
-            continue;
-          }
-
-          const appliedAmount = isLastCharge
-            ? remainingPaymentAmount
-            : Math.min(remainingPaymentAmount, pendingChargeAmount);
-
-          charge.paidAmount += appliedAmount;
-          remainingPaymentAmount -= appliedAmount;
-          firstAppliedChargeId ??= charge.id;
-          dirtyChargeIds.add(charge.id);
-
-          charge.status =
-            charge.paidAmount >= charge.amount
-              ? ChargeStatus.PAID
-              : ChargeStatus.PARTIALLY_PAID;
-
-          if (charge.status === ChargeStatus.PAID && !isLastCharge) {
-            chargeIndex += 1;
-            continue;
-          }
-
-          break;
-        }
-
-        if (firstAppliedChargeId) {
-          await tx.payment.update({
-            where: { id: payment.id },
-            data: { chargeId: firstAppliedChargeId },
-          });
-        }
-      }
-
-      for (const charge of newCharges) {
-        if (!dirtyChargeIds.has(charge.id)) continue;
-
-        await tx.charge.update({
-          where: { id: charge.id },
+      for (const charge of dto.charges) {
+        const createdCharge = await tx.charge.create({
           data: {
-            paidAmount: charge.paidAmount,
-            status: charge.status,
+            studentId,
+            conceptId: charge.conceptId,
+            amount: charge.amount,
+            dueDate: new Date(charge.dueDate),
+            status: ChargeStatus.PENDING,
           },
+          select: { id: true },
         });
+        createdChargeIds.push(createdCharge.id);
       }
+
+      await this.applyPaymentAllocations(
+        tx,
+        studentId,
+        dto.paymentAllocations,
+        createdChargeIds,
+      );
 
       await tx.student.update({
         where: { id: studentId },
         data: { financialSetup: FinancialSetupStatus.CONFIGURED },
       });
 
-      return createdCharges;
+      return createdChargeIds.length;
     });
 
     return {
       message: 'Financial plan configured successfully',
-      count: result.count,
+      count: result,
     };
   }
 
@@ -272,10 +315,11 @@ export class ChargesService {
       const currentChargesById = new Map(
         currentCharges.map((charge) => [charge.id, charge]),
       );
+      const chargeIdsByPayloadIndex: number[] = [];
 
-      for (const payloadCharge of dto.charges) {
+      for (const [index, payloadCharge] of dto.charges.entries()) {
         if (!payloadCharge.id) {
-          await tx.charge.create({
+          const createdCharge = await tx.charge.create({
             data: {
               studentId,
               conceptId: payloadCharge.conceptId,
@@ -283,7 +327,9 @@ export class ChargesService {
               dueDate: new Date(payloadCharge.dueDate),
               status: ChargeStatus.PENDING,
             },
+            select: { id: true },
           });
+          chargeIdsByPayloadIndex[index] = createdCharge.id;
           continue;
         }
 
@@ -308,7 +354,16 @@ export class ChargesService {
             dueDate: new Date(payloadCharge.dueDate),
           },
         });
+        chargeIdsByPayloadIndex[index] = currentCharge.id;
       }
+
+      await this.applyPaymentAllocations(
+        tx,
+        studentId,
+        dto.paymentAllocations,
+        chargeIdsByPayloadIndex,
+      );
+      await this.recalculateCharges(tx, chargeIdsByPayloadIndex);
 
       return tx.charge.findMany({
         where: { studentId, deletedAt: null },

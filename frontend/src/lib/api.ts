@@ -237,6 +237,10 @@ export interface Student {
 
 export interface SetupFinancialPlanDto {
   charges: Array<{ conceptId: number; amount: number; dueDate: string }>;
+  paymentAllocations?: Array<{
+    paymentId: number;
+    chargeIndex?: number | null;
+  }>;
 }
 
 export interface UpdateFinancialPlanDto {
@@ -245,6 +249,10 @@ export interface UpdateFinancialPlanDto {
     conceptId: number;
     amount: number;
     dueDate: string;
+  }>;
+  paymentAllocations?: Array<{
+    paymentId: number;
+    chargeIndex?: number | null;
   }>;
 }
 
@@ -261,19 +269,10 @@ export interface PaymentConcept {
 }
 
 export type ChargeStatus =
-  | "PENDING"
-  | "PARTIALLY_PAID"
-  | "PAID"
-  | "OVERDUE"
-  | "CANCELLED";
+  "PENDING" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "CANCELLED";
 
 export type PaymentMethod =
-  | "CASH"
-  | "DEBIT"
-  | "CREDIT"
-  | "CHECK"
-  | "TRANSFER"
-  | "WEBPAY";
+  "CASH" | "DEBIT" | "CREDIT" | "CHECK" | "TRANSFER" | "WEBPAY";
 
 export interface Charge {
   id: number;
@@ -296,6 +295,7 @@ export interface Payment {
   method: string;
   paymentDate: string;
   studentId: number;
+  chargeId?: number | null;
   student: Student;
   paymentGroupId?: number | null;
   paymentGroup?: Pick<
@@ -317,7 +317,7 @@ export interface Payment {
 export interface PaymentGroup {
   id: number;
   totalAmount: number;
-  method: string;
+  method: PaymentMethod;
   paymentDate: string;
   boletaFileUrl?: string | null;
   boletaNumber?: string | null;
@@ -573,6 +573,19 @@ export const paymentsApi = {
   createBatch: (formData: FormData) =>
     request<PaymentGroup>("/payments/batch", {
       method: "POST",
+      body: formData,
+    }),
+  markChargePaid: (
+    chargeId: number,
+    data: { method?: PaymentMethod; paymentDate?: string; notes?: string },
+  ) =>
+    request<PaymentGroup>(`/payments/charges/${chargeId}/mark-paid`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateGroupDetails: (id: number, formData: FormData) =>
+    request<PaymentGroup>(`/payments/groups/${id}`, {
+      method: "PATCH",
       body: formData,
     }),
   deleteGroup: (id: number) =>
