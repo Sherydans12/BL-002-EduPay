@@ -9,5 +9,6 @@ coverage
 .git
 .gitignore
 README*.md
-scripts
+scripts/*
+!scripts/rescue-prod.js
 test
