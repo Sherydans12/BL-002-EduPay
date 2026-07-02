@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && tsc -p tsconfig.scripts.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -20,6 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:import": "ts-node --project tsconfig.json scripts/import.ts",
     "db:seed:portal": "ts-node --project tsconfig.json prisma/seed-portal-test.ts",
+    "seed:demo": "node dist/scripts/seed-demo-tenant.js",
+    "seed:demo:dev": "ts-node --project tsconfig.json scripts/seed-demo-tenant.ts",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:rescue": "node scripts/rescue-prod.js"
   },
