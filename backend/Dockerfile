@@ -29,6 +29,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /usr/src/app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /usr/src/app/dist ./dist
 COPY prisma ./prisma/
+COPY scripts ./scripts/
 COPY prisma.config.ts ./
 COPY docker-entrypoint.sh ./
 

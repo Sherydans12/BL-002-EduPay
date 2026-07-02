@@ -21,7 +21,7 @@
     "db:import": "ts-node --project tsconfig.json scripts/import.ts",
     "db:seed:portal": "ts-node --project tsconfig.json prisma/seed-portal-test.ts",
     "db:migrate:deploy": "prisma migrate deploy",
-    "db:rescue": "ts-node scripts/rescue-prod.ts"
+    "db:rescue": "node scripts/rescue-prod.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
