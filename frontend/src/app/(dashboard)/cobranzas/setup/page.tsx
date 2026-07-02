@@ -748,24 +748,46 @@ export default function FinancialSetupRadarPage() {
           }
         }}
       >
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>
-              {isEditing
-                ? "Reestructurar Deuda Anual"
-                : "Configurar Nueva Deuda"}
-              {selectedStudent ? ` · ${selectedStudent.name}` : ""}
-            </SheetTitle>
-            <SheetDescription>
-              {isEditing
-                ? "Modifica las cuotas futuras. Las cuotas ya pagadas están bloqueadas por seguridad."
-                : "Crea la estructura de cobros anuales para este alumno."}
-            </SheetDescription>
+        <SheetContent className="sm:max-w-[min(96vw,1440px)]">
+          <SheetHeader className="bg-[var(--color-bg)]/35">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0 space-y-2">
+                <SheetTitle className="text-2xl">
+                  {isEditing
+                    ? "Reestructurar Deuda Anual"
+                    : "Configurar Nueva Deuda"}
+                </SheetTitle>
+                <SheetDescription className="text-base">
+                  {selectedStudent?.name ?? ""}
+                </SheetDescription>
+                <p className="max-w-3xl text-sm leading-6 text-[var(--color-text-muted)]">
+                  {isEditing
+                    ? "Ajusta el plan financiero, reasigna pagos históricos y regulariza cuotas pendientes sin perder trazabilidad contable."
+                    : "Crea la estructura anual de cobros y deja los pagos históricos listos para asignar."}
+                </p>
+              </div>
+              {selectedStudent ? (
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <Badge variant="secondary">
+                    {selectedStudent.course?.name ?? "Sin curso"}
+                  </Badge>
+                  <Badge
+                    variant={
+                      getFinancialSetup(selectedStudent) === "CONFIGURED"
+                        ? "success"
+                        : "warning"
+                    }
+                  >
+                    {STATUS_LABELS[getFinancialSetup(selectedStudent)]}
+                  </Badge>
+                </div>
+              ) : null}
+            </div>
           </SheetHeader>
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[0.95fr_1.25fr]">
-            <section className="min-h-0 overflow-y-auto border-b border-[var(--color-border)] p-6 lg:border-r lg:border-b-0">
-              <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden xl:grid-cols-[minmax(430px,0.95fr)_minmax(680px,1.45fr)]">
+            <section className="min-h-0 overflow-y-auto border-b border-[var(--color-border)] p-5 xl:border-r xl:border-b-0 xl:p-6">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-white">
                     Historial de pagos
@@ -789,29 +811,29 @@ export default function FinancialSetupRadarPage() {
                   No hay pagos históricos para este alumno.
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-xl border border-[var(--color-border)]">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto rounded-xl border border-[var(--color-border)]">
+                  <table className="min-w-[820px] w-full text-sm">
                     <thead className="bg-[var(--color-bg)]/60 text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)]">
                       <tr>
-                        <th className="px-3 py-3">Fecha</th>
-                        <th className="px-3 py-3">Concepto</th>
-                        <th className="px-3 py-3 text-right">Monto</th>
-                        <th className="px-3 py-3">Aplicar a</th>
+                        <th className="w-32 px-4 py-3">Fecha</th>
+                        <th className="min-w-44 px-4 py-3">Concepto</th>
+                        <th className="w-32 px-4 py-3 text-right">Monto</th>
+                        <th className="min-w-80 px-4 py-3">Aplicar a</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-border)]">
                       {paymentHistory.map((payment) => (
                         <tr key={payment.id}>
-                          <td className="px-3 py-3 text-[var(--color-text-secondary)]">
+                          <td className="px-4 py-3 text-[var(--color-text-secondary)] whitespace-nowrap">
                             {formatDate(payment.paymentDate)}
                           </td>
-                          <td className="px-3 py-3 text-white">
+                          <td className="px-4 py-3 text-white">
                             {payment.concept?.name ?? "Sin concepto"}
                           </td>
-                          <td className="px-3 py-3 text-right font-semibold text-emerald-300 tabular-nums">
+                          <td className="px-4 py-3 text-right font-semibold text-emerald-300 tabular-nums whitespace-nowrap">
                             {formatCurrency(payment.amount)}
                           </td>
-                          <td className="px-3 py-3">
+                          <td className="px-4 py-3">
                             <NativeSelectField>
                               <select
                                 value={paymentAssignments[payment.id] ?? ""}
@@ -822,7 +844,7 @@ export default function FinancialSetupRadarPage() {
                                   }))
                                 }
                                 disabled={fields.length === 0}
-                                className="w-full min-w-52 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-xs text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+                                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <option value="">Sin asignar a cuota</option>
                                 {fields.map((field, chargeIndex) => {
@@ -866,7 +888,7 @@ export default function FinancialSetupRadarPage() {
               )}
             </section>
 
-            <section className="min-h-0 overflow-y-auto p-6">
+            <section className="min-h-0 overflow-y-auto p-5 xl:p-6">
               {isEditing ? (
                 <Alert
                   variant="default"
@@ -884,9 +906,9 @@ export default function FinancialSetupRadarPage() {
                 </Alert>
               ) : null}
 
-              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="mb-5 flex flex-col gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/30 p-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-white">
+                  <h3 className="text-lg font-semibold text-white">
                     Generador de cuotas
                   </h3>
                   <p className="text-sm text-[var(--color-text-muted)]">
@@ -915,11 +937,11 @@ export default function FinancialSetupRadarPage() {
                 className="space-y-4"
               >
                 <Card className="border-emerald-500/25 bg-emerald-500/10">
-                  <CardContent className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-sm font-medium text-emerald-100">
                       Deuda Anual Proyectada:
                     </span>
-                    <span className="text-2xl font-bold tabular-nums text-emerald-300">
+                    <span className="text-3xl font-bold tabular-nums text-emerald-300">
                       {formatCurrency(projectedAnnualDebt)}
                     </span>
                   </CardContent>
@@ -930,7 +952,7 @@ export default function FinancialSetupRadarPage() {
                     Agrega cuotas manualmente o carga el plan estándar.
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {fields.map((field, index) => {
                       const watchedCharge = watchedCharges?.[index];
                       const paidAmount = Number(
@@ -948,13 +970,13 @@ export default function FinancialSetupRadarPage() {
                       return (
                         <div
                           key={field.fieldId}
-                          className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-3 md:grid-cols-[1.25fr_0.85fr_0.85fr_auto]"
+                          className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-4"
                         >
-                          <div>
-                            <div className="mb-1.5 flex items-center justify-between gap-2">
-                              <label className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                                Concepto
-                              </label>
+                          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-lg bg-[var(--color-surface)] px-2 text-xs font-semibold text-[var(--color-text-secondary)]">
+                                {index + 1}
+                              </span>
                               {isLocked ? (
                                 <Badge
                                   variant="secondary"
@@ -962,86 +984,96 @@ export default function FinancialSetupRadarPage() {
                                 >
                                   {isPaid ? "Pagada" : "Abonada"}
                                 </Badge>
-                              ) : null}
+                              ) : (
+                                <Badge variant="secondary">Editable</Badge>
+                              )}
                             </div>
-                            <NativeSelectField>
-                              <select
-                                {...register(`charges.${index}.conceptId`, {
-                                  valueAsNumber: true,
-                                })}
-                                disabled={isLocked}
-                                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
-                              >
-                                <option value="">Seleccionar...</option>
-                                {concepts.map((concept) => (
-                                  <option key={concept.id} value={concept.id}>
-                                    {concept.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </NativeSelectField>
-                          </div>
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                              Vencimiento
-                            </label>
-                            <input
-                              type="date"
-                              {...register(`charges.${index}.dueDate`)}
-                              disabled={isLocked}
-                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                              Monto
-                            </label>
-                            <input
-                              type="number"
-                              min={1}
-                              step={1}
-                              {...register(`charges.${index}.amount`, {
-                                valueAsNumber: true,
-                              })}
-                              disabled={isLocked}
-                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
-                            />
                             {paidAmount > 0 ? (
-                              <p className="mt-1 text-xs text-emerald-300">
+                              <p className="text-sm font-medium text-emerald-300">
                                 Abonado: {formatCurrency(paidAmount)}
                               </p>
                             ) : null}
                           </div>
-                          <div className="flex items-end justify-end gap-1.5">
-                            {!isPaid && field.id ? (
-                              <button
-                                type="button"
-                                onClick={() => openQuickPaymentDialog(index)}
-                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/35 px-3 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-200"
-                                title="Crear pago rápido por el saldo pendiente"
-                              >
-                                <CheckCircle2 className="h-4 w-4" />
-                                Pagar
-                              </button>
-                            ) : null}
-                            {!isLocked ? (
-                              <button
-                                type="button"
-                                onClick={() => remove(index)}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
-                                aria-label="Eliminar cuota"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            ) : (
-                              <div
-                                className="inline-flex h-10 w-10 items-center justify-center"
-                                title="Cuota con pagos y bloqueada"
-                                aria-label="Cuota con pagos y bloqueada"
-                              >
-                                <Lock className="h-4 w-4 text-slate-400" />
-                              </div>
-                            )}
+
+                          <div className="grid gap-4 lg:grid-cols-[minmax(260px,1fr)_minmax(170px,0.45fr)_minmax(190px,0.55fr)_auto]">
+                            <div className="min-w-0">
+                              <label className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                                Concepto
+                              </label>
+                              <NativeSelectField className="mt-1.5">
+                                <select
+                                  {...register(`charges.${index}.conceptId`, {
+                                    valueAsNumber: true,
+                                  })}
+                                  disabled={isLocked}
+                                  className="h-11 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
+                                >
+                                  <option value="">Seleccionar...</option>
+                                  {concepts.map((concept) => (
+                                    <option key={concept.id} value={concept.id}>
+                                      {concept.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </NativeSelectField>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                                Vencimiento
+                              </label>
+                              <input
+                                type="date"
+                                {...register(`charges.${index}.dueDate`)}
+                                disabled={isLocked}
+                                className="mt-1.5 h-11 w-full min-w-40 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                                Monto
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                {...register(`charges.${index}.amount`, {
+                                  valueAsNumber: true,
+                                })}
+                                disabled={isLocked}
+                                className="mt-1.5 h-11 w-full min-w-44 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-right text-base font-semibold tabular-nums text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-70"
+                              />
+                            </div>
+                            <div className="flex items-end justify-end gap-2">
+                              {!isPaid && field.id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openQuickPaymentDialog(index)}
+                                  className="inline-flex h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-emerald-500/35 px-3 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-200"
+                                  title="Crear pago rápido por el saldo pendiente"
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  Pagar
+                                </button>
+                              ) : null}
+                              {!isLocked ? (
+                                <button
+                                  type="button"
+                                  onClick={() => remove(index)}
+                                  className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+                                  aria-label="Eliminar cuota"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <div
+                                  className="inline-flex h-11 w-11 items-center justify-center"
+                                  title="Cuota con pagos y bloqueada"
+                                  aria-label="Cuota con pagos y bloqueada"
+                                >
+                                  <Lock className="h-4 w-4 text-slate-400" />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
