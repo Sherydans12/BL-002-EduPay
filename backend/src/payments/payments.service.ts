@@ -5,7 +5,12 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import * as path from 'path';
-import { ChargeStatus, NotificationType, Prisma } from '@prisma/client';
+import {
+  ChargeStatus,
+  NotificationType,
+  PaymentMethod,
+  Prisma,
+} from '@prisma/client';
 import { tenantContext } from '../core/tenant/tenant.context';
 import { buildPaymentGroupsWorkbookBuffer } from '../common/excel/payment-groups-sheet.export';
 import { MailService } from '../mail/mail.service';
@@ -14,6 +19,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
+import { MarkChargePaidDto } from './dto/mark-charge-paid.dto';
+import { UpdatePaymentGroupDto } from './dto/update-payment-group.dto';
 
 const RELATED_RECORD_NOT_FOUND =
   'Registro relacionado no encontrado o pertenece a otro colegio';
@@ -125,6 +132,48 @@ export class PaymentsService implements OnModuleInit {
         ),
       ),
     );
+  }
+
+  private resolveChargeStatus(
+    amount: number,
+    paidAmount: number,
+  ): ChargeStatus {
+    if (paidAmount >= amount) return ChargeStatus.PAID;
+    if (paidAmount > 0) return ChargeStatus.PARTIALLY_PAID;
+    return ChargeStatus.PENDING;
+  }
+
+  private async recalculateCharges(
+    tx: Prisma.TransactionClient,
+    chargeIds: Array<number | null | undefined>,
+  ): Promise<void> {
+    const uniqueChargeIds = [...new Set(chargeIds.filter(Boolean) as number[])];
+    if (uniqueChargeIds.length === 0) return;
+
+    const charges = await tx.charge.findMany({
+      where: { id: { in: uniqueChargeIds }, deletedAt: null },
+      select: { id: true, amount: true },
+    });
+
+    for (const charge of charges) {
+      const aggregate = await tx.payment.aggregate({
+        where: {
+          chargeId: charge.id,
+          deletedAt: null,
+          paymentGroup: { is: { deletedAt: null } },
+        },
+        _sum: { amount: true },
+      });
+      const paidAmount = aggregate._sum.amount ?? 0;
+
+      await tx.charge.update({
+        where: { id: charge.id },
+        data: {
+          paidAmount,
+          status: this.resolveChargeStatus(charge.amount, paidAmount),
+        },
+      });
+    }
   }
 
   async create(dto: CreatePaymentDto, boletaFileUrl?: string) {
@@ -294,6 +343,67 @@ export class PaymentsService implements OnModuleInit {
     return result;
   }
 
+  async markChargePaid(chargeId: number, dto: MarkChargePaidDto) {
+    const charge = await this.prisma.charge.findFirst({
+      where: { id: chargeId, deletedAt: null },
+      include: { student: { include: { guardian: true } }, concept: true },
+    });
+
+    if (!charge) {
+      throw new NotFoundException(`Charge #${chargeId} not found`);
+    }
+
+    if (charge.status === ChargeStatus.CANCELLED) {
+      throw new BadRequestException('No se puede pagar una cuota anulada');
+    }
+
+    const remainingAmount = Math.max(charge.amount - charge.paidAmount, 0);
+    if (remainingAmount <= 0) {
+      throw new BadRequestException('La cuota ya se encuentra pagada');
+    }
+
+    const method = dto.method ?? PaymentMethod.TRANSFER;
+    const paymentDate = dto.paymentDate
+      ? new Date(dto.paymentDate)
+      : new Date();
+    const notes =
+      dto.notes?.trim() || `Pago rápido registrado para ${charge.concept.name}`;
+
+    return this.prisma.$transaction(async (tx) => {
+      const group = await tx.paymentGroup.create({
+        data: {
+          totalAmount: remainingAmount,
+          method,
+          paymentDate,
+          isBoletaPending: true,
+          notes,
+        },
+      });
+
+      await tx.payment.create({
+        data: {
+          amount: remainingAmount,
+          method,
+          paymentDate,
+          studentId: charge.studentId,
+          conceptId: charge.conceptId,
+          chargeId: charge.id,
+          paymentGroupId: group.id,
+          notes: null,
+          boletaFileUrl: null,
+          boletaNumber: null,
+        },
+      });
+
+      await this.recalculateCharges(tx, [charge.id]);
+
+      return tx.paymentGroup.findUniqueOrThrow({
+        where: { id: group.id },
+        include: paymentGroupInclude,
+      });
+    });
+  }
+
   async resolvePendingBoleta(
     id: number,
     boletaNumber: string,
@@ -360,6 +470,61 @@ export class PaymentsService implements OnModuleInit {
     }
 
     return updatedGroup;
+  }
+
+  async updateGroupDetails(
+    id: number,
+    dto: UpdatePaymentGroupDto,
+    boletaFileUrl?: string,
+  ) {
+    const group = await this.prisma.paymentGroup.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`PaymentGroup #${id} not found`);
+    }
+
+    const trimmedBoletaNumber = dto.boletaNumber?.trim();
+    const data: Prisma.PaymentGroupUpdateInput = {};
+
+    if (dto.method) data.method = dto.method;
+    if (dto.paymentDate) data.paymentDate = new Date(dto.paymentDate);
+    if (dto.notes !== undefined) data.notes = dto.notes.trim() || null;
+    if (trimmedBoletaNumber !== undefined) {
+      data.boletaNumber = trimmedBoletaNumber || null;
+    }
+    if (boletaFileUrl) data.boletaFileUrl = boletaFileUrl;
+    if (dto.isBoletaPending !== undefined) {
+      data.isBoletaPending = dto.isBoletaPending;
+    } else if (trimmedBoletaNumber) {
+      data.isBoletaPending = false;
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedGroup = await tx.paymentGroup.update({
+        where: { id },
+        data,
+      });
+
+      if (dto.method || dto.paymentDate) {
+        await tx.payment.updateMany({
+          where: { paymentGroupId: id, deletedAt: null },
+          data: {
+            ...(dto.method ? { method: dto.method } : {}),
+            ...(dto.paymentDate
+              ? { paymentDate: new Date(dto.paymentDate) }
+              : {}),
+          },
+        });
+      }
+
+      return tx.paymentGroup.findUniqueOrThrow({
+        where: { id: updatedGroup.id },
+        include: paymentGroupInclude,
+      });
+    });
   }
 
   private buildPaymentGroupWhere(
@@ -502,7 +667,12 @@ export class PaymentsService implements OnModuleInit {
     return this.prisma.$transaction(async (tx) => {
       const group = await tx.paymentGroup.findFirst({
         where: { id, deletedAt: null },
-        select: { id: true },
+        include: {
+          payments: {
+            where: { deletedAt: null },
+            select: { chargeId: true },
+          },
+        },
       });
 
       if (!group) {
@@ -520,6 +690,11 @@ export class PaymentsService implements OnModuleInit {
         where: { paymentGroupId: id, deletedAt: null },
         data: { deletedAt },
       });
+
+      await this.recalculateCharges(
+        tx,
+        group.payments.map((payment) => payment.chargeId),
+      );
 
       return updatedGroup;
     });

@@ -29,6 +29,7 @@ import {
   ChevronRight,
   Users,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -96,6 +97,10 @@ function toggleExpandedRow(prev: Set<number>, groupId: number): Set<number> {
   return next;
 }
 
+function toDateInputValue(value: string): string {
+  return value.includes("T") ? value.split("T")[0] : value.slice(0, 10);
+}
+
 export default function PagosMasterPage() {
   const [groups, setGroups] = useState<PaymentGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +140,9 @@ export default function PagosMasterPage() {
   );
   const [boletaNumber, setBoletaNumber] = useState("");
   const [boletaFile, setBoletaFile] = useState<File | null>(null);
+  const [editPaymentDate, setEditPaymentDate] = useState("");
+  const [editMethod, setEditMethod] = useState<PaymentMethod>("TRANSFER");
+  const [editNotes, setEditNotes] = useState("");
   const [isResolvingBoleta, setIsResolvingBoleta] = useState(false);
 
   useEffect(() => {
@@ -262,6 +270,9 @@ export default function PagosMasterPage() {
     setResolvingGroup(group);
     setBoletaNumber(getGroupBoletaNumber(group) ?? "");
     setBoletaFile(null);
+    setEditPaymentDate(toDateInputValue(group.paymentDate));
+    setEditMethod(group.method);
+    setEditNotes(group.notes ?? "");
   };
 
   const handleResolveBoleta = async (event: FormEvent<HTMLFormElement>) => {
@@ -269,22 +280,29 @@ export default function PagosMasterPage() {
     if (!resolvingGroup) return;
 
     const trimmedBoletaNumber = boletaNumber.trim();
-    if (!trimmedBoletaNumber) {
-      toast.error("Ingresa el número de boleta");
+    if (!editPaymentDate) {
+      toast.error("Ingresa la fecha de pago");
       return;
     }
 
     const fd = new FormData();
-    fd.append("boletaNumber", trimmedBoletaNumber);
+    fd.append("method", editMethod);
+    fd.append("paymentDate", editPaymentDate);
+    fd.append("notes", editNotes);
+    fd.append("isBoletaPending", trimmedBoletaNumber ? "false" : "true");
+    if (trimmedBoletaNumber) fd.append("boletaNumber", trimmedBoletaNumber);
     if (boletaFile) fd.append("boleta", boletaFile);
 
     setIsResolvingBoleta(true);
     try {
-      await paymentsApi.resolveBoleta(resolvingGroup.id, fd);
-      toast.success("Boleta resuelta exitosamente");
+      await paymentsApi.updateGroupDetails(resolvingGroup.id, fd);
+      toast.success("Transacción actualizada exitosamente");
       setResolvingGroup(null);
       setBoletaNumber("");
       setBoletaFile(null);
+      setEditPaymentDate("");
+      setEditMethod("TRANSFER");
+      setEditNotes("");
       await fetchGroups();
     } catch (err: unknown) {
       toast.error(
@@ -636,6 +654,18 @@ export default function PagosMasterPage() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      openResolveBoletaDialog(group);
+                                    }}
+                                    className="inline-flex items-center justify-center p-2 rounded-lg text-blue-300 hover:text-blue-200 hover:bg-blue-500/10 border border-transparent hover:border-blue-500/30 transition-colors"
+                                    title="Editar transacción"
+                                    aria-label={`Editar transacción #${group.id}`}
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setVoidingGroup(group);
                                     }}
                                     className="inline-flex items-center justify-center p-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
@@ -795,7 +825,7 @@ export default function PagosMasterPage() {
                             className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-500/20 transition-all hover:bg-red-700 hover:shadow-red-500/30 active:scale-[0.98]"
                           >
                             <FileText className="w-4 h-4" />
-                            Adjuntar Boleta
+                            Completar Datos
                           </button>
                         </td>
                       </tr>
@@ -815,23 +845,62 @@ export default function PagosMasterPage() {
           setResolvingGroup(null);
           setBoletaNumber("");
           setBoletaFile(null);
+          setEditPaymentDate("");
+          setEditMethod("TRANSFER");
+          setEditNotes("");
         }}
       >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-white">
-              Adjuntar Boleta
+              Editar Transacción
             </DialogTitle>
             <DialogDescription className="text-[var(--color-text-secondary)]">
-              Completa el número de boleta para resolver la transacción
-              pendiente.
+              Actualiza los datos administrativos del pago. Si no hay boleta, se
+              mantiene en la bandeja de pendientes.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleResolveBoleta} className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                  Fecha de pago
+                </label>
+                <input
+                  type="date"
+                  value={editPaymentDate}
+                  onChange={(event) => setEditPaymentDate(event.target.value)}
+                  className={fieldClass}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                  Método
+                </label>
+                <NativeSelectField>
+                  <select
+                    value={editMethod}
+                    onChange={(event) =>
+                      setEditMethod(event.target.value as PaymentMethod)
+                    }
+                    className={fieldClass}
+                  >
+                    {METHOD_FILTER_OPTIONS.map((method) => (
+                      <option key={method.value} value={method.value}>
+                        {method.label}
+                      </option>
+                    ))}
+                  </select>
+                </NativeSelectField>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                N° de Boleta *
+                N° de Boleta
               </label>
               <input
                 type="text"
@@ -839,7 +908,6 @@ export default function PagosMasterPage() {
                 onChange={(event) => setBoletaNumber(event.target.value)}
                 className={fieldClass}
                 placeholder="Ej: BOL-00587"
-                required
               />
             </div>
 
@@ -860,6 +928,19 @@ export default function PagosMasterPage() {
               </p>
             </div>
 
+            <div>
+              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                Observaciones
+              </label>
+              <textarea
+                value={editNotes}
+                onChange={(event) => setEditNotes(event.target.value)}
+                className={fieldClass}
+                rows={3}
+                placeholder="Notas internas del pago"
+              />
+            </div>
+
             <DialogFooter className="mt-6">
               <button
                 type="button"
@@ -867,6 +948,9 @@ export default function PagosMasterPage() {
                   setResolvingGroup(null);
                   setBoletaNumber("");
                   setBoletaFile(null);
+                  setEditPaymentDate("");
+                  setEditMethod("TRANSFER");
+                  setEditNotes("");
                 }}
                 className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors"
               >
@@ -877,7 +961,7 @@ export default function PagosMasterPage() {
                 disabled={isResolvingBoleta}
                 className="px-5 py-2.5 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-hover)] transition-all disabled:opacity-50"
               >
-                {isResolvingBoleta ? "Guardando..." : "Guardar y Resolver"}
+                {isResolvingBoleta ? "Guardando..." : "Guardar Cambios"}
               </button>
             </DialogFooter>
           </form>

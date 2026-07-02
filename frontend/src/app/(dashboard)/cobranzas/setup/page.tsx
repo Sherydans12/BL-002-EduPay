@@ -6,14 +6,26 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { chargesApi, conceptsApi, paymentsApi, studentsApi } from "@/lib/api";
 import type {
   ChargeStatus,
+  Course,
   FinancialSetupStatus,
   Payment,
   PaymentConcept,
+  PaymentMethod,
   Student,
 } from "@/lib/api";
+import { fetchAllCourses } from "@/lib/fetch-all-pages";
+import { METHOD_LABELS } from "@/lib/payment-method-labels";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -63,6 +75,13 @@ const STATUS_LABELS: Record<FinancialSetupStatus, string> = {
 };
 
 const STANDARD_CHARGE_AMOUNT = 220000;
+const QUICK_PAYMENT_METHODS: PaymentMethod[] = [
+  "TRANSFER",
+  "CASH",
+  "DEBIT",
+  "CREDIT",
+  "CHECK",
+];
 
 async function fetchAllStudentsForRadar(): Promise<Student[]> {
   const all: Student[] = [];
@@ -116,15 +135,43 @@ function toDateInputValue(value: string): string {
   return value.includes("T") ? value.split("T")[0] : value.slice(0, 10);
 }
 
+function getTodayInputValue(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateInput(value: string): string {
+  const [year, month, day] = toDateInputValue(value).split("-");
+  if (!year || !month || !day) return value;
+  return `${day}-${month}-${year}`;
+}
+
 export default function FinancialSetupRadarPage() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>("PENDING");
+  const [courseFilter, setCourseFilter] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<Payment[]>([]);
+  const [paymentAssignments, setPaymentAssignments] = useState<
+    Record<number, string>
+  >({});
   const [concepts, setConcepts] = useState<PaymentConcept[]>([]);
   const [sheetLoading, setSheetLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [quickPaymentIndex, setQuickPaymentIndex] = useState<number | null>(
+    null,
+  );
+  const [quickPaymentMethod, setQuickPaymentMethod] =
+    useState<PaymentMethod>("TRANSFER");
+  const [quickPaymentDate, setQuickPaymentDate] =
+    useState(getTodayInputValue());
+  const [quickPaymentNotes, setQuickPaymentNotes] = useState("");
+  const [quickPaymentSubmitting, setQuickPaymentSubmitting] = useState(false);
 
   const { control, register, handleSubmit, reset } = useForm<FinancialPlanForm>(
     {
@@ -147,6 +194,17 @@ export default function FinancialSetupRadarPage() {
       ),
     [watchedCharges],
   );
+  const quickPaymentField =
+    quickPaymentIndex == null ? null : fields[quickPaymentIndex];
+  const quickPaymentCharge =
+    quickPaymentIndex == null ? null : watchedCharges?.[quickPaymentIndex];
+  const quickPaymentAmount = Math.max(
+    Number(quickPaymentCharge?.amount ?? quickPaymentField?.amount ?? 0) -
+      Number(
+        quickPaymentCharge?.paidAmount ?? quickPaymentField?.paidAmount ?? 0,
+      ),
+    0,
+  );
 
   const reloadStudents = useCallback(async () => {
     setLoading(true);
@@ -167,8 +225,14 @@ export default function FinancialSetupRadarPage() {
 
     (async () => {
       try {
-        const data = await fetchAllStudentsForRadar();
-        if (!cancelled) setStudents(data);
+        const [studentsData, coursesData] = await Promise.all([
+          fetchAllStudentsForRadar(),
+          fetchAllCourses(),
+        ]);
+        if (!cancelled) {
+          setStudents(studentsData);
+          setCourses(coursesData);
+        }
       } catch (err: unknown) {
         if (!cancelled) {
           toast.error(
@@ -191,6 +255,7 @@ export default function FinancialSetupRadarPage() {
     setSelectedStudent(student);
     reset({ charges: [] });
     setPaymentHistory([]);
+    setPaymentAssignments({});
     setSheetLoading(true);
 
     try {
@@ -219,17 +284,28 @@ export default function FinancialSetupRadarPage() {
       setConcepts([...activeConcepts, ...planConcepts]);
 
       if (isConfigured) {
+        const planRows = planRes.map((charge) => ({
+          id: charge.id,
+          conceptId: charge.conceptId,
+          amount: charge.amount,
+          dueDate: toDateInputValue(charge.dueDate),
+          status: charge.status,
+          paidAmount: charge.paidAmount,
+        }));
+
         reset({
-          charges: planRes.map((charge) => ({
-            id: charge.id,
-            conceptId: charge.conceptId,
-            amount: charge.amount,
-            dueDate: toDateInputValue(charge.dueDate),
-            status: charge.status,
-            paidAmount: charge.paidAmount,
-          })),
+          charges: planRows,
         });
       }
+
+      setPaymentAssignments(
+        Object.fromEntries(
+          paymentsRes.data.map((payment) => [
+            payment.id,
+            payment.chargeId ? `id:${payment.chargeId}` : "",
+          ]),
+        ),
+      );
     } catch (err: unknown) {
       toast.error(
         err instanceof Error
@@ -239,6 +315,49 @@ export default function FinancialSetupRadarPage() {
     } finally {
       setSheetLoading(false);
     }
+  };
+
+  const refreshConfiguredStudentContext = async (student: Student) => {
+    const [paymentsRes, conceptsRes, planRes] = await Promise.all([
+      paymentsApi.getAll({
+        studentId: String(student.id),
+        page: "1",
+        limit: "20",
+      }),
+      conceptsApi.getAll(),
+      chargesApi.getPlan(student.id),
+    ]);
+
+    const activeConcepts = conceptsRes.filter((concept) => concept.isActive);
+    const activeConceptIds = new Set(
+      activeConcepts.map((concept) => concept.id),
+    );
+    const planConcepts = planRes
+      .map((charge) => charge.concept)
+      .filter(
+        (concept) => concept && !activeConceptIds.has(concept.id),
+      ) as PaymentConcept[];
+
+    setPaymentHistory(paymentsRes.data);
+    setConcepts([...activeConcepts, ...planConcepts]);
+    reset({
+      charges: planRes.map((charge) => ({
+        id: charge.id,
+        conceptId: charge.conceptId,
+        amount: charge.amount,
+        dueDate: toDateInputValue(charge.dueDate),
+        status: charge.status,
+        paidAmount: charge.paidAmount,
+      })),
+    });
+    setPaymentAssignments(
+      Object.fromEntries(
+        paymentsRes.data.map((payment) => [
+          payment.id,
+          payment.chargeId ? `id:${payment.chargeId}` : "",
+        ]),
+      ),
+    );
   };
 
   const metrics = useMemo(() => {
@@ -253,9 +372,23 @@ export default function FinancialSetupRadarPage() {
   }, [students]);
 
   const filteredStudents = useMemo(() => {
-    if (filter === "ALL") return students;
-    return students.filter((student) => getFinancialSetup(student) === filter);
-  }, [filter, students]);
+    const visibleStudents = students.filter((student) => {
+      const matchesStatus =
+        filter === "ALL" || getFinancialSetup(student) === filter;
+      const matchesCourse =
+        !courseFilter || String(student.courseId) === courseFilter;
+      return matchesStatus && matchesCourse;
+    });
+
+    return [...visibleStudents].sort((a, b) => {
+      const courseCompare = (a.course?.name ?? "").localeCompare(
+        b.course?.name ?? "",
+        "es-CL",
+      );
+      if (courseCompare !== 0) return courseCompare;
+      return a.name.localeCompare(b.name, "es-CL");
+    });
+  }, [courseFilter, filter, students]);
 
   const loadStandardSchoolYear = () => {
     const year = new Date().getFullYear();
@@ -298,6 +431,12 @@ export default function FinancialSetupRadarPage() {
   const submitFinancialPlan = async (data: FinancialPlanForm) => {
     if (!selectedStudent) return;
     const isConfigured = getFinancialSetup(selectedStudent) === "CONFIGURED";
+    const fieldIndexByAssignmentValue = new Map(
+      fields.map((field, index) => [
+        field.id ? `id:${field.id}` : `field:${field.fieldId}`,
+        index,
+      ]),
+    );
 
     const charges = data.charges.map((charge, index) => ({
       ...(isConfigured && fields[index]?.id
@@ -307,6 +446,15 @@ export default function FinancialSetupRadarPage() {
       amount: Number(charge.amount ?? fields[index]?.amount),
       dueDate: charge.dueDate || fields[index]?.dueDate || "",
     }));
+    const paymentAllocations = paymentHistory.map((payment) => {
+      const assignmentValue = paymentAssignments[payment.id] ?? "";
+      const chargeIndex = fieldIndexByAssignmentValue.get(assignmentValue);
+
+      return {
+        paymentId: payment.id,
+        ...(chargeIndex == null ? {} : { chargeIndex }),
+      };
+    });
 
     if (
       charges.length === 0 ||
@@ -321,10 +469,16 @@ export default function FinancialSetupRadarPage() {
     setSubmitting(true);
     try {
       if (isConfigured) {
-        await chargesApi.updateFinancialPlan(selectedStudent.id, { charges });
+        await chargesApi.updateFinancialPlan(selectedStudent.id, {
+          charges,
+          paymentAllocations,
+        });
         toast.success("Plan financiero actualizado exitosamente");
       } else {
-        await chargesApi.setupFinancialPlan(selectedStudent.id, { charges });
+        await chargesApi.setupFinancialPlan(selectedStudent.id, {
+          charges,
+          paymentAllocations,
+        });
         toast.success("Plan financiero configurado exitosamente");
       }
       setSelectedStudent(null);
@@ -336,6 +490,60 @@ export default function FinancialSetupRadarPage() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openQuickPaymentDialog = (index: number) => {
+    const field = fields[index];
+    const charge = watchedCharges?.[index];
+    const conceptId = Number(charge?.conceptId ?? field?.conceptId);
+    const conceptName =
+      concepts.find((concept) => concept.id === conceptId)?.name ?? "cuota";
+    const dueDate = charge?.dueDate ?? field?.dueDate;
+
+    setQuickPaymentIndex(index);
+    setQuickPaymentMethod("TRANSFER");
+    setQuickPaymentDate(getTodayInputValue());
+    setQuickPaymentNotes(
+      `Regularización rápida de ${conceptName}${
+        dueDate ? ` con vencimiento ${formatDateInput(dueDate)}` : ""
+      }`,
+    );
+  };
+
+  const closeQuickPaymentDialog = () => {
+    setQuickPaymentIndex(null);
+    setQuickPaymentMethod("TRANSFER");
+    setQuickPaymentDate(getTodayInputValue());
+    setQuickPaymentNotes("");
+  };
+
+  const handleQuickPaymentSubmit = async () => {
+    if (!selectedStudent || quickPaymentIndex == null) return;
+
+    const field = fields[quickPaymentIndex];
+    if (!field?.id) {
+      toast.error("Guarda la cuota antes de marcarla como pagada");
+      return;
+    }
+
+    setQuickPaymentSubmitting(true);
+    try {
+      await paymentsApi.markChargePaid(Number(field.id), {
+        method: quickPaymentMethod,
+        paymentDate: quickPaymentDate,
+        notes: quickPaymentNotes,
+      });
+      toast.success("Pago rápido creado y cuota marcada como pagada");
+      closeQuickPaymentDialog();
+      await refreshConfiguredStudentContext(selectedStudent);
+      await reloadStudents();
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al crear pago rápido",
+      );
+    } finally {
+      setQuickPaymentSubmitting(false);
     }
   };
 
@@ -420,20 +628,36 @@ export default function FinancialSetupRadarPage() {
               Filtra rápido para detectar pendientes de configuración.
             </p>
           </div>
-          <Tabs
-            defaultValue="PENDING"
-            onValueChange={(value) => setFilter(value as FilterMode)}
-            value={filter}
-            className="w-auto"
-          >
-            <TabsList>
-              {FILTERS.map((item) => (
-                <TabsTrigger key={item.value} value={item.value}>
-                  {item.value === "PENDING" ? "Pendientes" : item.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <NativeSelectField className="w-full md:w-56">
+              <select
+                value={courseFilter}
+                onChange={(event) => setCourseFilter(event.target.value)}
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+              >
+                <option value="">Todos los cursos</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name}
+                  </option>
+                ))}
+              </select>
+            </NativeSelectField>
+            <Tabs
+              defaultValue="PENDING"
+              onValueChange={(value) => setFilter(value as FilterMode)}
+              value={filter}
+              className="w-auto"
+            >
+              <TabsList>
+                {FILTERS.map((item) => (
+                  <TabsTrigger key={item.value} value={item.value}>
+                    {item.value === "PENDING" ? "Pendientes" : item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
 
         {loading ? (
@@ -519,6 +743,7 @@ export default function FinancialSetupRadarPage() {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedStudent(null);
+            setPaymentAssignments({});
             reset({ charges: [] });
           }
         }}
@@ -546,7 +771,8 @@ export default function FinancialSetupRadarPage() {
                     Historial de pagos
                   </h3>
                   <p className="text-sm text-[var(--color-text-muted)]">
-                    Últimos registros asociados al alumno seleccionado.
+                    Asigna cada pago a la cuota que corresponde o déjalo sin
+                    aplicar.
                   </p>
                 </div>
                 <Badge variant="secondary">
@@ -570,6 +796,7 @@ export default function FinancialSetupRadarPage() {
                         <th className="px-3 py-3">Fecha</th>
                         <th className="px-3 py-3">Concepto</th>
                         <th className="px-3 py-3 text-right">Monto</th>
+                        <th className="px-3 py-3">Aplicar a</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-border)]">
@@ -583,6 +810,53 @@ export default function FinancialSetupRadarPage() {
                           </td>
                           <td className="px-3 py-3 text-right font-semibold text-emerald-300 tabular-nums">
                             {formatCurrency(payment.amount)}
+                          </td>
+                          <td className="px-3 py-3">
+                            <NativeSelectField>
+                              <select
+                                value={paymentAssignments[payment.id] ?? ""}
+                                onChange={(event) =>
+                                  setPaymentAssignments((current) => ({
+                                    ...current,
+                                    [payment.id]: event.target.value,
+                                  }))
+                                }
+                                disabled={fields.length === 0}
+                                className="w-full min-w-52 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 text-xs text-white outline-none transition-colors focus:border-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <option value="">Sin asignar a cuota</option>
+                                {fields.map((field, chargeIndex) => {
+                                  const watchedCharge =
+                                    watchedCharges?.[chargeIndex];
+                                  const conceptId = Number(
+                                    watchedCharge?.conceptId ?? field.conceptId,
+                                  );
+                                  const conceptName =
+                                    concepts.find(
+                                      (concept) => concept.id === conceptId,
+                                    )?.name ?? "Cuota";
+                                  const amount = Number(
+                                    watchedCharge?.amount ?? field.amount ?? 0,
+                                  );
+                                  const dueDate =
+                                    watchedCharge?.dueDate ?? field.dueDate;
+
+                                  return (
+                                    <option
+                                      key={field.fieldId}
+                                      value={
+                                        field.id
+                                          ? `id:${field.id}`
+                                          : `field:${field.fieldId}`
+                                      }
+                                    >
+                                      {formatDateInput(dueDate)} · {conceptName}{" "}
+                                      · {formatCurrency(amount)}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </NativeSelectField>
                           </td>
                         </tr>
                       ))}
@@ -602,8 +876,9 @@ export default function FinancialSetupRadarPage() {
                   <div>
                     <AlertTitle>Setup financiero activo</AlertTitle>
                     <AlertDescription className="text-amber-700">
-                      Estás reestructurando una deuda vigente. Las cuotas pagadas
-                      permanecen bloqueadas y no pueden eliminarse ni reducirse.
+                      Estás reestructurando una deuda vigente. Las cuotas
+                      pagadas permanecen bloqueadas, pero puedes mover sus pagos
+                      a la cuota correcta desde el historial antes de guardar.
                     </AlertDescription>
                   </div>
                 </Alert>
@@ -673,7 +948,7 @@ export default function FinancialSetupRadarPage() {
                       return (
                         <div
                           key={field.fieldId}
-                          className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-3 md:grid-cols-[1.4fr_0.9fr_0.9fr_auto]"
+                          className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/45 p-3 md:grid-cols-[1.25fr_0.85fr_0.85fr_auto]"
                         >
                           <div>
                             <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -737,7 +1012,18 @@ export default function FinancialSetupRadarPage() {
                               </p>
                             ) : null}
                           </div>
-                          <div className="flex items-end">
+                          <div className="flex items-end justify-end gap-1.5">
+                            {!isPaid && field.id ? (
+                              <button
+                                type="button"
+                                onClick={() => openQuickPaymentDialog(index)}
+                                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/35 px-3 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/10 hover:text-emerald-200"
+                                title="Crear pago rápido por el saldo pendiente"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                Pagar
+                              </button>
+                            ) : null}
                             {!isLocked ? (
                               <button
                                 type="button"
@@ -797,6 +1083,101 @@ export default function FinancialSetupRadarPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog
+        open={quickPaymentIndex != null}
+        onOpenChange={(open) => {
+          if (!open && !quickPaymentSubmitting) closeQuickPaymentDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Crear pago rápido</DialogTitle>
+            <DialogDescription>
+              Se registrará un pago por el saldo pendiente de la cuota y la
+              boleta quedará pendiente para completar después.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+            <p className="text-xs font-medium uppercase tracking-wider text-emerald-100">
+              Saldo a registrar
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-300">
+              {formatCurrency(quickPaymentAmount)}
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                Fecha de pago
+              </label>
+              <input
+                type="date"
+                value={quickPaymentDate}
+                onChange={(event) => setQuickPaymentDate(event.target.value)}
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                Método
+              </label>
+              <NativeSelectField>
+                <select
+                  value={quickPaymentMethod}
+                  onChange={(event) =>
+                    setQuickPaymentMethod(event.target.value as PaymentMethod)
+                  }
+                  className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+                >
+                  {QUICK_PAYMENT_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {METHOD_LABELS[method] ?? method}
+                    </option>
+                  ))}
+                </select>
+              </NativeSelectField>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+              Observación
+            </label>
+            <textarea
+              value={quickPaymentNotes}
+              onChange={(event) => setQuickPaymentNotes(event.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-[var(--color-primary)]"
+            />
+          </div>
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={closeQuickPaymentDialog}
+              disabled={quickPaymentSubmitting}
+              className="px-4 py-2 text-sm text-[var(--color-text-secondary)] transition-colors hover:text-white disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickPaymentSubmit}
+              disabled={
+                quickPaymentSubmitting ||
+                quickPaymentAmount <= 0 ||
+                !quickPaymentField?.id
+              }
+              className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {quickPaymentSubmitting ? "Creando..." : "Crear pago"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
