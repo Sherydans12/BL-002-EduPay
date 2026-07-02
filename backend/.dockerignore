@@ -11,4 +11,5 @@ coverage
 README*.md
 scripts/*
 !scripts/rescue-prod.js
+!scripts/seed-demo-tenant.ts
 test
