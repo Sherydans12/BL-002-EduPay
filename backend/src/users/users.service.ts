@@ -1,10 +1,55 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
+
+  async changePassword(userId: string, data: ChangePasswordDto) {
+    if (data.newPassword !== data.confirmPassword) {
+      throw new BadRequestException('La confirmación no coincide');
+    }
+
+    if (data.currentPassword === data.newPassword) {
+      throw new BadRequestException(
+        'La nueva contraseña debe ser distinta a la actual',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, password: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(
+      data.currentPassword,
+      user.password,
+    );
+
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('La contraseña actual es incorrecta');
+    }
+
+    const hashedPassword = await bcrypt.hash(data.newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+
+    return { message: 'Contraseña actualizada correctamente' };
+  }
 
   async findAll() {
     return this.prisma.user.findMany({
