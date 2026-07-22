@@ -122,9 +122,9 @@ export class GuardiansService {
     ]);
 
     const dataWithFamilyDebt = data.map(({ students, ...guardian }) => {
-      const optimizedStudents = students.map(
+      const optimizedStudents = (students ?? []).map(
         ({ charges, course, ...student }) => {
-          const overdueDebt = charges.reduce(
+          const overdueDebt = (charges ?? []).reduce(
             (total, charge) =>
               total + Math.max(0, charge.amount - charge.paidAmount),
             0,
@@ -133,7 +133,7 @@ export class GuardiansService {
           return {
             id: String(student.id),
             name: student.name,
-            course: { name: course.name },
+            course: course ? { name: course?.name ?? null } : null,
             overdueDebt,
           };
         },

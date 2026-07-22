@@ -70,6 +70,15 @@ describe('PortalService', () => {
               paidAmount: 50000,
               dueDate: new Date('2026-01-05T00:00:00.000Z'),
               status: ChargeStatus.PAID,
+              concept: { id: 1, name: 'Matrícula' },
+              payments: [
+                {
+                  id: 100,
+                  amount: 50000,
+                  method: 'TRANSFER',
+                  paymentDate: new Date('2026-01-05T12:00:00.000Z'),
+                },
+              ],
             },
             {
               id: 11,
@@ -77,6 +86,8 @@ describe('PortalService', () => {
               paidAmount: 10000,
               dueDate: new Date('2020-01-05T00:00:00.000Z'),
               status: ChargeStatus.PARTIALLY_PAID,
+              concept: null,
+              payments: [],
             },
             {
               id: 12,
@@ -84,6 +95,8 @@ describe('PortalService', () => {
               paidAmount: 0,
               dueDate: new Date('2099-01-05T00:00:00.000Z'),
               status: ChargeStatus.PENDING,
+              concept: { id: 2, name: 'Colegiatura' },
+              payments: [],
             },
           ],
         },
@@ -100,6 +113,15 @@ describe('PortalService', () => {
         paidAmount: 50000,
         outstandingAmount: 0,
         status: 'PAGADO',
+        concept: { id: 1, name: 'Matrícula' },
+        payments: [
+          {
+            id: 100,
+            amount: 50000,
+            method: 'TRANSFER',
+            paymentDate: new Date('2026-01-05T12:00:00.000Z'),
+          },
+        ],
       },
       {
         id: 11,
@@ -108,6 +130,8 @@ describe('PortalService', () => {
         paidAmount: 10000,
         outstandingAmount: 40000,
         status: 'VENCIDO',
+        concept: null,
+        payments: [],
       },
       {
         id: 12,
@@ -116,8 +140,60 @@ describe('PortalService', () => {
         paidAmount: 0,
         outstandingAmount: 50000,
         status: 'PENDIENTE',
+        concept: { id: 2, name: 'Colegiatura' },
+        payments: [],
       },
     ]);
+    expect(result.students[0].totalDebt).toBe(90000);
+    expect(result.totalDebt).toBe(90000);
+  });
+
+  it('retorna arreglos vacíos y deuda cero si el apoderado no tiene alumnos', async () => {
+    prisma.guardian.findFirst.mockResolvedValue({
+      rut: '11.111.111-1',
+      name: 'Apoderado sin alumnos',
+      students: [],
+    });
+
+    await expect(service.getGuardianStatement('11111111-1')).resolves.toEqual({
+      guardian: {
+        rut: '11.111.111-1',
+        name: 'Apoderado sin alumnos',
+      },
+      students: [],
+      totalDebt: 0,
+    });
+  });
+
+  it('tolera un alumno sin curso ni cargos en datos históricos', async () => {
+    prisma.guardian.findFirst.mockResolvedValue({
+      rut: '11.111.111-1',
+      name: 'Apoderado',
+      students: [
+        {
+          id: 20,
+          rut: '20.000.002-3',
+          name: 'Alumno sin configuración financiera',
+          course: null,
+          charges: undefined,
+        },
+      ],
+    });
+
+    await expect(service.getGuardianStatement('11111111-1')).resolves.toEqual({
+      guardian: { rut: '11.111.111-1', name: 'Apoderado' },
+      students: [
+        {
+          id: 20,
+          rut: '20.000.002-3',
+          name: 'Alumno sin configuración financiera',
+          course: null,
+          installments: [],
+          totalDebt: 0,
+        },
+      ],
+      totalDebt: 0,
+    });
   });
 
   it('sincroniza el pago y salda todas las cuotas en una transacción', async () => {

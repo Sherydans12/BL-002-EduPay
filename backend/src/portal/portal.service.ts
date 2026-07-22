@@ -79,6 +79,19 @@ export class PortalService {
                 paidAmount: true,
                 dueDate: true,
                 status: true,
+                concept: {
+                  select: { id: true, name: true },
+                },
+                payments: {
+                  where: { deletedAt: null },
+                  orderBy: [{ paymentDate: 'asc' }, { id: 'asc' }],
+                  select: {
+                    id: true,
+                    amount: true,
+                    method: true,
+                    paymentDate: true,
+                  },
+                },
               },
             },
           },
@@ -92,25 +105,62 @@ export class PortalService {
 
     const today = this.startOfToday();
 
+    const students = (guardian.students ?? []).map((student) => {
+      const installments = (student.charges ?? []).map((charge) => {
+        const amount = charge.amount ?? 0;
+        const paidAmount = charge.paidAmount ?? 0;
+
+        return {
+          id: charge.id,
+          month: charge.dueDate ? this.toMonth(charge.dueDate) : null,
+          amount,
+          paidAmount,
+          outstandingAmount: Math.max(amount - paidAmount, 0),
+          status: this.toPortalStatus(charge.status, charge.dueDate, today),
+          concept: charge.concept
+            ? {
+                id: charge.concept?.id ?? null,
+                name: charge.concept?.name ?? null,
+              }
+            : null,
+          payments:
+            charge.payments?.map((payment) => ({
+              id: payment.id,
+              amount: payment.amount ?? 0,
+              method: payment.method,
+              paymentDate: payment.paymentDate,
+            })) ?? [],
+        };
+      });
+
+      return {
+        id: student.id,
+        rut: student.rut,
+        name: student.name,
+        course: student.course
+          ? {
+              id: student.course?.id ?? null,
+              name: student.course?.name ?? null,
+            }
+          : null,
+        installments,
+        totalDebt: installments.reduce(
+          (total, installment) => total + installment.outstandingAmount,
+          0,
+        ),
+      };
+    });
+
     return {
       guardian: {
         rut: guardian.rut,
         name: guardian.name,
       },
-      students: guardian.students.map((student) => ({
-        id: student.id,
-        rut: student.rut,
-        name: student.name,
-        course: student.course,
-        installments: student.charges.map((charge) => ({
-          id: charge.id,
-          month: this.toMonth(charge.dueDate),
-          amount: charge.amount,
-          paidAmount: charge.paidAmount,
-          outstandingAmount: Math.max(charge.amount - charge.paidAmount, 0),
-          status: this.toPortalStatus(charge.status, charge.dueDate, today),
-        })),
-      })),
+      students,
+      totalDebt: students.reduce(
+        (total, student) => total + student.totalDebt,
+        0,
+      ),
     };
   }
 
@@ -298,12 +348,14 @@ export class PortalService {
   }
 
   private toPortalStatus(
-    status: ChargeStatus,
-    dueDate: Date,
+    status: ChargeStatus | null | undefined,
+    dueDate: Date | null | undefined,
     today: Date,
   ): PortalInstallmentStatus {
     if (status === ChargeStatus.PAID) return 'PAGADO';
-    if (status === ChargeStatus.OVERDUE || dueDate < today) return 'VENCIDO';
+    if (status === ChargeStatus.OVERDUE || (dueDate && dueDate < today)) {
+      return 'VENCIDO';
+    }
     return 'PENDIENTE';
   }
 }

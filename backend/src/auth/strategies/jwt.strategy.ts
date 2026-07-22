@@ -34,13 +34,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           },
         },
       });
-    const user =
-      payload?.role === 'SUPER_ADMIN'
-        ? await tenantContext.run(
-            { tenantId: '', isSuperAdmin: true },
-            loadUser,
-          )
-        : await loadUser();
+    // La identidad es global. No debe buscarse bajo el tenant seleccionado,
+    // porque los SUPER_ADMIN no tienen tenantId y quedarían filtrados por Prisma.
+    const user = await tenantContext.run(
+      { tenantId: '', isSuperAdmin: false },
+      loadUser,
+    );
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Sesión inválida o usuario inactivo');
@@ -50,7 +49,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const context = tenantContext.getStore();
     const isSuperAdmin = user.role?.name === 'SUPER_ADMIN';
     if (context) {
-      context.tenantId = isSuperAdmin ? context.tenantId : (user.tenantId ?? '');
+      context.tenantId = isSuperAdmin
+        ? context.tenantId
+        : (user.tenantId ?? '');
       context.isSuperAdmin = isSuperAdmin;
     }
 

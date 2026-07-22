@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:import": "ts-node --project tsconfig.json scripts/import.ts",
     "db:seed:portal": "ts-node --project tsconfig.json prisma/seed-portal-test.ts",
+    "db:seed:demo": "ts-node scripts/seed-demo-tenant.ts",
     "seed:demo": "node dist/scripts/seed-demo-tenant.js",
     "seed:demo:dev": "ts-node --project tsconfig.json scripts/seed-demo-tenant.ts",
     "db:migrate:deploy": "prisma migrate deploy",

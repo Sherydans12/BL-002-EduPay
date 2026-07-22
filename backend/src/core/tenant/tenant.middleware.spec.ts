@@ -1,7 +1,8 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { NextFunction, Request, Response } from 'express';
+import { PrismaService } from '../../prisma/prisma.service';
 import { tenantContext } from './tenant.context';
 import { TenantMiddleware } from './tenant.middleware';
 
@@ -11,8 +12,18 @@ describe('TenantMiddleware', () => {
   const config = {
     get: jest.fn().mockReturnValue(secret),
   } as unknown as ConfigService;
+  const prisma = {
+    tenant: {
+      findFirst: jest.fn(),
+    },
+  };
 
-  it('crea contexto desde un JWT de usuario tenant', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.tenant.findFirst.mockResolvedValue({ id: 'colegio-pruebas' });
+  });
+
+  it('crea contexto desde un JWT de usuario tenant', async () => {
     const token = new JwtService({ secret }).sign({
       tenantId: 'colegio-pruebas',
       role: 'ADMIN',
@@ -29,12 +40,16 @@ describe('TenantMiddleware', () => {
       });
     }) as NextFunction;
 
-    new TenantMiddleware(config).use(request, response, next);
+    await new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+      request,
+      response,
+      next,
+    );
 
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('crea contexto S2S desde x-tenant-id', () => {
+  it('crea contexto S2S desde x-tenant-id', async () => {
     const request = {
       header: jest.fn((name: string) =>
         name === 'x-tenant-id' ? 'colegio-pruebas' : 'Bearer portal-key',
@@ -47,12 +62,16 @@ describe('TenantMiddleware', () => {
       });
     }) as NextFunction;
 
-    new TenantMiddleware(config).use(request, response, next);
+    await new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+      request,
+      response,
+      next,
+    );
 
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('permite al SUPER_ADMIN operar sin tenant', () => {
+  it('permite al SUPER_ADMIN operar sin tenant', async () => {
     const token = new JwtService({ secret }).sign({ role: 'SUPER_ADMIN' });
     const request = {
       header: jest.fn((name: string) =>
@@ -66,12 +85,17 @@ describe('TenantMiddleware', () => {
       });
     }) as NextFunction;
 
-    new TenantMiddleware(config).use(request, response, next);
+    await new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+      request,
+      response,
+      next,
+    );
 
     expect(next).toHaveBeenCalledTimes(1);
+    expect(prisma.tenant.findFirst).not.toHaveBeenCalled();
   });
 
-  it('permite al SUPER_ADMIN seleccionar tenant desde x-tenant-id', () => {
+  it('permite al SUPER_ADMIN seleccionar tenant desde x-tenant-id', async () => {
     const token = new JwtService({ secret }).sign({
       tenantId: 'colegio-conquistadores',
       role: 'SUPER_ADMIN',
@@ -90,12 +114,20 @@ describe('TenantMiddleware', () => {
       });
     }) as NextFunction;
 
-    new TenantMiddleware(config).use(request, response, next);
+    await new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+      request,
+      response,
+      next,
+    );
 
     expect(next).toHaveBeenCalledTimes(1);
+    expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
+      where: { id: 'colegio-pruebas', isActive: true },
+      select: { id: true },
+    });
   });
 
-  it('falla cerrado para un usuario tenant sin tenantId', () => {
+  it('falla cerrado para un usuario tenant sin tenantId', async () => {
     const token = new JwtService({ secret }).sign({ role: 'ADMIN' });
     const request = {
       header: jest.fn((name: string) =>
@@ -103,8 +135,34 @@ describe('TenantMiddleware', () => {
       ),
     } as unknown as Request;
 
-    expect(() =>
-      new TenantMiddleware(config).use(request, response, jest.fn()),
-    ).toThrow(UnauthorizedException);
+    await expect(
+      new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+        request,
+        response,
+        jest.fn(),
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('responde 404 y no crea contexto para un tenant inexistente o inactivo', async () => {
+    prisma.tenant.findFirst.mockResolvedValue(null);
+    const token = new JwtService({ secret }).sign({ role: 'SUPER_ADMIN' });
+    const request = {
+      header: jest.fn((name: string) => {
+        if (name === 'authorization') return `Bearer ${token}`;
+        if (name === 'x-tenant-id') return 'tenant-inactivo';
+        return undefined;
+      }),
+    } as unknown as Request;
+    const next = jest.fn();
+
+    await expect(
+      new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+        request,
+        response,
+        next,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(next).not.toHaveBeenCalled();
   });
 });

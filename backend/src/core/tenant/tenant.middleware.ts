@@ -1,11 +1,13 @@
 import {
   Injectable,
   NestMiddleware,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { NextFunction, Request, Response } from 'express';
+import { PrismaService } from '../../prisma/prisma.service';
 import { tenantContext } from './tenant.context';
 
 type TenantJwtPayload = {
@@ -17,13 +19,20 @@ type TenantJwtPayload = {
 export class TenantMiddleware implements NestMiddleware {
   private readonly jwtService: JwtService;
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     this.jwtService = new JwtService({
       secret: configService.get<string>('JWT_SECRET') || 'super-secret-key',
     });
   }
 
-  use(request: Request, _response: Response, next: NextFunction): void {
+  async use(
+    request: Request,
+    _response: Response,
+    next: NextFunction,
+  ): Promise<void> {
     const headerTenantId = request.header('x-tenant-id')?.trim();
     const payload = this.verifyPanelToken(request);
     const isSuperAdmin = payload?.role === 'SUPER_ADMIN';
@@ -39,7 +48,27 @@ export class TenantMiddleware implements NestMiddleware {
       );
     }
 
+    if (tenantId) {
+      await this.assertTenantIsActive(tenantId);
+    }
+
     tenantContext.run({ tenantId, isSuperAdmin }, next);
+  }
+
+  private async assertTenantIsActive(tenantId: string): Promise<void> {
+    const tenant = await this.prisma.tenant.findFirst({
+      where: {
+        id: tenantId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(
+        `Tenant no encontrado o inactivo: ${tenantId}`,
+      );
+    }
   }
 
   private verifyPanelToken(request: Request): TenantJwtPayload | null {
