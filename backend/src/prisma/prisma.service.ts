@@ -13,17 +13,20 @@ const TENANT_MODELS = new Set([
   'Payment',
   'Charge',
   'NotificationLog',
-  'User',
 ]);
+
+const SYSTEM_MODELS = new Set(['User', 'Tenant', 'Role', 'Permission']);
+
+export function isTenantScopedModel(model: string | undefined): boolean {
+  return Boolean(
+    model && !SYSTEM_MODELS.has(model) && TENANT_MODELS.has(model),
+  );
+}
 
 function currentTenantId(model: string | undefined): string | null {
   const context = tenantContext.getStore();
 
-  if (
-    !model ||
-    !TENANT_MODELS.has(model) ||
-    !context?.tenantId
-  ) {
+  if (!isTenantScopedModel(model) || !context?.tenantId) {
     return null;
   }
 
