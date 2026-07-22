@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 export type TenantContextStore = {
-  tenantId: string;
+  tenantId: string | null;
   isSuperAdmin: boolean;
 };
 

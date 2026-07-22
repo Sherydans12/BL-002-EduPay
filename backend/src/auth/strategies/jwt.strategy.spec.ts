@@ -36,14 +36,14 @@ describe('JwtStrategy', () => {
     );
     const requestContext = {
       tenantId: 'colegio-pruebas',
-      isSuperAdmin: true,
+      isSuperAdmin: false,
     };
 
     const user = await tenantContext.run(requestContext, () =>
       strategy.validate({ sub: 'super-admin-id', role: 'SUPER_ADMIN' }),
     );
 
-    expect(lookupContext).toEqual({ tenantId: '', isSuperAdmin: false });
+    expect(lookupContext).toEqual({ tenantId: null, isSuperAdmin: true });
     expect(requestContext).toEqual({
       tenantId: 'colegio-pruebas',
       isSuperAdmin: true,

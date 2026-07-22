@@ -25,20 +25,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * de inmediato sin requerir que el usuario vuelva a iniciar sesión.
    */
   async validate(payload: any) {
-    const loadUser = () =>
-      this.prisma.user.findUnique({
-        where: { id: payload.sub },
-        include: {
-          role: {
-            include: { permissions: true },
-          },
-        },
-      });
-    // La identidad es global. No debe buscarse bajo el tenant seleccionado,
-    // porque los SUPER_ADMIN no tienen tenantId y quedarían filtrados por Prisma.
+    // La identidad es global y nunca debe resolverse bajo el tenant elegido.
     const user = await tenantContext.run(
-      { tenantId: '', isSuperAdmin: false },
-      loadUser,
+      { tenantId: null, isSuperAdmin: true },
+      () =>
+        this.prisma.user.findUnique({
+          where: { id: payload.sub },
+          include: {
+            role: {
+              include: { permissions: true },
+            },
+          },
+        }),
     );
 
     if (!user || !user.isActive) {
@@ -49,9 +47,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const context = tenantContext.getStore();
     const isSuperAdmin = user.role?.name === 'SUPER_ADMIN';
     if (context) {
-      context.tenantId = isSuperAdmin
-        ? context.tenantId
-        : (user.tenantId ?? '');
+      context.tenantId = isSuperAdmin ? context.tenantId : user.tenantId;
       context.isSuperAdmin = isSuperAdmin;
     }
 
