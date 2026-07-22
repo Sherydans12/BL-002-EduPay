@@ -1,4 +1,4 @@
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { NextFunction, Request, Response } from 'express';
@@ -164,21 +164,33 @@ describe('TenantMiddleware', () => {
     });
   });
 
-  it('falla cerrado para un usuario tenant sin tenantId', async () => {
-    const token = new JwtService({ secret }).sign({ role: 'ADMIN' });
+  it('no bloquea si el JWT no permite identificar rol o tenant', async () => {
+    const token = new JwtService({ secret }).sign({ sub: 'user-id' });
     const request = {
-      header: jest.fn((name: string) =>
-        name === 'authorization' ? `Bearer ${token}` : undefined,
-      ),
+      header: jest.fn((name: string) => {
+        if (name === 'authorization') return `Bearer ${token}`;
+        if (name === 'x-tenant-id') return 'colegio-pruebas';
+        return undefined;
+      }),
     } as unknown as Request;
+    const next = jest.fn(() => {
+      expect(tenantContext.getStore()).toEqual({
+        tenantId: 'colegio-pruebas',
+        isSuperAdmin: false,
+      });
+    }) as NextFunction;
 
-    await expect(
-      new TenantMiddleware(config, prisma as unknown as PrismaService).use(
-        request,
-        response,
-        jest.fn(),
-      ),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+      request,
+      response,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
+      where: { id: 'colegio-pruebas' },
+      select: { id: true },
+    });
   });
 
   it('responde 404 y no crea contexto para un tenant inexistente', async () => {

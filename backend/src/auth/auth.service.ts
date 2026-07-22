@@ -39,7 +39,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       tenantId: user.tenantId,
-      role: user.role?.name || user.role,
+      role: user.role?.name,
       permissions: permissions,
     };
 

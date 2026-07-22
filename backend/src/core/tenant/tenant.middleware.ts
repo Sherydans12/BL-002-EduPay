@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NestMiddleware,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, NestMiddleware, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { NextFunction, Request, Response } from 'express';
@@ -38,17 +33,9 @@ export class TenantMiddleware implements NestMiddleware {
     const roleName =
       typeof payload?.role === 'string' ? payload.role : payload?.role?.name;
     const isSuperAdmin = roleName === 'SUPER_ADMIN';
-    const tenantId = payload
-      ? isSuperAdmin
-        ? headerTenantId || null
-        : payload.tenantId?.trim() || null
-      : headerTenantId || null;
-
-    if (payload && !isSuperAdmin && !tenantId) {
-      throw new UnauthorizedException(
-        'El usuario autenticado no tiene un tenant asignado',
-      );
-    }
+    const tenantId = isSuperAdmin
+      ? headerTenantId || null
+      : payload?.tenantId?.trim() || headerTenantId || null;
 
     if (tenantId) {
       await this.assertTenantExists(tenantId);
