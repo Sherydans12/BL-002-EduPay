@@ -14,13 +14,13 @@ describe('TenantMiddleware', () => {
   } as unknown as ConfigService;
   const prisma = {
     tenant: {
-      findFirst: jest.fn(),
+      findUnique: jest.fn(),
     },
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.tenant.findFirst.mockResolvedValue({ id: 'colegio-pruebas' });
+    prisma.tenant.findUnique.mockResolvedValue({ id: 'colegio-pruebas' });
   });
 
   it('crea contexto desde un JWT de usuario tenant', async () => {
@@ -80,7 +80,7 @@ describe('TenantMiddleware', () => {
     } as unknown as Request;
     const next = jest.fn(() => {
       expect(tenantContext.getStore()).toEqual({
-        tenantId: '',
+        tenantId: null,
         isSuperAdmin: true,
       });
     }) as NextFunction;
@@ -92,13 +92,50 @@ describe('TenantMiddleware', () => {
     );
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(prisma.tenant.findFirst).not.toHaveBeenCalled();
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
   });
 
-  it('permite al SUPER_ADMIN seleccionar tenant desde x-tenant-id', async () => {
+  it.each([
+    ['string', 'SUPER_ADMIN'],
+    ['objeto', { name: 'SUPER_ADMIN' }],
+  ])(
+    'permite al SUPER_ADMIN con rol como %s seleccionar tenant desde x-tenant-id',
+    async (_label, role) => {
+      const token = new JwtService({ secret }).sign({
+        tenantId: 'colegio-conquistadores',
+        role,
+      });
+      const request = {
+        header: jest.fn((name: string) => {
+          if (name === 'authorization') return `Bearer ${token}`;
+          if (name === 'x-tenant-id') return 'colegio-pruebas';
+          return undefined;
+        }),
+      } as unknown as Request;
+      const next = jest.fn(() => {
+        expect(tenantContext.getStore()).toEqual({
+          tenantId: 'colegio-pruebas',
+          isSuperAdmin: true,
+        });
+      }) as NextFunction;
+
+      await new TenantMiddleware(
+        config,
+        prisma as unknown as PrismaService,
+      ).use(request, response, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
+        where: { id: 'colegio-pruebas' },
+        select: { id: true },
+      });
+    },
+  );
+
+  it('ignora x-tenant-id para un usuario normal y usa su tenant propio', async () => {
     const token = new JwtService({ secret }).sign({
-      tenantId: 'colegio-conquistadores',
-      role: 'SUPER_ADMIN',
+      tenantId: 'colegio-origen',
+      role: { name: 'ADMIN' },
     });
     const request = {
       header: jest.fn((name: string) => {
@@ -109,8 +146,8 @@ describe('TenantMiddleware', () => {
     } as unknown as Request;
     const next = jest.fn(() => {
       expect(tenantContext.getStore()).toEqual({
-        tenantId: 'colegio-pruebas',
-        isSuperAdmin: true,
+        tenantId: 'colegio-origen',
+        isSuperAdmin: false,
       });
     }) as NextFunction;
 
@@ -121,8 +158,8 @@ describe('TenantMiddleware', () => {
     );
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(prisma.tenant.findFirst).toHaveBeenCalledWith({
-      where: { id: 'colegio-pruebas', isActive: true },
+    expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
+      where: { id: 'colegio-origen' },
       select: { id: true },
     });
   });
@@ -144,9 +181,11 @@ describe('TenantMiddleware', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('responde 404 y no crea contexto para un tenant inexistente o inactivo', async () => {
-    prisma.tenant.findFirst.mockResolvedValue(null);
-    const token = new JwtService({ secret }).sign({ role: 'SUPER_ADMIN' });
+  it('responde 404 y no crea contexto para un tenant inexistente', async () => {
+    prisma.tenant.findUnique.mockResolvedValue(null);
+    const token = new JwtService({ secret }).sign({
+      role: { name: 'SUPER_ADMIN' },
+    });
     const request = {
       header: jest.fn((name: string) => {
         if (name === 'authorization') return `Bearer ${token}`;
@@ -156,13 +195,13 @@ describe('TenantMiddleware', () => {
     } as unknown as Request;
     const next = jest.fn();
 
-    await expect(
-      new TenantMiddleware(config, prisma as unknown as PrismaService).use(
-        request,
-        response,
-        next,
-      ),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    const result = new TenantMiddleware(
+      config,
+      prisma as unknown as PrismaService,
+    ).use(request, response, next);
+
+    await expect(result).rejects.toBeInstanceOf(NotFoundException);
+    await expect(result).rejects.toThrow('El colegio seleccionado no existe');
     expect(next).not.toHaveBeenCalled();
   });
 });

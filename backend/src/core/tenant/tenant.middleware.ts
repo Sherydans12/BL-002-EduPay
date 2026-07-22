@@ -12,7 +12,7 @@ import { tenantContext } from './tenant.context';
 
 type TenantJwtPayload = {
   tenantId?: string | null;
-  role?: string;
+  role?: string | { name?: string | null } | null;
 };
 
 @Injectable()
@@ -34,13 +34,15 @@ export class TenantMiddleware implements NestMiddleware {
     next: NextFunction,
   ): Promise<void> {
     const headerTenantId = request.header('x-tenant-id')?.trim();
-    const payload = this.verifyPanelToken(request);
-    const isSuperAdmin = payload?.role === 'SUPER_ADMIN';
+    const payload = this.decodePanelToken(request);
+    const roleName =
+      typeof payload?.role === 'string' ? payload.role : payload?.role?.name;
+    const isSuperAdmin = roleName === 'SUPER_ADMIN';
     const tenantId = payload
       ? isSuperAdmin
-        ? headerTenantId || ''
-        : payload.tenantId?.trim() || ''
-      : headerTenantId || '';
+        ? headerTenantId || null
+        : payload.tenantId?.trim() || null
+      : headerTenantId || null;
 
     if (payload && !isSuperAdmin && !tenantId) {
       throw new UnauthorizedException(
@@ -49,29 +51,24 @@ export class TenantMiddleware implements NestMiddleware {
     }
 
     if (tenantId) {
-      await this.assertTenantIsActive(tenantId);
+      await this.assertTenantExists(tenantId);
     }
 
-    tenantContext.run({ tenantId, isSuperAdmin }, next);
+    tenantContext.run({ tenantId, isSuperAdmin }, () => next());
   }
 
-  private async assertTenantIsActive(tenantId: string): Promise<void> {
-    const tenant = await this.prisma.tenant.findFirst({
-      where: {
-        id: tenantId,
-        isActive: true,
-      },
+  private async assertTenantExists(tenantId: string): Promise<void> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
       select: { id: true },
     });
 
     if (!tenant) {
-      throw new NotFoundException(
-        `Tenant no encontrado o inactivo: ${tenantId}`,
-      );
+      throw new NotFoundException('El colegio seleccionado no existe');
     }
   }
 
-  private verifyPanelToken(request: Request): TenantJwtPayload | null {
+  private decodePanelToken(request: Request): TenantJwtPayload | null {
     const authorization = request.header('authorization');
     const match = authorization?.match(/^Bearer\s+(.+)$/i);
     const token = match?.[1]?.trim();
@@ -79,7 +76,8 @@ export class TenantMiddleware implements NestMiddleware {
     if (!token) return null;
 
     try {
-      return this.jwtService.verify<TenantJwtPayload>(token);
+      const decoded = this.jwtService.decode<TenantJwtPayload>(token);
+      return decoded && typeof decoded === 'object' ? decoded : null;
     } catch {
       // El Bearer de Portal no es JWT. La autenticación definitiva sigue
       // perteneciendo al guard JWT o al middleware S2S correspondiente.
