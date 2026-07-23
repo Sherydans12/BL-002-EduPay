@@ -30,13 +30,14 @@ import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
 import { MarkChargePaidDto } from './dto/mark-charge-paid.dto';
 import { UpdatePaymentGroupDto } from './dto/update-payment-group.dto';
+import { AttachBoletaDto } from './dto/attach-boleta.dto';
 import { multerConfig } from './multer.config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 
 @ApiTags('payments')
-@Controller('payments')
+@Controller(['payments', 'v1/payments'])
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
@@ -277,6 +278,52 @@ export class PaymentsController {
   ) {
     const fileUrl = file ? `/uploads/${file.filename}` : undefined;
     return this.paymentsService.resolvePendingBoleta(id, boletaNumber, fileUrl);
+  }
+
+  @Patch('groups/:id/attach-boleta')
+  @RequirePermissions('manage:payments')
+  @ApiOperation({
+    summary: 'Adjuntar PDF a una boleta pendiente y notificar al apoderado',
+  })
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiParam({
+    name: 'id',
+    type: Number,
+    description: 'ID del grupo/transacción de pago',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        boletaFileUrl: {
+          type: 'string',
+          description: 'URL pública alternativa al archivo PDF',
+        },
+        boleta: {
+          type: 'string',
+          format: 'binary',
+          description: 'Archivo PDF de la boleta',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Boleta adjuntada y envío iniciado',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'La boleta ya fue resuelta o no se adjuntó un PDF/URL',
+  })
+  @ApiResponse({ status: 404, description: 'Transacción no encontrada' })
+  @UseInterceptors(FileInterceptor('boleta', multerConfig))
+  attachBoleta(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AttachBoletaDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const fileUrl = file ? `/uploads/${file.filename}` : undefined;
+    return this.paymentsService.attachBoleta(id, dto, fileUrl);
   }
 
   @Get('export')

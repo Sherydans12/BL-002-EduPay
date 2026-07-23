@@ -27,6 +27,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { PortalModule } from './portal/portal.module';
 import { TenantMiddleware } from './core/tenant/tenant.middleware';
 import { TenantsModule } from './tenants/tenants.module';
+import { CommunicationsModule } from './communications/communications.module';
+import { CommunicationActionsModule } from './communications/communication-actions.module';
 
 @Module({
   controllers: [AppController],
@@ -43,7 +45,9 @@ import { TenantsModule } from './tenants/tenants.module';
     StudentsModule,
     PaymentsModule,
     PaymentConceptsModule,
+    CommunicationsModule,
     MailModule,
+    CommunicationActionsModule,
     ChargesModule,
     NotificationsModule,
     AnalyticsModule,

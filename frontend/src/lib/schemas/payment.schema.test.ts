@@ -4,6 +4,7 @@ import { paymentSchema } from "./payment.schema";
 const baseAllocation = {
   studentId: 1,
   conceptId: 1,
+  chargeId: 1,
   amount: 75000,
 };
 
@@ -61,7 +62,7 @@ describe("paymentSchema", () => {
       totalAmount: 150000,
       allocations: [
         baseAllocation,
-        { studentId: 2, conceptId: 1, amount: 75000 },
+        { studentId: 2, conceptId: 1, chargeId: 2, amount: 75000 },
       ],
       method: "TRANSFER",
       paymentDate: "2026-06-01",

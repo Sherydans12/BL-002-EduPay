@@ -1,20 +1,17 @@
 import { Logger, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotificationType, PaymentMethod, PaymentSource } from '@prisma/client';
+import { PaymentMethod, PaymentSource } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { tenantContext } from '../core/tenant/tenant.context';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
 
   const mailService = {
     sendPaymentConfirmation: jest.fn().mockResolvedValue(undefined),
-  };
-
-  const notificationsService = {
-    dispatchEmail: jest.fn().mockResolvedValue(undefined),
+    sendBoletaNotification: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockStudent = {
@@ -52,9 +49,11 @@ describe('PaymentsService', () => {
     },
     paymentGroup: {
       create: jest.fn(),
+      findFirst: jest.fn(),
       findUniqueOrThrow: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
+      update: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -79,7 +78,6 @@ describe('PaymentsService', () => {
         PaymentsService,
         { provide: PrismaService, useValue: prisma },
         { provide: MailService, useValue: mailService },
-        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -152,7 +150,16 @@ describe('PaymentsService', () => {
         totalAmount: 150000,
         method: PaymentMethod.CASH,
         paymentDate: new Date('2026-06-01'),
-        payments: [],
+        boletaFileUrl: '/uploads/boleta.pdf',
+        boletaNumber: 'BOL-001',
+        payments: [
+          {
+            id: 1,
+            studentId: 1,
+            student: mockStudent,
+            concept: { id: 1, name: 'Mensualidad' },
+          },
+        ],
       });
 
       await service.createBatch(
@@ -164,22 +171,13 @@ describe('PaymentsService', () => {
         '/uploads/boleta.pdf',
       );
 
-      expect(prisma.student.findFirst).toHaveBeenCalledWith({
-        where: { id: 1, deletedAt: null },
-        include: { guardian: true },
-      });
-      expect(notificationsService.dispatchEmail).toHaveBeenCalledWith(
+      expect(mailService.sendBoletaNotification).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: NotificationType.BOLETA_DELIVERY,
-          recipientEmail: 'maria@example.com',
-          subject: 'Su boleta de pago está lista - N° BOL-001',
+          to: 'maria@example.com',
           studentId: 1,
           paymentGroupId: 10,
-          attachments: [
-            expect.objectContaining({
-              filename: 'boleta-BOL-001.pdf',
-            }),
-          ],
+          boletaNumber: 'BOL-001',
+          boletaFileUrl: '/uploads/boleta.pdf',
         }),
       );
     });
@@ -196,6 +194,84 @@ describe('PaymentsService', () => {
         'Registro relacionado no encontrado o pertenece a otro colegio',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('attachBoleta', () => {
+    it('resuelve la boleta pendiente del tenant y notifica al apoderado', async () => {
+      const pendingGroup = {
+        id: 30,
+        tenantId: 'colegio-test',
+        isBoletaPending: true,
+        boletaNumber: 'BOL-030',
+        boletaFileUrl: null,
+        payments: [
+          {
+            id: 1,
+            studentId: 1,
+            student: mockStudent,
+            concept: { id: 1, name: 'Mensualidad' },
+          },
+        ],
+      };
+      const updatedGroup = {
+        ...pendingGroup,
+        isBoletaPending: false,
+        boletaFileUrl: '/uploads/boleta-30.pdf',
+      };
+      prisma.paymentGroup.findFirst.mockResolvedValue(pendingGroup);
+      prisma.paymentGroup.update.mockResolvedValue(updatedGroup);
+
+      const result = await tenantContext.run(
+        { tenantId: 'colegio-test', isSuperAdmin: false },
+        () => service.attachBoleta(30, {}, '/uploads/boleta-30.pdf'),
+      );
+
+      expect(prisma.paymentGroup.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 30,
+            tenantId: 'colegio-test',
+            deletedAt: null,
+          },
+        }),
+      );
+      expect(prisma.paymentGroup.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 30, tenantId: 'colegio-test' },
+          data: {
+            boletaFileUrl: '/uploads/boleta-30.pdf',
+            isBoletaPending: false,
+          },
+        }),
+      );
+      expect(mailService.sendBoletaNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'maria@example.com',
+          paymentGroupId: 30,
+          boletaFileUrl: '/uploads/boleta-30.pdf',
+        }),
+      );
+      expect(result).toEqual(updatedGroup);
+    });
+
+    it('rechaza una transacción cuya boleta ya fue resuelta', async () => {
+      prisma.paymentGroup.findFirst.mockResolvedValue({
+        id: 31,
+        tenantId: 'colegio-test',
+        isBoletaPending: false,
+        payments: [],
+      });
+
+      await expect(
+        tenantContext.run(
+          { tenantId: 'colegio-test', isSuperAdmin: false },
+          () =>
+            service.attachBoleta(31, {
+              boletaFileUrl: 'https://files.example.com/boleta.pdf',
+            }),
+        ),
+      ).rejects.toThrow('La transacción ya tiene su boleta resuelta');
     });
   });
 

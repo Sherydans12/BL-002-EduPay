@@ -1,14 +1,13 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
-import * as path from 'path';
 import {
   ChargeStatus,
-  NotificationType,
   PaymentMethod,
   PaymentSource,
   Prisma,
@@ -16,8 +15,8 @@ import {
 import { tenantContext } from '../core/tenant/tenant.context';
 import { buildPaymentGroupsWorkbookBuffer } from '../common/excel/payment-groups-sheet.export';
 import { MailService } from '../mail/mail.service';
-import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AttachBoletaDto } from './dto/attach-boleta.dto';
 import { CreatePaymentBatchDto } from './dto/create-payment-batch.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { FilterPaymentsDto } from './dto/filter-payments.dto';
@@ -40,6 +39,10 @@ const paymentGroupInclude = {
   },
 } as const;
 
+type PaymentGroupWithLines = Prisma.PaymentGroupGetPayload<{
+  include: typeof paymentGroupInclude;
+}>;
+
 @Injectable()
 export class PaymentsService implements OnModuleInit {
   private readonly tenantContext = tenantContext;
@@ -48,7 +51,6 @@ export class PaymentsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
-    private readonly notificationsService: NotificationsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -240,8 +242,10 @@ export class PaymentsService implements OnModuleInit {
       paymentDate: Date;
       student: {
         name: string;
-        guardian: { email: string | null };
+        guardian: { name: string; email: string | null };
       };
+      paymentGroupId?: number | null;
+      studentId?: number;
     },
     boletaFileUrl: string | null,
   ): Promise<void> {
@@ -257,7 +261,10 @@ export class PaymentsService implements OnModuleInit {
     try {
       await this.mailService.sendPaymentConfirmation({
         to: guardianEmail,
+        recipientName: payment.student.guardian.name,
         studentName: payment.student.name,
+        studentId: payment.studentId,
+        paymentGroupId: payment.paymentGroupId ?? undefined,
         amount: payment.amount,
         paymentDate: payment.paymentDate,
         boletaFileUrl: boletaFileUrl ?? undefined,
@@ -347,41 +354,8 @@ export class PaymentsService implements OnModuleInit {
       });
     });
 
-    if (!dto.isBoletaPending && dto.boletaNumber && boletaFileUrl) {
-      const studentId = dto.allocations[0].studentId;
-      const student = await this.prisma.student.findFirst({
-        where: { id: studentId, deletedAt: null },
-        include: { guardian: true },
-      });
-
-      if (student?.guardian?.email) {
-        void this.notificationsService
-          .dispatchEmail({
-            type: NotificationType.BOLETA_DELIVERY,
-            recipientEmail: student.guardian.email,
-            subject: `Su boleta de pago está lista - N° ${dto.boletaNumber}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-                <h2 style="margin: 0 0 16px;">Su boleta de pago está lista</h2>
-                <p>Estimado/a apoderado/a,</p>
-                <p>
-                  Informamos la recepción del pago registrado en nuestro sistema.
-                  La boleta N° ${dto.boletaNumber} se encuentra disponible y se adjunta en este correo.
-                </p>
-                <p>Saludos cordiales,<br />Equipo de Administración</p>
-              </div>
-            `,
-            studentId: student.id,
-            paymentGroupId: result.id,
-            attachments: [
-              {
-                filename: `boleta-${dto.boletaNumber}.pdf`,
-                path: path.join(process.cwd(), boletaFileUrl),
-              },
-            ],
-          })
-          .catch(() => undefined);
-      }
+    if (!dto.isBoletaPending && dto.boletaNumber && resolvedBoletaUrl) {
+      this.sendBoletaNotifications(result);
     }
 
     return result;
@@ -480,40 +454,55 @@ export class PaymentsService implements OnModuleInit {
       include: paymentGroupInclude,
     });
 
-    const guardian = updatedGroup.payments[0]?.student?.guardian;
-    const recipientEmail = guardian?.email?.trim();
+    this.sendBoletaNotifications(updatedGroup);
 
-    if (recipientEmail && updatedGroup.boletaFileUrl) {
-      const student = updatedGroup.payments[0]?.student;
+    return updatedGroup;
+  }
 
-      void this.notificationsService
-        .dispatchEmail({
-          type: NotificationType.BOLETA_DELIVERY,
-          recipientEmail,
-          subject: `Su boleta de pago está lista - N° ${updatedGroup.boletaNumber}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-              <h2 style="margin: 0 0 16px;">Su boleta de pago está lista</h2>
-              <p>Estimado/a apoderado/a,</p>
-              <p>
-                Informamos que la boleta N° ${updatedGroup.boletaNumber} correspondiente
-                ${student?.name ? ` al alumno/a ${student.name}` : ' al pago registrado'}
-                se encuentra disponible y se adjunta en este correo.
-              </p>
-              <p>Saludos cordiales,<br />Equipo de Administración</p>
-            </div>
-          `,
-          studentId: updatedGroup.payments[0]?.studentId,
-          paymentGroupId: updatedGroup.id,
-          attachments: [
-            {
-              filename: `boleta-${updatedGroup.boletaNumber}.pdf`,
-              path: path.join(process.cwd(), updatedGroup.boletaFileUrl),
-            },
-          ],
-        })
-        .catch(() => undefined);
+  async attachBoleta(
+    id: number,
+    dto: AttachBoletaDto,
+    uploadedFileUrl?: string,
+  ) {
+    const tenantId = this.tenantContext.getStore()?.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException(
+        'Debe seleccionar un colegio para adjuntar una boleta',
+      );
     }
+
+    const boletaFileUrl = uploadedFileUrl ?? dto.boletaFileUrl?.trim();
+    if (!boletaFileUrl) {
+      throw new BadRequestException(
+        'Debe adjuntar un archivo PDF o indicar boletaFileUrl',
+      );
+    }
+
+    const paymentGroup = await this.prisma.paymentGroup.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      include: paymentGroupInclude,
+    });
+
+    if (!paymentGroup) {
+      throw new NotFoundException(`PaymentGroup #${id} not found`);
+    }
+
+    if (!paymentGroup.isBoletaPending) {
+      throw new BadRequestException(
+        'La transacción ya tiene su boleta resuelta',
+      );
+    }
+
+    const updatedGroup = await this.prisma.paymentGroup.update({
+      where: { id, tenantId },
+      data: {
+        boletaFileUrl,
+        isBoletaPending: false,
+      },
+      include: paymentGroupInclude,
+    });
+
+    this.sendBoletaNotifications(updatedGroup);
 
     return updatedGroup;
   }
@@ -571,6 +560,59 @@ export class PaymentsService implements OnModuleInit {
         include: paymentGroupInclude,
       });
     });
+  }
+
+  private sendBoletaNotifications(group: PaymentGroupWithLines): void {
+    if (!group.boletaFileUrl) return;
+
+    const recipients = new Map<
+      string,
+      {
+        recipientName: string;
+        studentNames: string[];
+        studentId: number;
+      }
+    >();
+
+    for (const payment of group.payments) {
+      const email = payment.student.guardian.email?.trim();
+      if (!email) continue;
+
+      const existing = recipients.get(email);
+      if (existing) {
+        if (!existing.studentNames.includes(payment.student.name)) {
+          existing.studentNames.push(payment.student.name);
+        }
+        continue;
+      }
+
+      recipients.set(email, {
+        recipientName: payment.student.guardian.name,
+        studentNames: [payment.student.name],
+        studentId: payment.studentId,
+      });
+    }
+
+    for (const [to, recipient] of recipients) {
+      void this.mailService
+        .sendBoletaNotification({
+          to,
+          recipientName: recipient.recipientName,
+          studentName: recipient.studentNames.join(', '),
+          studentId: recipient.studentId,
+          paymentGroupId: group.id,
+          boletaNumber: group.boletaNumber,
+          boletaFileUrl: group.boletaFileUrl,
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `No fue posible enviar la boleta del PaymentGroup #${group.id}: ${
+              error instanceof Error ? error.message : 'Error desconocido'
+            }`,
+            error instanceof Error ? error.stack : undefined,
+          );
+        });
+    }
   }
 
   private buildPaymentGroupWhere(

@@ -9,6 +9,7 @@ describe('PaymentsController', () => {
   const paymentsService = {
     create: jest.fn(),
     createBatch: jest.fn(),
+    attachBoleta: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -51,5 +52,18 @@ describe('PaymentsController', () => {
     await controller.createBatch(dto as never, undefined);
 
     expect(paymentsService.createBatch).toHaveBeenCalledWith(dto, undefined);
+  });
+
+  it('attachBoleta pasa la URL del PDF subido al servicio', async () => {
+    const file = { filename: 'boleta.pdf' } as Express.Multer.File;
+    paymentsService.attachBoleta.mockResolvedValue({ id: 10 });
+
+    await controller.attachBoleta(10, {}, file);
+
+    expect(paymentsService.attachBoleta).toHaveBeenCalledWith(
+      10,
+      {},
+      '/uploads/boleta.pdf',
+    );
   });
 });

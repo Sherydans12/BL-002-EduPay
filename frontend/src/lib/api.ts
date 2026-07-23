@@ -269,10 +269,19 @@ export interface PaymentConcept {
 }
 
 export type ChargeStatus =
-  "PENDING" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "CANCELLED";
+  | "PENDING"
+  | "PARTIALLY_PAID"
+  | "PAID"
+  | "OVERDUE"
+  | "CANCELLED";
 
 export type PaymentMethod =
-  "CASH" | "DEBIT" | "CREDIT" | "CHECK" | "TRANSFER" | "WEBPAY";
+  | "CASH"
+  | "DEBIT"
+  | "CREDIT"
+  | "CHECK"
+  | "TRANSFER"
+  | "WEBPAY";
 
 export interface Charge {
   id: number;
@@ -360,6 +369,34 @@ export interface NotificationLogFilters {
   search?: string;
   status?: NotificationStatus;
   type?: NotificationType;
+}
+
+export type CommunicationType =
+  | "BOLETA_EMITTED"
+  | "MANUAL_PAYMENT_RECEIPT"
+  | "PAYMENT_REMINDER"
+  | "ACCOUNT_STATEMENT";
+
+export type DeliveryStatus = "SENT" | "FAILED";
+
+export interface SentCommunication {
+  id: string;
+  recipientEmail: string;
+  recipientName?: string | null;
+  type: CommunicationType;
+  subject: string;
+  status: DeliveryStatus;
+  metadata?: Record<string, unknown> | null;
+  errorMessage?: string | null;
+  createdAt: string;
+}
+
+export interface SentCommunicationFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: DeliveryStatus;
+  type?: CommunicationType;
 }
 
 export type AccountStatementPayment = Omit<Payment, "paymentGroup"> & {
@@ -604,6 +641,18 @@ export const paymentsApi = {
     if (data.boleta) fd.append("boleta", data.boleta);
     return paymentsApi.resolveBoleta(id, fd);
   },
+  attachBoleta: (
+    id: number,
+    data: { boleta?: File; boletaFileUrl?: string },
+  ) => {
+    const fd = new FormData();
+    if (data.boleta) fd.append("boleta", data.boleta);
+    if (data.boletaFileUrl) fd.append("boletaFileUrl", data.boletaFileUrl);
+    return request<PaymentGroup>(`/v1/payments/groups/${id}/attach-boleta`, {
+      method: "PATCH",
+      body: fd,
+    });
+  },
   summaryByCourse: (dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams();
     if (dateFrom) params.set("dateFrom", dateFrom);
@@ -631,6 +680,29 @@ export const notificationsApi = {
       `/notifications${query}`,
     );
   },
+};
+
+// ─── Communications ──────────────────────────────────────────
+export const communicationsApi = {
+  getAll: (filters: SentCommunicationFilters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.page != null) params.set("page", String(filters.page));
+    if (filters.limit != null) params.set("limit", String(filters.limit));
+    if (filters.search) params.set("search", filters.search);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.type) params.set("type", filters.type);
+    const query = params.size > 0 ? `?${params.toString()}` : "";
+    return request<PaginatedResponse<SentCommunication>>(
+      `/v1/communications${query}`,
+    );
+  },
+  sendPaymentReminders: () =>
+    request<{
+      processed: number;
+      sent: number;
+      failed: number;
+      skipped: number;
+    }>("/v1/communications/reminders", { method: "POST" }),
 };
 
 // ─── Analytics ───────────────────────────────────────────────

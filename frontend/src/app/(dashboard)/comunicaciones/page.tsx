@@ -1,22 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  CheckCircle2,
-  Clock,
-  MailOpen,
-  Search,
-  Send,
-  XCircle,
-} from "lucide-react";
+import { CheckCircle2, MailOpen, Search, Send, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { notificationsApi } from "@/lib/api";
+import { communicationsApi } from "@/lib/api";
 import type {
-  NotificationLog,
-  NotificationStatus,
-  NotificationType,
+  CommunicationType,
+  DeliveryStatus,
+  SentCommunication,
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmActionModal } from "@/components/ui/confirm-action-modal";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -33,36 +27,34 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
-const TYPE_LABELS: Record<NotificationType, string> = {
-  BOLETA_DELIVERY: "Boleta",
-  PAYMENT_RECEIPT: "Recibo",
-  COBRANZA_PREVENTIVA: "Cobranza preventiva",
-  COBRANZA_MORA: "Cobranza mora",
+const TYPE_LABELS: Record<CommunicationType, string> = {
+  BOLETA_EMITTED: "Boleta emitida",
+  MANUAL_PAYMENT_RECEIPT: "Recibo de pago",
+  PAYMENT_REMINDER: "Recordatorio de pago",
+  ACCOUNT_STATEMENT: "Estado de cuenta",
 };
 
-const TYPE_CLASS: Record<NotificationType, string> = {
-  BOLETA_DELIVERY: "border-blue-500/30 bg-blue-500/15 text-blue-300",
-  PAYMENT_RECEIPT: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
-  COBRANZA_PREVENTIVA: "border-amber-500/30 bg-amber-500/15 text-amber-300",
-  COBRANZA_MORA: "border-red-500/30 bg-red-500/15 text-red-300",
+const TYPE_CLASS: Record<CommunicationType, string> = {
+  BOLETA_EMITTED: "border-blue-500/30 bg-blue-500/15 text-blue-300",
+  MANUAL_PAYMENT_RECEIPT:
+    "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+  PAYMENT_REMINDER: "border-amber-500/30 bg-amber-500/15 text-amber-300",
+  ACCOUNT_STATEMENT: "border-violet-500/30 bg-violet-500/15 text-violet-300",
 };
 
-const STATUS_LABELS: Record<NotificationStatus, string> = {
-  PENDING: "Pendiente",
+const STATUS_LABELS: Record<DeliveryStatus, string> = {
   SENT: "Enviado",
   FAILED: "Fallido",
 };
 
-const STATUS_CLASS: Record<NotificationStatus, string> = {
+const STATUS_CLASS: Record<DeliveryStatus, string> = {
   SENT: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
   FAILED: "border-red-500/30 bg-red-500/15 text-red-300",
-  PENDING: "border-yellow-500/30 bg-yellow-500/15 text-yellow-300",
 };
 
-const STATUS_ICON: Record<NotificationStatus, typeof CheckCircle2> = {
+const STATUS_ICON: Record<DeliveryStatus, typeof CheckCircle2> = {
   SENT: CheckCircle2,
   FAILED: XCircle,
-  PENDING: Clock,
 };
 
 function formatDateTime(value: string) {
@@ -72,23 +64,26 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function isHtmlBody(body: string) {
-  return /<\/?[a-z][\s\S]*>/i.test(body);
-}
-
 export default function ComunicacionesPage() {
-  const [logs, setLogs] = useState<NotificationLog[]>([]);
+  const [logs, setLogs] = useState<SentCommunication[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLog, setSelectedLog] = useState<NotificationLog | null>(null);
+  const [selectedLog, setSelectedLog] = useState<SentCommunication | null>(
+    null,
+  );
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<NotificationStatus | "ALL">(
+  const [filterStatus, setFilterStatus] = useState<DeliveryStatus | "ALL">(
     "ALL",
   );
-  const [filterType, setFilterType] = useState<NotificationType | "ALL">("ALL");
+  const [filterType, setFilterType] = useState<CommunicationType | "ALL">(
+    "ALL",
+  );
+  const [reminderConfirmationOpen, setReminderConfirmationOpen] =
+    useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -102,7 +97,7 @@ export default function ComunicacionesPage() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await notificationsApi.getAll({
+      const res = await communicationsApi.getAll({
         page,
         limit: 20,
         search: debouncedSearch || undefined,
@@ -125,7 +120,6 @@ export default function ComunicacionesPage() {
     fetchLogs();
   }, [fetchLogs]);
 
-  const selectedIsHtml = selectedLog ? isHtmlBody(selectedLog.body) : false;
   const hasActiveFilters =
     searchTerm.length > 0 || filterStatus !== "ALL" || filterType !== "ALL";
 
@@ -137,6 +131,27 @@ export default function ComunicacionesPage() {
     setPage(1);
   };
 
+  const sendPaymentReminders = async () => {
+    setSendingReminders(true);
+    try {
+      const result = await communicationsApi.sendPaymentReminders();
+      toast.success(
+        `Recordatorios procesados: ${result.sent} enviados, ${result.failed} fallidos`,
+      );
+      setReminderConfirmationOpen(false);
+      setPage(1);
+      await fetchLogs();
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No fue posible enviar los recordatorios",
+      );
+    } finally {
+      setSendingReminders(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-10 animate-fade-in">
       <div className="flex items-start justify-between gap-4">
@@ -146,9 +161,19 @@ export default function ComunicacionesPage() {
             Bandeja centralizada de correos enviados por EduPay
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-sm text-[var(--color-text-secondary)]">
-          <Send className="h-4 w-4 text-[var(--color-primary)]" />
-          {totalCount} registros
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-sm text-[var(--color-text-secondary)]">
+            <Send className="h-4 w-4 text-[var(--color-primary)]" />
+            {totalCount} registros
+          </div>
+          <button
+            type="button"
+            onClick={() => setReminderConfirmationOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)]"
+          >
+            <Send className="h-4 w-4" />
+            Enviar recordatorios
+          </button>
         </div>
       </div>
 
@@ -176,7 +201,7 @@ export default function ComunicacionesPage() {
             <Select
               value={filterStatus}
               onValueChange={(value) => {
-                setFilterStatus(value as NotificationStatus | "ALL");
+                setFilterStatus(value as DeliveryStatus | "ALL");
                 setPage(1);
               }}
             >
@@ -187,14 +212,13 @@ export default function ComunicacionesPage() {
                 <SelectItem value="ALL">Todos los estados</SelectItem>
                 <SelectItem value="SENT">Enviado</SelectItem>
                 <SelectItem value="FAILED">Fallido</SelectItem>
-                <SelectItem value="PENDING">Pendiente</SelectItem>
               </SelectContent>
             </Select>
 
             <Select
               value={filterType}
               onValueChange={(value) => {
-                setFilterType(value as NotificationType | "ALL");
+                setFilterType(value as CommunicationType | "ALL");
                 setPage(1);
               }}
             >
@@ -266,9 +290,9 @@ export default function ComunicacionesPage() {
                           <p className="text-sm font-medium text-white">
                             {log.recipientEmail}
                           </p>
-                          {log.student && (
+                          {log.recipientName && (
                             <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                              {log.student.name}
+                              {log.recipientName}
                             </p>
                           )}
                         </td>
@@ -292,7 +316,7 @@ export default function ComunicacionesPage() {
                             className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-white transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
                           >
                             <MailOpen className="h-4 w-4" />
-                            Ver Mensaje
+                            Ver detalle
                           </button>
                         </td>
                       </tr>
@@ -343,8 +367,10 @@ export default function ComunicacionesPage() {
               <SheetHeader>
                 <SheetTitle>{selectedLog.subject}</SheetTitle>
                 <SheetDescription>
-                  {TYPE_LABELS[selectedLog.type]} enviado a{" "}
-                  {selectedLog.recipientEmail}
+                  {TYPE_LABELS[selectedLog.type]} para{" "}
+                  {selectedLog.recipientName
+                    ? `${selectedLog.recipientName} (${selectedLog.recipientEmail})`
+                    : selectedLog.recipientEmail}
                 </SheetDescription>
               </SheetHeader>
 
@@ -372,25 +398,32 @@ export default function ComunicacionesPage() {
                   </div>
                 )}
 
-                <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
-                  {selectedIsHtml ? (
-                    <iframe
-                      title="Mensaje enviado"
-                      sandbox=""
-                      srcDoc={selectedLog.body}
-                      className="h-[70vh] w-full bg-white"
-                    />
-                  ) : (
-                    <pre className="min-h-[360px] whitespace-pre-wrap p-5 text-sm leading-6 text-slate-900">
-                      {selectedLog.body}
-                    </pre>
-                  )}
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-5">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                    Metadata de trazabilidad
+                  </p>
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-sm leading-6 text-[var(--color-text-secondary)]">
+                    {selectedLog.metadata
+                      ? JSON.stringify(selectedLog.metadata, null, 2)
+                      : "Sin metadata adicional"}
+                  </pre>
                 </div>
               </div>
             </>
           )}
         </SheetContent>
       </Sheet>
+
+      <ConfirmActionModal
+        open={reminderConfirmationOpen}
+        onOpenChange={setReminderConfirmationOpen}
+        title="Confirmar envío masivo"
+        description="Se enviará un recordatorio automático a cada apoderado con cuotas vencidas. Cada intento quedará registrado en la bandeja de comunicaciones."
+        variant="default"
+        onConfirm={sendPaymentReminders}
+        confirmLabel="Sí, enviar recordatorios"
+        isLoading={sendingReminders}
+      />
     </div>
   );
 }

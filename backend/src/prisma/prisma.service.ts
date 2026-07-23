@@ -13,6 +13,7 @@ const TENANT_MODELS = new Set([
   'Payment',
   'Charge',
   'NotificationLog',
+  'SentCommunication',
 ]);
 
 const SYSTEM_MODELS = new Set(['User', 'Tenant', 'Role', 'Permission']);

@@ -56,24 +56,37 @@ enum NotificationStatus {
   FAILED
 }
 
+enum CommunicationType {
+  BOLETA_EMITTED
+  MANUAL_PAYMENT_RECEIPT
+  PAYMENT_REMINDER
+  ACCOUNT_STATEMENT
+}
+
+enum DeliveryStatus {
+  SENT
+  FAILED
+}
+
 // ─── Models ──────────────────────────────────────────────────
 
 model Tenant {
-  id               String            @id
-  name             String
-  slug             String            @unique
-  isActive         Boolean           @default(true)
-  courses          Course[]
-  guardians        Guardian[]
-  students         Student[]
-  paymentConcepts  PaymentConcept[]
-  paymentGroups    PaymentGroup[]
-  payments         Payment[]
-  charges          Charge[]
-  notificationLogs NotificationLog[]
-  users            User[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id                 String              @id
+  name               String
+  slug               String              @unique
+  isActive           Boolean             @default(true)
+  courses            Course[]
+  guardians          Guardian[]
+  students           Student[]
+  paymentConcepts    PaymentConcept[]
+  paymentGroups      PaymentGroup[]
+  payments           Payment[]
+  charges            Charge[]
+  notificationLogs   NotificationLog[]
+  sentCommunications SentCommunication[]
+  users              User[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@map("tenants")
 }
@@ -272,6 +285,25 @@ model NotificationLog {
   @@index([tenantId])
   @@index([tenantId, status, retryCount])
   @@map("notification_logs")
+}
+
+model SentCommunication {
+  id             String            @id @default(uuid())
+  tenantId       String            @default("colegio-conquistadores")
+  tenant         Tenant            @relation(fields: [tenantId], references: [id])
+  recipientEmail String
+  recipientName  String?
+  type           CommunicationType
+  subject        String
+  status         DeliveryStatus
+  metadata       Json?
+  errorMessage   String?
+  createdAt      DateTime          @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, type, status])
+  @@map("sent_communications")
 }
 
 model User {

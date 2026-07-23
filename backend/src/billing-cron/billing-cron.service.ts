@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ChargeStatus, NotificationType } from '@prisma/client';
+import { ChargeStatus } from '@prisma/client';
 import { tenantContext } from '../core/tenant/tenant.context';
-import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -12,7 +12,7 @@ export class BillingCronService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService,
+    private readonly mailService: MailService,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
@@ -67,27 +67,23 @@ export class BillingCronService {
               continue;
             }
 
-            const formattedAmount = new Intl.NumberFormat('es-CL').format(
-              charge.amount,
-            );
-            const formattedDueDate = new Intl.DateTimeFormat('es-CL', {
-              dateStyle: 'short',
-            }).format(charge.dueDate);
-
-            await this.notificationsService.dispatchEmail({
-              type: NotificationType.COBRANZA_MORA,
-              recipientEmail,
-              subject: `Cuota vencida: ${charge.concept.name}`,
-              studentId: charge.studentId,
-              html: `
-                <p>Estimado Apoderado,</p>
-                <p>
-                  le recordamos que la cuota de ${charge.concept.name}
-                  por $${formattedAmount} ha vencido el ${formattedDueDate}.
-                  Por favor regularice su situación.
-                </p>
-              `,
-            });
+            try {
+              await this.mailService.sendReminder({
+                to: recipientEmail,
+                recipientName: charge.student.guardian.name,
+                studentName: charge.student.name,
+                studentId: charge.studentId,
+                amount: Math.max(charge.amount - charge.paidAmount, 0),
+                dueDate: charge.dueDate,
+                conceptName: charge.concept.name,
+              });
+            } catch (error) {
+              this.logger.warn(
+                `Charge #${charge.id} marked overdue but its reminder failed: ${
+                  error instanceof Error ? error.message : 'unknown error'
+                }`,
+              );
+            }
           }
         },
       );

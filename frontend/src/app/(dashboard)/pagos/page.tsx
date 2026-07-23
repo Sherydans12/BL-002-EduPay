@@ -33,16 +33,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -78,6 +68,7 @@ import {
 } from "@/components/ui/dropdown-chevron";
 import { formatPaymentDate } from "@/lib/format-payment-date";
 import { METHOD_LABELS } from "@/lib/payment-method-labels";
+import { ConfirmActionModal } from "@/components/ui/confirm-action-modal";
 
 const fieldClass =
   "w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all";
@@ -144,6 +135,8 @@ export default function PagosMasterPage() {
   const [editMethod, setEditMethod] = useState<PaymentMethod>("TRANSFER");
   const [editNotes, setEditNotes] = useState("");
   const [isResolvingBoleta, setIsResolvingBoleta] = useState(false);
+  const [saveConfirmationOpen, setSaveConfirmationOpen] = useState(false);
+  const [isVoidingGroup, setIsVoidingGroup] = useState(false);
 
   useEffect(() => {
     fetchAllCourses()
@@ -254,6 +247,7 @@ export default function PagosMasterPage() {
 
   const confirmVoidGroup = async () => {
     if (!voidingGroup) return;
+    setIsVoidingGroup(true);
     try {
       await paymentsApi.deleteGroup(voidingGroup.id);
       toast.success("Transacción anulada exitosamente");
@@ -263,6 +257,8 @@ export default function PagosMasterPage() {
       toast.error(
         err instanceof Error ? err.message : "Error al anular transacción",
       );
+    } finally {
+      setIsVoidingGroup(false);
     }
   };
 
@@ -285,18 +281,51 @@ export default function PagosMasterPage() {
       return;
     }
 
+    if (resolvingGroup.isBoletaPending && trimmedBoletaNumber && !boletaFile) {
+      toast.error("Adjunta el archivo PDF para resolver la boleta pendiente");
+      return;
+    }
+
+    setSaveConfirmationOpen(true);
+  };
+
+  const confirmGroupUpdate = async () => {
+    if (!resolvingGroup) return;
+
+    const trimmedBoletaNumber = boletaNumber.trim();
+    const willAttachPendingBoleta =
+      resolvingGroup.isBoletaPending && boletaFile != null;
     const fd = new FormData();
     fd.append("method", editMethod);
     fd.append("paymentDate", editPaymentDate);
     fd.append("notes", editNotes);
-    fd.append("isBoletaPending", trimmedBoletaNumber ? "false" : "true");
+    fd.append(
+      "isBoletaPending",
+      willAttachPendingBoleta
+        ? "true"
+        : trimmedBoletaNumber
+          ? "false"
+          : String(resolvingGroup.isBoletaPending),
+    );
     if (trimmedBoletaNumber) fd.append("boletaNumber", trimmedBoletaNumber);
-    if (boletaFile) fd.append("boleta", boletaFile);
+    if (boletaFile && !willAttachPendingBoleta) {
+      fd.append("boleta", boletaFile);
+    }
 
     setIsResolvingBoleta(true);
     try {
       await paymentsApi.updateGroupDetails(resolvingGroup.id, fd);
-      toast.success("Transacción actualizada exitosamente");
+
+      if (willAttachPendingBoleta) {
+        await paymentsApi.attachBoleta(resolvingGroup.id, {
+          boleta: boletaFile,
+        });
+        toast.success("Boleta adjuntada; el correo al apoderado fue iniciado");
+      } else {
+        toast.success("Transacción actualizada exitosamente");
+      }
+
+      setSaveConfirmationOpen(false);
       setResolvingGroup(null);
       setBoletaNumber("");
       setBoletaFile(null);
@@ -312,6 +341,18 @@ export default function PagosMasterPage() {
       setIsResolvingBoleta(false);
     }
   };
+
+  const boletaRecipients = useMemo(() => {
+    if (!resolvingGroup) return [];
+
+    return Array.from(
+      new Set(
+        resolvingGroup.payments
+          .map((payment) => payment.student.guardian?.email?.trim())
+          .filter((email): email is string => Boolean(email)),
+      ),
+    );
+  }, [resolvingGroup]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-10">
@@ -842,6 +883,7 @@ export default function PagosMasterPage() {
         open={!!resolvingGroup}
         onOpenChange={(open) => {
           if (open) return;
+          setSaveConfirmationOpen(false);
           setResolvingGroup(null);
           setBoletaNumber("");
           setBoletaFile(null);
@@ -945,6 +987,7 @@ export default function PagosMasterPage() {
               <button
                 type="button"
                 onClick={() => {
+                  setSaveConfirmationOpen(false);
                   setResolvingGroup(null);
                   setBoletaNumber("");
                   setBoletaFile(null);
@@ -968,33 +1011,39 @@ export default function PagosMasterPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
+      <ConfirmActionModal
+        open={saveConfirmationOpen}
+        onOpenChange={setSaveConfirmationOpen}
+        title={
+          resolvingGroup?.isBoletaPending && boletaFile
+            ? "Confirmar carga de boleta"
+            : "Confirmar edición contable"
+        }
+        description={
+          resolvingGroup?.isBoletaPending && boletaFile
+            ? `Se adjuntará la boleta y se enviará un correo automático a ${
+                boletaRecipients.length > 0
+                  ? boletaRecipients.join(", ")
+                  : "los apoderados con correo registrado"
+              }.`
+            : "Se modificarán los datos administrativos de esta transacción y el cambio quedará reflejado en los registros contables."
+        }
+        variant="default"
+        onConfirm={confirmGroupUpdate}
+        confirmLabel="Sí, guardar cambios"
+        isLoading={isResolvingBoleta}
+      />
+
+      <ConfirmActionModal
         open={!!voidingGroup}
         onOpenChange={(open) => !open && setVoidingGroup(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              ¿Estás seguro de anular esta transacción?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-[var(--color-text-secondary)]">
-              Esta acción marcará los pagos como anulados y descontará el monto
-              de los reportes. No se puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmVoidGroup}
-              className="bg-red-600 hover:bg-red-700 text-white border-0"
-            >
-              Sí, anular transacción
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        title="¿Estás seguro de anular esta transacción?"
+        description="Esta acción marcará los pagos como anulados y descontará el monto de los reportes. No se puede deshacer."
+        variant="destructive"
+        onConfirm={confirmVoidGroup}
+        confirmLabel="Sí, anular transacción"
+        isLoading={isVoidingGroup}
+      />
     </div>
   );
 }
