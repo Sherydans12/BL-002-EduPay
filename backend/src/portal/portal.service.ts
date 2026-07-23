@@ -27,7 +27,7 @@ type PaymentReceiptData = {
   buyOrder: string;
   paymentDate: Date;
   totalAmount: number;
-  cardNumber: string;
+  cardNumber?: string;
   items: Array<{
     chargeId: number;
     studentName: string;
@@ -536,7 +536,7 @@ export class PortalService {
           </tr>
           <tr>
             <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold; background: #f9fafb;">Método de pago</td>
-            <td style="padding: 10px; border: 1px solid #e5e7eb;">WEBPAY **** ${this.escapeHtml(receipt.cardNumber)}</td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb;">${receipt.cardNumber ? `WEBPAY **** ${this.escapeHtml(receipt.cardNumber)}` : 'WEBPAY'}</td>
           </tr>
         </table>
         <h3 style="margin-bottom: 8px;">Detalle de cuotas y conceptos cancelados</h3>

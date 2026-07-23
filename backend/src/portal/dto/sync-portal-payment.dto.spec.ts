@@ -19,17 +19,48 @@ describe('SyncPortalPaymentDto', () => {
     await expect(validate(dto)).resolves.toHaveLength(0);
   });
 
-  it('rechaza métodos distintos de WEBPAY y tarjetas que no sean últimos 4', async () => {
+  it('normaliza tipos, WEBPAY_PLUS y los últimos cuatro dígitos', async () => {
+    const dto = plainToInstance(SyncPortalPaymentDto, {
+      ...validPayload,
+      amount: '120000',
+      paymentMethod: 'webpay_plus',
+      authorizationCode: undefined,
+      cardNumber: 123456,
+      chargeIds: ['10', '11'],
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto).toMatchObject({
+      amount: 120000,
+      paymentMethod: PaymentMethod.WEBPAY,
+      cardNumber: '3456',
+      chargeIds: [10, 11],
+    });
+  });
+
+  it('acepta autorización y tarjeta ausentes', async () => {
+    const dto = plainToInstance(SyncPortalPaymentDto, {
+      ...validPayload,
+      authorizationCode: null,
+      cardNumber: null,
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.cardNumber).toBeUndefined();
+  });
+
+  it('rechaza métodos distintos de WEBPAY e IDs no numéricos', async () => {
     const dto = plainToInstance(SyncPortalPaymentDto, {
       ...validPayload,
       paymentMethod: PaymentMethod.TRANSFER,
-      cardNumber: '123456',
+      cardNumber: 'abc',
+      chargeIds: ['not-an-id'],
     });
 
     const errors = await validate(dto);
 
     expect(errors.map((error) => error.property)).toEqual(
-      expect.arrayContaining(['paymentMethod', 'cardNumber']),
+      expect.arrayContaining(['paymentMethod', 'cardNumber', 'chargeIds']),
     );
   });
 });

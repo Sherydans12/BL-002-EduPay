@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   ArrayUnique,
@@ -6,6 +7,7 @@ import {
   IsArray,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsPositive,
   IsString,
   Matches,
@@ -21,24 +23,42 @@ export class SyncPortalPaymentDto {
   buyOrder: string;
 
   @ApiProperty({ example: 120000, minimum: 1 })
+  @Type(() => Number)
   @IsInt()
   @IsPositive()
   amount: number;
 
   @ApiProperty({ enum: [PaymentMethod.WEBPAY], example: PaymentMethod.WEBPAY })
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const normalizedValue = value.trim().toUpperCase();
+    return normalizedValue === 'WEBPAY_PLUS'
+      ? PaymentMethod.WEBPAY
+      : normalizedValue;
+  })
+  @IsString()
   @Equals(PaymentMethod.WEBPAY)
   paymentMethod: PaymentMethod;
 
-  @ApiProperty({ example: '1213', maxLength: 50 })
+  @ApiPropertyOptional({ example: '1213', maxLength: 50 })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(50)
-  authorizationCode: string;
+  authorizationCode?: string;
 
-  @ApiProperty({ example: '6623', description: 'Últimos 4 dígitos' })
+  @ApiPropertyOptional({
+    example: '6623',
+    description: 'Últimos 4 dígitos',
+  })
+  @Transform(({ value }) =>
+    value === null || value === undefined || value === ''
+      ? undefined
+      : String(value).slice(-4),
+  )
+  @IsOptional()
   @IsString()
   @Matches(/^\d{4}$/)
-  cardNumber: string;
+  cardNumber?: string;
 
   @ApiProperty({
     type: [Number],
@@ -46,6 +66,7 @@ export class SyncPortalPaymentDto {
     description:
       'IDs numéricos de Charge. El esquema actual de EduPay no usa UUID para cuotas.',
   })
+  @Type(() => Number)
   @IsArray()
   @ArrayNotEmpty()
   @ArrayUnique()
