@@ -10,6 +10,7 @@ describe('SyncPortalPaymentDto', () => {
     paymentMethod: PaymentMethod.WEBPAY,
     authorizationCode: '1213',
     cardNumber: '6623',
+    guardianEmail: 'apoderado@example.com',
     chargeIds: [10, 11],
   };
 
@@ -34,6 +35,7 @@ describe('SyncPortalPaymentDto', () => {
       amount: 120000,
       paymentMethod: PaymentMethod.WEBPAY,
       cardNumber: '3456',
+      guardianEmail: 'apoderado@example.com',
       chargeIds: [10, 11],
     });
   });
@@ -47,6 +49,21 @@ describe('SyncPortalPaymentDto', () => {
 
     await expect(validate(dto)).resolves.toHaveLength(0);
     expect(dto.cardNumber).toBeUndefined();
+  });
+
+  it('mantiene guardianEmail opcional para auditoría', async () => {
+    const withoutEmail = plainToInstance(SyncPortalPaymentDto, {
+      ...validPayload,
+      guardianEmail: undefined,
+    });
+    const withTrimmedEmail = plainToInstance(SyncPortalPaymentDto, {
+      ...validPayload,
+      guardianEmail: '  auditoria@example.com  ',
+    });
+
+    await expect(validate(withoutEmail)).resolves.toHaveLength(0);
+    await expect(validate(withTrimmedEmail)).resolves.toHaveLength(0);
+    expect(withTrimmedEmail.guardianEmail).toBe('auditoria@example.com');
   });
 
   it('rechaza métodos distintos de WEBPAY e IDs no numéricos', async () => {

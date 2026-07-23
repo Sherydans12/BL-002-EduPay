@@ -1,6 +1,6 @@
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotificationType, PaymentMethod } from '@prisma/client';
+import { NotificationType, PaymentMethod, PaymentSource } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -35,7 +35,11 @@ describe('PaymentsService', () => {
 
   const prisma = {
     tenant: { findMany: jest.fn() },
-    student: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() },
+    student: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+    },
     paymentConcept: { findFirst: jest.fn() },
     charge: { findFirst: jest.fn(), update: jest.fn() },
     payment: {
@@ -131,6 +135,7 @@ describe('PaymentsService', () => {
         data: expect.objectContaining({
           totalAmount: 150000,
           method: PaymentMethod.CASH,
+          source: PaymentSource.MANUAL,
           boletaFileUrl: '/uploads/boleta.pdf',
         }),
       });
@@ -202,6 +207,7 @@ describe('PaymentsService', () => {
         id: 99,
         amount: 75000,
         method: PaymentMethod.CASH,
+        source: PaymentSource.MANUAL,
         paymentDate,
         student: mockStudent,
         concept: null,
@@ -218,6 +224,14 @@ describe('PaymentsService', () => {
       );
 
       expect(result.id).toBe(99);
+      expect(prisma.paymentGroup.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ source: PaymentSource.MANUAL }),
+      });
+      expect(prisma.payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ source: PaymentSource.MANUAL }),
+        }),
+      );
       expect(mailService.sendPaymentConfirmation).toHaveBeenCalledWith(
         expect.objectContaining({
           to: 'maria@example.com',
@@ -233,6 +247,7 @@ describe('PaymentsService', () => {
         id: 100,
         amount: 50000,
         method: PaymentMethod.TRANSFER,
+        source: PaymentSource.MANUAL,
         paymentDate: new Date('2026-06-01'),
         student: {
           ...mockStudent,
@@ -250,6 +265,64 @@ describe('PaymentsService', () => {
 
       expect(mailService.sendPaymentConfirmation).not.toHaveBeenCalled();
     });
+
+    it('no envía correo cuando sendEmailNotification es false', async () => {
+      prisma.paymentGroup.create.mockResolvedValue({ id: 5 });
+      prisma.payment.create.mockResolvedValue({
+        id: 101,
+        amount: 50000,
+        method: PaymentMethod.TRANSFER,
+        source: PaymentSource.MANUAL,
+        paymentDate: new Date('2026-06-01'),
+        student: mockStudent,
+        concept: null,
+      });
+
+      await service.create({
+        amount: 50000,
+        method: PaymentMethod.TRANSFER,
+        paymentDate: '2026-06-01',
+        studentId: 1,
+        sendEmailNotification: false,
+      });
+
+      expect(mailService.sendPaymentConfirmation).not.toHaveBeenCalled();
+    });
+
+    it('confirma el pago aunque Resend falle y registra el error', async () => {
+      const loggerError = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      prisma.paymentGroup.create.mockResolvedValue({ id: 5 });
+      prisma.payment.create.mockResolvedValue({
+        id: 102,
+        amount: 50000,
+        method: PaymentMethod.TRANSFER,
+        source: PaymentSource.MANUAL,
+        paymentDate: new Date('2026-06-01'),
+        student: mockStudent,
+        concept: null,
+      });
+      mailService.sendPaymentConfirmation.mockRejectedValueOnce(
+        new Error('Resend no disponible'),
+      );
+
+      await expect(
+        service.create({
+          amount: 50000,
+          method: PaymentMethod.TRANSFER,
+          paymentDate: '2026-06-01',
+          studentId: 1,
+        }),
+      ).resolves.toMatchObject({ id: 102 });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(loggerError).toHaveBeenCalledWith(
+        expect.stringContaining('pago manual #102'),
+        expect.any(String),
+      );
+      loggerError.mockRestore();
+    });
   });
 
   describe('migrateLegacyPayments', () => {
@@ -258,6 +331,7 @@ describe('PaymentsService', () => {
         id: 7,
         amount: 30000,
         method: PaymentMethod.CASH,
+        source: PaymentSource.MANUAL,
         paymentDate: new Date('2026-05-01'),
         boletaFileUrl: null,
         boletaNumber: null,
@@ -273,7 +347,10 @@ describe('PaymentsService', () => {
         where: { isActive: true },
       });
       expect(prisma.paymentGroup.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ totalAmount: 30000 }),
+        data: expect.objectContaining({
+          totalAmount: 30000,
+          source: PaymentSource.MANUAL,
+        }),
       });
       expect(prisma.payment.update).toHaveBeenCalledWith({
         where: { id: 7 },

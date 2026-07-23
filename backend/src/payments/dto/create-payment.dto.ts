@@ -106,6 +106,21 @@ export class CreatePaymentDto {
   isBoletaPending?: boolean;
 
   @ApiPropertyOptional({
+    description:
+      'Envía el comprobante al apoderado. Por defecto se envía; use false para omitirlo.',
+    default: true,
+    example: true,
+  })
+  @Transform(({ value }) =>
+    value == null || value === ''
+      ? undefined
+      : value === true || value === 'true',
+  )
+  @IsOptional()
+  @IsBoolean()
+  sendEmailNotification?: boolean;
+
+  @ApiPropertyOptional({
     description: 'ID del concepto de pago (ej. Mensualidad, Matrícula)',
     example: 1,
   })

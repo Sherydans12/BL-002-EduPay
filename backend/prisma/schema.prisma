@@ -193,6 +193,7 @@ model Payment {
   tenant      Tenant        @relation(fields: [tenantId], references: [id])
   amount      Int
   method      PaymentMethod
+  source      PaymentSource @default(MANUAL)
   paymentDate DateTime
   studentId   Int
   student     Student       @relation(fields: [studentId], references: [id])

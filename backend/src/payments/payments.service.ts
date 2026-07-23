@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
@@ -9,6 +10,7 @@ import {
   ChargeStatus,
   NotificationType,
   PaymentMethod,
+  PaymentSource,
   Prisma,
 } from '@prisma/client';
 import { tenantContext } from '../core/tenant/tenant.context';
@@ -41,6 +43,7 @@ const paymentGroupInclude = {
 @Injectable()
 export class PaymentsService implements OnModuleInit {
   private readonly tenantContext = tenantContext;
+  private readonly logger = new Logger(PaymentsService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -74,6 +77,7 @@ export class PaymentsService implements OnModuleInit {
                 data: {
                   totalAmount: p.amount,
                   method: p.method,
+                  source: p.source,
                   paymentDate: p.paymentDate,
                   boletaFileUrl: p.boletaFileUrl,
                   boletaNumber: p.boletaNumber,
@@ -189,6 +193,7 @@ export class PaymentsService implements OnModuleInit {
         data: {
           totalAmount: dto.amount,
           method: dto.method,
+          source: PaymentSource.MANUAL,
           paymentDate,
           boletaFileUrl: resolvedBoletaUrl,
           boletaNumber,
@@ -201,6 +206,7 @@ export class PaymentsService implements OnModuleInit {
         data: {
           amount: dto.amount,
           method: dto.method,
+          source: PaymentSource.MANUAL,
           paymentDate,
           studentId: dto.studentId,
           conceptId: dto.conceptId || null,
@@ -216,18 +222,54 @@ export class PaymentsService implements OnModuleInit {
       });
     });
 
+    if (
+      payment.source === PaymentSource.MANUAL &&
+      dto.sendEmailNotification !== false
+    ) {
+      void this.sendManualPaymentReceipt(payment, resolvedBoletaUrl);
+    }
+
+    return payment;
+  }
+
+  private async sendManualPaymentReceipt(
+    payment: {
+      id: number;
+      amount: number;
+      source: PaymentSource;
+      paymentDate: Date;
+      student: {
+        name: string;
+        guardian: { email: string | null };
+      };
+    },
+    boletaFileUrl: string | null,
+  ): Promise<void> {
     const guardianEmail = payment.student.guardian.email?.trim();
-    if (guardianEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guardianEmail)) {
+    if (
+      payment.source !== PaymentSource.MANUAL ||
+      !guardianEmail ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guardianEmail)
+    ) {
+      return;
+    }
+
+    try {
       await this.mailService.sendPaymentConfirmation({
         to: guardianEmail,
         studentName: payment.student.name,
         amount: payment.amount,
         paymentDate: payment.paymentDate,
-        boletaFileUrl: resolvedBoletaUrl ?? undefined,
+        boletaFileUrl: boletaFileUrl ?? undefined,
       });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Error de correo desconocido';
+      this.logger.error(
+        `No fue posible enviar el comprobante del pago manual #${payment.id}: ${message}`,
+        error instanceof Error ? error.stack : undefined,
+      );
     }
-
-    return payment;
   }
 
   async createBatch(dto: CreatePaymentBatchDto, boletaFileUrl?: string) {
@@ -243,6 +285,7 @@ export class PaymentsService implements OnModuleInit {
         data: {
           totalAmount: dto.totalAmount,
           method: dto.method,
+          source: PaymentSource.MANUAL,
           paymentDate,
           boletaFileUrl: resolvedBoletaUrl,
           boletaNumber,
@@ -256,6 +299,7 @@ export class PaymentsService implements OnModuleInit {
           data: {
             amount: allocation.amount,
             method: dto.method,
+            source: PaymentSource.MANUAL,
             paymentDate,
             studentId: allocation.studentId,
             conceptId: allocation.conceptId,
@@ -374,6 +418,7 @@ export class PaymentsService implements OnModuleInit {
         data: {
           totalAmount: remainingAmount,
           method,
+          source: PaymentSource.MANUAL,
           paymentDate,
           isBoletaPending: true,
           notes,
@@ -384,6 +429,7 @@ export class PaymentsService implements OnModuleInit {
         data: {
           amount: remainingAmount,
           method,
+          source: PaymentSource.MANUAL,
           paymentDate,
           studentId: charge.studentId,
           conceptId: charge.conceptId,

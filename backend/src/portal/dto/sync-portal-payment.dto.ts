@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   Equals,
   IsArray,
+  IsEmail,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -59,6 +60,19 @@ export class SyncPortalPaymentDto {
   @IsString()
   @Matches(/^\d{4}$/)
   cardNumber?: string;
+
+  @ApiPropertyOptional({
+    example: 'apoderado@example.com',
+    description:
+      'Correo informado por el Portal para auditoría y trazabilidad. EduPay no envía el comprobante de este pago.',
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() || undefined : value,
+  )
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(320)
+  guardianEmail?: string;
 
   @ApiProperty({
     type: [Number],

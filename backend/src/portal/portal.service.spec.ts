@@ -1,11 +1,10 @@
 import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import {
   ChargeStatus,
-  NotificationType,
   PaymentMethod,
+  PaymentSource,
   Prisma,
 } from '@prisma/client';
-import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PortalService } from './portal.service';
 
@@ -35,18 +34,11 @@ describe('PortalService', () => {
       callback(tx),
     ),
   };
-  const notificationsService = {
-    dispatchEmail: jest.fn().mockResolvedValue(undefined),
-  };
-
   let service: PortalService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PortalService(
-      prisma as unknown as PrismaService,
-      notificationsService as unknown as NotificationsService,
-    );
+    service = new PortalService(prisma as unknown as PrismaService);
   });
 
   it('retorna exists=false cuando el RUT no está registrado', async () => {
@@ -285,21 +277,15 @@ describe('PortalService', () => {
     });
     expect(tx.payment.create).toHaveBeenCalledTimes(2);
     expect(tx.charge.update).toHaveBeenCalledTimes(2);
+    expect(tx.paymentGroup.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ source: PaymentSource.PORTAL }),
+    });
+    expect(tx.payment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ source: PaymentSource.PORTAL }),
+    });
     expect(tx.paymentGroup.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { tenantId: 'colegio-pruebas', buyOrder: 'OC-123' },
-      }),
-    );
-    expect(notificationsService.dispatchEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: 'colegio-pruebas',
-        type: NotificationType.PAYMENT_RECEIPT,
-        recipientEmail: 'apoderado@example.com',
-        subject: 'Comprobante de pago - Orden OC-123',
-        paymentGroupId: 90,
-        html: expect.stringMatching(
-          /OC-123[\s\S]*\$120\.000[\s\S]*WEBPAY \*\*\*\* 6623[\s\S]*Colegiatura junio[\s\S]*Colegiatura julio/,
-        ),
       }),
     );
     expect(loggerLog).toHaveBeenCalledWith({
@@ -312,7 +298,7 @@ describe('PortalService', () => {
     loggerLog.mockRestore();
   });
 
-  it('mantiene la confirmación exitosa si falla el despacho del correo', async () => {
+  it('ignora guardianEmail porque el Portal ya despachó el comprobante', async () => {
     const loggerLog = jest
       .spyOn(Logger.prototype, 'log')
       .mockImplementation(() => undefined);
@@ -342,13 +328,6 @@ describe('PortalService', () => {
         },
       },
     ]);
-    notificationsService.dispatchEmail.mockRejectedValueOnce(
-      new Error('Resend no disponible'),
-    );
-    const loggerError = jest
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation(() => undefined);
-
     await expect(
       service.syncPayment(
         {
@@ -357,6 +336,7 @@ describe('PortalService', () => {
           paymentMethod: PaymentMethod.WEBPAY,
           authorizationCode: '1215',
           cardNumber: '1234',
+          guardianEmail: 'apoderado2@example.com',
           chargeIds: [12],
         },
         'colegio-pruebas',
@@ -369,10 +349,6 @@ describe('PortalService', () => {
       amount: 45000,
       chargeIds: [12],
     });
-    expect(loggerError).toHaveBeenCalledWith(
-      expect.stringContaining('OC-125'),
-      expect.any(String),
-    );
     expect(loggerLog).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'WEBPAY_SYNCED',
@@ -382,7 +358,6 @@ describe('PortalService', () => {
         durationMs: expect.any(Number),
       }),
     );
-    loggerError.mockRestore();
     loggerLog.mockRestore();
   });
 
@@ -456,7 +431,6 @@ describe('PortalService', () => {
       ),
     ).rejects.toBeInstanceOf(ConflictException);
 
-    expect(notificationsService.dispatchEmail).not.toHaveBeenCalled();
     expect(loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'WEBPAY_SYNC_DUPLICATE',
@@ -523,7 +497,6 @@ describe('PortalService', () => {
         where: { tenantId: 'colegio-pruebas', buyOrder: 'OC-123' },
       }),
     );
-    expect(notificationsService.dispatchEmail).not.toHaveBeenCalled();
     expect(loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'WEBPAY_SYNC_DUPLICATE',
