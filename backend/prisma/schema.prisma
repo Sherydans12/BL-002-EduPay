@@ -162,23 +162,25 @@ model PaymentConcept {
 }
 
 model PaymentGroup {
-  id               Int               @id @default(autoincrement())
-  tenantId         String            @default("colegio-conquistadores")
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
-  buyOrder         String?
-  totalAmount      Int
-  method           PaymentMethod
-  paymentDate      DateTime
-  boletaFileUrl    String?
-  boletaNumber     String?
-  notes            String?
-  source           PaymentSource     @default(MANUAL)
-  isBoletaPending  Boolean           @default(false)
-  payments         Payment[]
-  notificationLogs NotificationLog[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  deletedAt        DateTime?
+  id                Int               @id @default(autoincrement())
+  tenantId          String            @default("colegio-conquistadores")
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  buyOrder          String?
+  authorizationCode String?
+  cardLast4         String?
+  totalAmount       Int
+  method            PaymentMethod
+  paymentDate       DateTime
+  boletaFileUrl     String?
+  boletaNumber      String?
+  notes             String?
+  source            PaymentSource     @default(MANUAL)
+  isBoletaPending   Boolean           @default(false)
+  payments          Payment[]
+  notificationLogs  NotificationLog[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
 
   @@unique([tenantId, buyOrder])
   @@index([tenantId])
@@ -257,6 +259,7 @@ model NotificationLog {
   subject        String
   body           String
   errorMessage   String?
+  retryCount     Int                @default(0)
   studentId      Int?
   student        Student?           @relation(fields: [studentId], references: [id])
   paymentGroupId Int?
@@ -266,6 +269,7 @@ model NotificationLog {
   deletedAt      DateTime?
 
   @@index([tenantId])
+  @@index([tenantId, status, retryCount])
   @@map("notification_logs")
 }
 

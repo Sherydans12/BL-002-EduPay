@@ -1,5 +1,11 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
-import { ChargeStatus } from '@prisma/client';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import {
+  ChargeStatus,
+  NotificationType,
+  PaymentMethod,
+  Prisma,
+} from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PortalService } from './portal.service';
 
@@ -22,16 +28,25 @@ describe('PortalService', () => {
     guardian: {
       findFirst: jest.fn(),
     },
+    paymentGroup: {
+      findFirst: jest.fn(),
+    },
     $transaction: jest.fn((callback: (client: typeof tx) => Promise<unknown>) =>
       callback(tx),
     ),
+  };
+  const notificationsService = {
+    dispatchEmail: jest.fn().mockResolvedValue(undefined),
   };
 
   let service: PortalService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PortalService(prisma as unknown as PrismaService);
+    service = new PortalService(
+      prisma as unknown as PrismaService,
+      notificationsService as unknown as NotificationsService,
+    );
   });
 
   it('retorna exists=false cuando el RUT no está registrado', async () => {
@@ -197,8 +212,16 @@ describe('PortalService', () => {
   });
 
   it('sincroniza el pago y salda todas las cuotas en una transacción', async () => {
+    const loggerLog = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
     tx.paymentGroup.findFirst.mockResolvedValue(null);
-    tx.paymentGroup.create.mockResolvedValue({ id: 90 });
+    tx.paymentGroup.create.mockResolvedValue({
+      id: 90,
+      totalAmount: 120000,
+      paymentDate: new Date('2026-06-23T15:30:00.000Z'),
+      payments: [],
+    });
     tx.charge.findMany.mockResolvedValue([
       {
         id: 10,
@@ -207,7 +230,17 @@ describe('PortalService', () => {
         status: ChargeStatus.PARTIALLY_PAID,
         studentId: 1,
         conceptId: 3,
-        student: { id: 1, guardian: { rut: '12.345.678-5' } },
+        dueDate: new Date('2026-06-05T00:00:00.000Z'),
+        concept: { name: 'Colegiatura junio' },
+        student: {
+          id: 1,
+          name: 'Alumno Prueba',
+          guardian: {
+            rut: '12.345.678-5',
+            name: 'Apoderado Prueba',
+            email: 'apoderado@example.com',
+          },
+        },
       },
       {
         id: 11,
@@ -216,16 +249,31 @@ describe('PortalService', () => {
         status: ChargeStatus.PENDING,
         studentId: 1,
         conceptId: 3,
-        student: { id: 1, guardian: { rut: '12.345.678-5' } },
+        dueDate: new Date('2026-07-05T00:00:00.000Z'),
+        concept: { name: 'Colegiatura julio' },
+        student: {
+          id: 1,
+          name: 'Alumno Prueba',
+          guardian: {
+            rut: '12.345.678-5',
+            name: 'Apoderado Prueba',
+            email: 'apoderado@example.com',
+          },
+        },
       },
     ]);
 
-    const result = await service.syncPayment({
-      buyOrder: ' OC-123 ',
-      amount: 120000,
-      paymentDate: '2026-06-23T15:30:00.000Z',
-      installmentsIds: [10, 11],
-    });
+    const result = await service.syncPayment(
+      {
+        buyOrder: ' OC-123 ',
+        amount: 120000,
+        paymentMethod: PaymentMethod.WEBPAY,
+        authorizationCode: '1213',
+        cardNumber: '6623',
+        chargeIds: [10, 11],
+      },
+      'colegio-pruebas',
+    );
 
     expect(result).toEqual({
       synced: true,
@@ -233,15 +281,109 @@ describe('PortalService', () => {
       buyOrder: 'OC-123',
       paymentGroupId: 90,
       amount: 120000,
-      paidInstallmentsIds: [10, 11],
+      chargeIds: [10, 11],
     });
     expect(tx.payment.create).toHaveBeenCalledTimes(2);
     expect(tx.charge.update).toHaveBeenCalledTimes(2);
     expect(tx.paymentGroup.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { buyOrder: 'OC-123' },
+        where: { tenantId: 'colegio-pruebas', buyOrder: 'OC-123' },
       }),
     );
+    expect(notificationsService.dispatchEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'colegio-pruebas',
+        type: NotificationType.PAYMENT_RECEIPT,
+        recipientEmail: 'apoderado@example.com',
+        subject: 'Comprobante de pago - Orden OC-123',
+        paymentGroupId: 90,
+        html: expect.stringMatching(
+          /OC-123[\s\S]*\$120\.000[\s\S]*WEBPAY \*\*\*\* 6623[\s\S]*Colegiatura junio[\s\S]*Colegiatura julio/,
+        ),
+      }),
+    );
+    expect(loggerLog).toHaveBeenCalledWith({
+      event: 'WEBPAY_SYNCED',
+      tenantId: 'colegio-pruebas',
+      buyOrder: 'OC-123',
+      amount: 120000,
+      durationMs: expect.any(Number),
+    });
+    loggerLog.mockRestore();
+  });
+
+  it('mantiene la confirmación exitosa si falla el despacho del correo', async () => {
+    const loggerLog = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    tx.paymentGroup.findFirst.mockResolvedValue(null);
+    tx.paymentGroup.create.mockResolvedValue({
+      id: 92,
+      paymentDate: new Date('2026-06-23T15:30:00.000Z'),
+    });
+    tx.charge.findMany.mockResolvedValue([
+      {
+        id: 12,
+        amount: 45000,
+        paidAmount: 0,
+        status: ChargeStatus.PENDING,
+        studentId: 2,
+        conceptId: 4,
+        dueDate: new Date('2026-08-05T00:00:00.000Z'),
+        concept: { name: 'Colegiatura agosto' },
+        student: {
+          id: 2,
+          name: 'Alumno Dos',
+          guardian: {
+            rut: '11.111.111-1',
+            name: 'Apoderado Dos',
+            email: 'apoderado2@example.com',
+          },
+        },
+      },
+    ]);
+    notificationsService.dispatchEmail.mockRejectedValueOnce(
+      new Error('Resend no disponible'),
+    );
+    const loggerError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    await expect(
+      service.syncPayment(
+        {
+          buyOrder: 'OC-125',
+          amount: 45000,
+          paymentMethod: PaymentMethod.WEBPAY,
+          authorizationCode: '1215',
+          cardNumber: '1234',
+          chargeIds: [12],
+        },
+        'colegio-pruebas',
+      ),
+    ).resolves.toEqual({
+      synced: true,
+      alreadyProcessed: false,
+      buyOrder: 'OC-125',
+      paymentGroupId: 92,
+      amount: 45000,
+      chargeIds: [12],
+    });
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.stringContaining('OC-125'),
+      expect.any(String),
+    );
+    expect(loggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'WEBPAY_SYNCED',
+        tenantId: 'colegio-pruebas',
+        buyOrder: 'OC-125',
+        amount: 45000,
+        durationMs: expect.any(Number),
+      }),
+    );
+    loggerError.mockRestore();
+    loggerLog.mockRestore();
   });
 
   it('rechaza el sync si el monto no coincide con el saldo', async () => {
@@ -259,38 +401,138 @@ describe('PortalService', () => {
     ]);
 
     await expect(
-      service.syncPayment({
-        buyOrder: 'OC-124',
-        amount: 60000,
-        paymentDate: '2026-06-23T15:30:00.000Z',
-        installmentsIds: [10],
-      }),
+      service.syncPayment(
+        {
+          buyOrder: 'OC-124',
+          amount: 60000,
+          paymentMethod: PaymentMethod.WEBPAY,
+          authorizationCode: '1214',
+          cardNumber: '6623',
+          chargeIds: [10],
+        },
+        'colegio-pruebas',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('acepta un reintento idempotente y rechaza datos diferentes', async () => {
+    const loggerWarn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     tx.paymentGroup.findFirst.mockResolvedValue({
       id: 90,
       totalAmount: 120000,
+      method: PaymentMethod.WEBPAY,
+      authorizationCode: '1213',
+      cardLast4: '6623',
       payments: [{ chargeId: 10 }, { chargeId: 11 }],
     });
 
     await expect(
-      service.syncPayment({
-        buyOrder: 'OC-123',
-        amount: 120000,
-        paymentDate: '2026-06-23T15:30:00.000Z',
-        installmentsIds: [11, 10],
-      }),
+      service.syncPayment(
+        {
+          buyOrder: 'OC-123',
+          amount: 120000,
+          paymentMethod: PaymentMethod.WEBPAY,
+          authorizationCode: '1213',
+          cardNumber: '6623',
+          chargeIds: [11, 10],
+        },
+        'colegio-pruebas',
+      ),
     ).resolves.toMatchObject({ alreadyProcessed: true });
 
     await expect(
-      service.syncPayment({
+      service.syncPayment(
+        {
+          buyOrder: 'OC-123',
+          amount: 999,
+          paymentMethod: PaymentMethod.WEBPAY,
+          authorizationCode: '1213',
+          cardNumber: '6623',
+          chargeIds: [10, 11],
+        },
+        'colegio-pruebas',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(notificationsService.dispatchEmail).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'WEBPAY_SYNC_DUPLICATE',
+        tenantId: 'colegio-pruebas',
+        buyOrder: 'OC-123',
+        amount: 120000,
+        durationMs: expect.any(Number),
+      }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'WEBPAY_SYNC_CONFLICT',
+        tenantId: 'colegio-pruebas',
         buyOrder: 'OC-123',
         amount: 999,
-        paymentDate: '2026-06-23T15:30:00.000Z',
-        installmentsIds: [10, 11],
+        durationMs: expect.any(Number),
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    );
+    loggerWarn.mockRestore();
+  });
+
+  it('recupera la confirmación existente ante una carrera por buyOrder', async () => {
+    const loggerWarn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const concurrentGroup = {
+      id: 91,
+      totalAmount: 120000,
+      method: PaymentMethod.WEBPAY,
+      authorizationCode: '1213',
+      cardLast4: '6623',
+      payments: [{ chargeId: 10 }, { chargeId: 11 }],
+    };
+    prisma.$transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '7.8.0',
+      }),
+    );
+    prisma.paymentGroup.findFirst.mockResolvedValue(concurrentGroup);
+
+    await expect(
+      service.syncPayment(
+        {
+          buyOrder: 'OC-123',
+          amount: 120000,
+          paymentMethod: PaymentMethod.WEBPAY,
+          authorizationCode: '1213',
+          cardNumber: '6623',
+          chargeIds: [10, 11],
+        },
+        'colegio-pruebas',
+      ),
+    ).resolves.toEqual({
+      synced: true,
+      alreadyProcessed: true,
+      buyOrder: 'OC-123',
+      paymentGroupId: 91,
+      amount: 120000,
+      chargeIds: [10, 11],
+    });
+    expect(prisma.paymentGroup.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenantId: 'colegio-pruebas', buyOrder: 'OC-123' },
+      }),
+    );
+    expect(notificationsService.dispatchEmail).not.toHaveBeenCalled();
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'WEBPAY_SYNC_DUPLICATE',
+        tenantId: 'colegio-pruebas',
+        buyOrder: 'OC-123',
+        amount: 120000,
+        durationMs: expect.any(Number),
+      }),
+    );
+    loggerWarn.mockRestore();
   });
 });

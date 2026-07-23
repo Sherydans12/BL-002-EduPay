@@ -2,14 +2,16 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   ArrayNotEmpty,
   ArrayUnique,
+  Equals,
   IsArray,
-  IsDateString,
   IsInt,
   IsNotEmpty,
   IsPositive,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
+import { PaymentMethod } from '@prisma/client';
 
 export class SyncPortalPaymentDto {
   @ApiProperty({ example: 'OC-123', maxLength: 100 })
@@ -23,9 +25,20 @@ export class SyncPortalPaymentDto {
   @IsPositive()
   amount: number;
 
-  @ApiProperty({ example: '2026-06-23T15:30:00.000Z' })
-  @IsDateString()
-  paymentDate: string;
+  @ApiProperty({ enum: [PaymentMethod.WEBPAY], example: PaymentMethod.WEBPAY })
+  @Equals(PaymentMethod.WEBPAY)
+  paymentMethod: PaymentMethod;
+
+  @ApiProperty({ example: '1213', maxLength: 50 })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  authorizationCode: string;
+
+  @ApiProperty({ example: '6623', description: 'Últimos 4 dígitos' })
+  @IsString()
+  @Matches(/^\d{4}$/)
+  cardNumber: string;
 
   @ApiProperty({
     type: [Number],
@@ -38,5 +51,5 @@ export class SyncPortalPaymentDto {
   @ArrayUnique()
   @IsInt({ each: true })
   @IsPositive({ each: true })
-  installmentsIds: number[];
+  chargeIds: number[];
 }

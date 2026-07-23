@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiHeader,
@@ -42,12 +51,16 @@ export class PortalController {
   }
 
   @Post('payments/sync')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sincronizar un pago Webpay exitoso' })
-  @ApiResponse({ status: 201, description: 'Pago sincronizado' })
+  @ApiResponse({ status: 200, description: 'Pago sincronizado o ya procesado' })
   @ApiResponse({ status: 400, description: 'Monto o payload inválido' })
   @ApiResponse({ status: 404, description: 'Alguna cuota no existe' })
   @ApiResponse({ status: 409, description: 'Orden o cuota en conflicto' })
-  syncPayment(@Body() dto: SyncPortalPaymentDto) {
-    return this.portalService.syncPayment(dto);
+  syncPayment(
+    @Body() dto: SyncPortalPaymentDto,
+    @Headers('x-tenant-id') tenantId: string,
+  ) {
+    return this.portalService.syncPayment(dto, tenantId);
   }
 }
