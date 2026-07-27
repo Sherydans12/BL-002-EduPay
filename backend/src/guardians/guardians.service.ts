@@ -19,7 +19,6 @@ export class GuardiansService {
     studentIds: number[],
     guardianId?: number,
   ): Promise<void> {
-    if (studentIds.length === 0) return;
     const found = await this.prisma.student.findMany({
       where: { id: { in: studentIds }, deletedAt: null },
       select: { id: true, name: true, guardianId: true },
@@ -28,6 +27,24 @@ export class GuardiansService {
       const foundSet = new Set(found.map((s) => s.id));
       const missing = studentIds.filter((id) => !foundSet.has(id));
       throw new NotFoundException(`Students not found: ${missing.join(', ')}`);
+    }
+
+    if (guardianId !== undefined) {
+      const currentStudents = await this.prisma.student.findMany({
+        where: { guardianId, deletedAt: null },
+        select: { id: true, name: true },
+      });
+      const requestedIds = new Set(studentIds);
+      const removedStudents = currentStudents.filter(
+        (student) => !requestedIds.has(student.id),
+      );
+
+      if (removedStudents.length > 0) {
+        const names = removedStudents.map((student) => student.name).join(', ');
+        throw new BadRequestException(
+          `No se puede quitar a ${names} porque cada alumno debe tener un apoderado. Cambie su apoderado desde el módulo de Alumnos.`,
+        );
+      }
     }
 
     const conflicts = found.filter((s) =>
@@ -46,16 +63,19 @@ export class GuardiansService {
   private buildStudentRelation(
     studentIds: number[] | undefined,
   ): Prisma.GuardianUpdateInput['students'] | undefined {
-    if (studentIds === undefined) return undefined;
+    if (!studentIds || studentIds.length === 0) return undefined;
     return { set: studentIds.map((id) => ({ id })) };
   }
 
   async create(dto: CreateGuardianDto) {
     const { studentIds, ...fields } = dto;
-    if (studentIds !== undefined) {
-      await this.validateStudentIds(studentIds);
+    const normalizedStudentIds = studentIds?.length
+      ? [...new Set(studentIds)]
+      : undefined;
+    if (normalizedStudentIds !== undefined) {
+      await this.validateStudentIds(normalizedStudentIds);
     }
-    const studentsRelation = this.buildStudentRelation(studentIds);
+    const studentsRelation = this.buildStudentRelation(normalizedStudentIds);
     const data: Prisma.GuardianCreateInput = {
       ...fields,
       ...(studentsRelation ? { students: studentsRelation } : {}),
@@ -82,7 +102,7 @@ export class GuardiansService {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2014' &&
-        studentIds !== undefined
+        normalizedStudentIds !== undefined
       ) {
         throw new BadRequestException(
           'No se puede desasociar un alumno sin asignarlo a otro apoderado',
@@ -178,10 +198,13 @@ export class GuardiansService {
   async update(id: number, dto: UpdateGuardianDto) {
     await this.findOne(id);
     const { studentIds, ...fields } = dto;
-    if (studentIds !== undefined) {
-      await this.validateStudentIds(studentIds, id);
+    const normalizedStudentIds = studentIds?.length
+      ? [...new Set(studentIds)]
+      : studentIds;
+    if (normalizedStudentIds !== undefined) {
+      await this.validateStudentIds(normalizedStudentIds, id);
     }
-    const studentsRelation = this.buildStudentRelation(studentIds);
+    const studentsRelation = this.buildStudentRelation(normalizedStudentIds);
     const data: Prisma.GuardianUpdateInput = {
       ...fields,
       ...(studentsRelation ? { students: studentsRelation } : {}),
@@ -209,7 +232,7 @@ export class GuardiansService {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         (error.code === 'P2014' || error.code === 'P2003') &&
-        studentIds !== undefined
+        normalizedStudentIds !== undefined
       ) {
         throw new BadRequestException(
           'No se puede desasociar un alumno sin asignarlo a otro apoderado',

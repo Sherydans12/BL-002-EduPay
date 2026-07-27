@@ -209,12 +209,31 @@ export default function GuardiansPage() {
 
   const onSubmit = async (data: GuardianFormData) => {
     setIsSubmitting(true);
+    const studentIds = data.studentIds ?? [];
+
+    if (editingGuardian && editingGuardian.students.length > 0) {
+      const currentStudentIds = new Set(
+        editingGuardian.students.map((student) => Number(student.id)),
+      );
+      const removedCurrentStudent = [...currentStudentIds].some(
+        (studentId) => !studentIds.includes(studentId),
+      );
+
+      if (removedCurrentStudent) {
+        toast.error(
+          "Para cambiar el apoderado de un alumno, edítelo desde el módulo de Alumnos.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     const payload = {
       rut: data.rut ? formatRut(data.rut) : undefined,
       name: data.name,
       email: data.email || undefined,
       phone: data.phone || undefined,
-      studentIds: data.studentIds ?? [],
+      ...(editingGuardian || studentIds.length > 0 ? { studentIds } : {}),
     };
     try {
       if (editingGuardian) {
@@ -521,6 +540,11 @@ export default function GuardiansPage() {
                 <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                   Alumnos Asociados
                 </label>
+                <p className="text-xs text-[var(--color-text-muted)] mb-2">
+                  {editingGuardian
+                    ? "Los alumnos actuales deben conservar un apoderado. Para cambiarlo, edítelo desde el módulo de Alumnos."
+                    : "Opcional. Puede crear el apoderado ahora y asociar alumnos después."}
+                </p>
                 <Controller
                   name="studentIds"
                   control={control}
