@@ -30,6 +30,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { CommunicationsModule } from './communications/communications.module';
 import { CommunicationActionsModule } from './communications/communication-actions.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   controllers: [AppController],
@@ -37,6 +38,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    HealthModule,
     AuthModule,
     UsersModule,
     RolesModule,

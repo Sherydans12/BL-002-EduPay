@@ -1,5 +1,5 @@
 import { RequestMethod } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -8,12 +8,15 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { LoggedValidationPipe } from './common/pipes/logged-validation.pipe';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
   const config = app.get(ConfigService);
+
+  app.use(helmet());
 
   // Global prefix
   app.setGlobalPrefix('api', {
@@ -27,28 +30,24 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Global transform interceptor
-  app.useGlobalInterceptors(new TransformInterceptor());
+  app.useGlobalInterceptors(new TransformInterceptor(app.get(Reflector)));
 
   // ─── CORS ───────────────────────────────────────────────────
   const isProduction = config.get<string>('NODE_ENV') === 'production';
-  const frontendUrl = config.get<string>('FRONTEND_URL');
+  const portalOrigins = [
+    config.get<string>('PORTAL_URL'),
+    config.get<string>('NEXT_PUBLIC_APP_URL'),
+  ].filter((origin): origin is string => Boolean(origin));
 
-  if (isProduction && !frontendUrl) {
+  if (portalOrigins.length === 0) {
     console.error(
-      '[bootstrap] FATAL: FRONTEND_URL no está definido en producción. ' +
+      '[bootstrap] PORTAL_URL o NEXT_PUBLIC_APP_URL no está definido. ' +
         'CORS denegará todos los orígenes cross-origin.',
     );
   }
 
   app.enableCors({
-    origin: isProduction
-      ? (frontendUrl ?? false)
-      : [
-          'http://localhost:3000',
-          'http://localhost:3001',
-          'http://localhost:3002',
-          ...(frontendUrl ? [frontendUrl] : []),
-        ],
+    origin: portalOrigins.length > 0 ? portalOrigins : false,
     credentials: true,
   });
 

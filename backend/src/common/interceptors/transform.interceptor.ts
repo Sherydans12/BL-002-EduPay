@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { Reflector } from '@nestjs/core';
+import { SKIP_TRANSFORM_KEY } from '../decorators/skip-transform.decorator';
 
 /**
  * Estructura de respuesta unificada de la API.
@@ -34,10 +36,21 @@ export class TransformInterceptor<T> implements NestInterceptor<
   T,
   ApiResponse<T>
 > {
+  constructor(private readonly reflector: Reflector) {}
+
   intercept(
-    _context: ExecutionContext,
+    context: ExecutionContext,
     next: CallHandler,
   ): Observable<ApiResponse<T>> {
+    const skipTransform = this.reflector.getAllAndOverride<boolean>(
+      SKIP_TRANSFORM_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (skipTransform) {
+      return next.handle() as Observable<ApiResponse<T>>;
+    }
+
     return next.handle().pipe(
       map((result) => {
         // Si el servicio ya devuelve la estructura paginada { data, meta }
