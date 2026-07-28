@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, MailOpen, Search, Send, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  Info,
+  MailOpen,
+  RefreshCw,
+  Search,
+  Send,
+  Settings,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { communicationsApi } from "@/lib/api";
 import type {
@@ -11,6 +20,7 @@ import type {
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmActionModal } from "@/components/ui/confirm-action-modal";
+import { EmailTypesGuideModal } from "@/components/email-types-guide-modal";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,6 +36,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Tooltip,
@@ -50,12 +67,18 @@ const TYPE_CLASS: Record<CommunicationType, string> = {
 };
 
 const STATUS_CLASS: Record<DeliveryStatus, string> = {
-  SENT: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+  SENT: "border-blue-500/30 bg-blue-500/15 text-blue-300",
+  DELIVERED: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+  BOUNCED: "border-red-500/30 bg-red-500/15 text-red-300",
+  COMPLAINED: "border-rose-500/30 bg-rose-500/15 text-rose-300",
   FAILED: "border-red-500/30 bg-red-500/15 text-red-300",
 };
 
 const STATUS_LABEL: Record<DeliveryStatus, string> = {
-  SENT: "Enviado",
+  SENT: "Enviado a Resend",
+  DELIVERED: "Entregado",
+  BOUNCED: "Rebotado",
+  COMPLAINED: "Marcado como spam",
   FAILED: "Fallido",
 };
 
@@ -80,6 +103,12 @@ export function CommunicationsInbox() {
   const [reminderConfirmationOpen, setReminderConfirmationOpen] =
     useState(false);
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [emailGuideOpen, setEmailGuideOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [retryTarget, setRetryTarget] = useState<SentCommunication | null>(
+    null,
+  );
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -147,6 +176,26 @@ export function CommunicationsInbox() {
     }
   };
 
+  const retryCommunication = async () => {
+    if (!retryTarget) return;
+
+    setRetrying(true);
+    try {
+      await communicationsApi.retry(retryTarget.id);
+      toast.success("Correo reenviado a la cola de Resend");
+      setRetryTarget(null);
+      await fetchCommunications();
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No fue posible reintentar el envío del correo",
+      );
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const hasActiveFilters =
     searchTerm.length > 0 || type !== "ALL" || status !== "ALL";
 
@@ -165,6 +214,22 @@ export function CommunicationsInbox() {
               <Send className="size-4 text-[var(--color-primary)]" />
               {total} registros
             </div>
+            <button
+              type="button"
+              onClick={() => setEmailGuideOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-surface-hover)]"
+            >
+              <Info className="size-4 text-[var(--color-primary)]" />
+              Guía de Correos
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-surface-hover)]"
+            >
+              <Settings className="size-4 text-[var(--color-primary)]" />
+              Configuración de Envíos
+            </button>
             <button
               type="button"
               onClick={() => setReminderConfirmationOpen(true)}
@@ -223,7 +288,10 @@ export function CommunicationsInbox() {
                 </SelectTrigger>
                 <SelectContent align="start">
                   <SelectItem value="ALL">Todos los estados</SelectItem>
-                  <SelectItem value="SENT">Enviado</SelectItem>
+                  <SelectItem value="SENT">Enviado a Resend</SelectItem>
+                  <SelectItem value="DELIVERED">Entregado</SelectItem>
+                  <SelectItem value="BOUNCED">Rebotado</SelectItem>
+                  <SelectItem value="COMPLAINED">Marcado como spam</SelectItem>
                   <SelectItem value="FAILED">Fallido</SelectItem>
                 </SelectContent>
               </Select>
@@ -258,15 +326,19 @@ export function CommunicationsInbox() {
                       <th className="px-6 py-4">Asunto</th>
                       <th className="px-6 py-4">Tipo</th>
                       <th className="px-6 py-4">Estado</th>
-                      <th className="px-6 py-4 text-right">Detalle</th>
+                      <th className="px-6 py-4 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {communications.map((communication) => {
                       const StatusIcon =
-                        communication.status === "SENT"
+                        communication.status === "DELIVERED"
                           ? CheckCircle2
-                          : XCircle;
+                          : communication.status === "FAILED" ||
+                              communication.status === "BOUNCED" ||
+                              communication.status === "COMPLAINED"
+                            ? XCircle
+                            : Send;
                       const statusBadge = (
                         <Badge
                           className={`${STATUS_CLASS[communication.status]} gap-1`}
@@ -305,7 +377,8 @@ export function CommunicationsInbox() {
                             </Badge>
                           </td>
                           <td className="px-6 py-4">
-                            {communication.status === "FAILED" &&
+                            {(communication.status === "FAILED" ||
+                              communication.status === "BOUNCED") &&
                             communication.errorMessage ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -320,14 +393,27 @@ export function CommunicationsInbox() {
                             )}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setSelected(communication)}
-                              className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-white transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
-                            >
-                              <MailOpen className="size-4" />
-                              Ver detalle
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              {communication.status === "FAILED" ||
+                              communication.status === "BOUNCED" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setRetryTarget(communication)}
+                                  className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-hover)]"
+                                >
+                                  <RefreshCw className="size-4" />
+                                  Reintentar envío
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => setSelected(communication)}
+                                className="inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-white transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)]"
+                              >
+                                <MailOpen className="size-4" />
+                                Ver detalle
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -402,6 +488,29 @@ export function CommunicationsInbox() {
           </SheetContent>
         </Sheet>
 
+        <EmailTypesGuideModal
+          open={emailGuideOpen}
+          onOpenChange={setEmailGuideOpen}
+        />
+
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-white">
+                Configuración de Envíos
+              </DialogTitle>
+              <DialogDescription className="text-[var(--color-text-secondary)]">
+                Próximamente podrás administrar remitentes, reglas de envío y
+                preferencias de notificación desde este espacio.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-5 text-sm text-[var(--color-text-muted)]">
+              La configuración avanzada de Resend estará disponible en una
+              siguiente etapa.
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <ConfirmActionModal
           open={reminderConfirmationOpen}
           onOpenChange={setReminderConfirmationOpen}
@@ -411,6 +520,17 @@ export function CommunicationsInbox() {
           onConfirm={sendPaymentReminders}
           confirmLabel="Sí, enviar recordatorios"
           isLoading={sendingReminders}
+        />
+
+        <ConfirmActionModal
+          open={retryTarget != null}
+          onOpenChange={(open) => !open && setRetryTarget(null)}
+          title="Reintentar envío de correo"
+          description={`¿Deseas reintentar el envío de este correo a ${retryTarget?.recipientEmail ?? "este destinatario"}?`}
+          variant="default"
+          onConfirm={retryCommunication}
+          confirmLabel="Sí, reintentar envío"
+          isLoading={retrying}
         />
       </div>
     </TooltipProvider>

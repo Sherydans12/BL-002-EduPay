@@ -369,7 +369,8 @@ export type CommunicationType =
   | "PAYMENT_REMINDER"
   | "ACCOUNT_STATEMENT";
 
-export type DeliveryStatus = "SENT" | "FAILED";
+export type DeliveryStatus =
+  "SENT" | "DELIVERED" | "BOUNCED" | "COMPLAINED" | "FAILED";
 
 export interface SentCommunication {
   id: string;
@@ -696,6 +697,10 @@ export const communicationsApi = {
       failed: number;
       skipped: number;
     }>("/v1/communications/reminders", { method: "POST" }),
+  retry: (id: string) =>
+    request<SentCommunication>(`/v1/communications/${id}/retry`, {
+      method: "POST",
+    }),
 };
 
 // ─── Analytics ───────────────────────────────────────────────
