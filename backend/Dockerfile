@@ -37,7 +37,7 @@ COPY docker-entrypoint.sh ./
 RUN mkdir -p /usr/src/app/uploads \
   && sed -i 's/\r$//' docker-entrypoint.sh \
   && chmod +x docker-entrypoint.sh \
-  && chown -R node:node /usr/src/app
+  && chown -R node:node /usr/src/app/uploads
 VOLUME ["/usr/src/app/uploads"]
 
 USER node
