@@ -14,6 +14,7 @@ const TENANT_MODELS = new Set([
   'Charge',
   'NotificationLog',
   'SentCommunication',
+  'TenantEmailConfig',
 ]);
 
 const SYSTEM_MODELS = new Set(['User', 'Tenant', 'Role', 'Permission']);

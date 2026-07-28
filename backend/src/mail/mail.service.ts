@@ -249,6 +249,13 @@ export class MailService {
   ): Promise<void> {
     try {
       const resendEmailId = await this.sendViaResend(data);
+      if (!resendEmailId) {
+        this.logger.log(
+          `Email omitted by tenant configuration: ${data.type} to ${data.to}`,
+        );
+        return;
+      }
+
       await this.logDelivery(
         data,
         DeliveryStatus.SENT,
@@ -274,7 +281,14 @@ export class MailService {
     }
   }
 
-  private async sendViaResend(data: SendTrackedEmailData): Promise<string> {
+  private async sendViaResend(
+    data: SendTrackedEmailData,
+  ): Promise<string | null> {
+    const emailConfig = await this.communicationsService.getEmailSettings();
+    if (!this.isCommunicationEnabled(data.type, emailConfig)) {
+      return null;
+    }
+
     const recipientEmail = data.to.trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
@@ -291,10 +305,11 @@ export class MailService {
       ? await this.buildAttachment(data.attachment)
       : undefined;
     const result = await this.resend.emails.send({
-      from: this.from,
+      from: this.formatSender(emailConfig.senderName),
       to: recipientEmail,
       subject: data.subject,
-      html: data.html,
+      html: this.withEmailFooter(data.html, emailConfig.emailFooter),
+      replyTo: emailConfig.replyToEmail || undefined,
       attachments: attachment ? [attachment] : undefined,
     });
 
@@ -307,6 +322,40 @@ export class MailService {
     }
 
     return result.data.id;
+  }
+
+  private isCommunicationEnabled(
+    type: CommunicationType,
+    config: {
+      enableManualPaymentEmails: boolean;
+      enableBoletaEmails: boolean;
+      enableReminderEmails: boolean;
+    },
+  ): boolean {
+    switch (type) {
+      case CommunicationType.MANUAL_PAYMENT_RECEIPT:
+        return config.enableManualPaymentEmails;
+      case CommunicationType.BOLETA_EMITTED:
+        return config.enableBoletaEmails;
+      case CommunicationType.PAYMENT_REMINDER:
+        return config.enableReminderEmails;
+      default:
+        return true;
+    }
+  }
+
+  private formatSender(senderName: string): string {
+    const senderEmail = this.from.match(/<([^>]+)>/)?.[1] ?? this.from.trim();
+    const safeName = senderName.replace(/[\r\n"]/g, '').trim();
+
+    return safeName ? `"${safeName}" <${senderEmail}>` : senderEmail;
+  }
+
+  private withEmailFooter(html: string, emailFooter: string | null): string {
+    const footer = emailFooter?.trim();
+    if (!footer) return html;
+
+    return `${html}<div style="font-family: Arial, sans-serif; max-width: 640px; margin: 24px auto 0; color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; padding-top: 16px;">${footer}</div>`;
   }
 
   private async buildAttachment(attachment: {

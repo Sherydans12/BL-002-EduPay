@@ -18,6 +18,7 @@ describe('CommunicationsService', () => {
       update: jest.fn(),
     },
     student: { findFirst: jest.fn() },
+    tenantEmailConfig: { upsert: jest.fn() },
   };
   const mailService = {
     sendBoletaNotification: jest.fn(),
@@ -99,6 +100,24 @@ describe('CommunicationsService', () => {
     await expect(service.getSentCommunications()).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('crea la configuración de correo por defecto para el tenant actual', async () => {
+    prisma.tenantEmailConfig.upsert.mockResolvedValue({
+      tenantId: 'colegio-test',
+      senderName: 'Colegio Conquistadores',
+    });
+
+    await tenantContext.run(
+      { tenantId: 'colegio-test', isSuperAdmin: false },
+      () => service.getEmailSettings(),
+    );
+
+    expect(prisma.tenantEmailConfig.upsert).toHaveBeenCalledWith({
+      where: { tenantId: 'colegio-test' },
+      create: { tenantId: 'colegio-test' },
+      update: {},
+    });
   });
 
   it('reintenta una comunicación fallida del tenant actual y actualiza el mismo registro', async () => {

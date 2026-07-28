@@ -12,6 +12,7 @@ import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FindSentCommunicationsQueryDto } from './dto/find-sent-communications-query.dto';
 import { LogCommunicationDto } from './dto/log-communication.dto';
+import { UpdateTenantEmailConfigDto } from './dto/update-tenant-email-config.dto';
 
 type SentCommunicationFilters = Pick<
   FindSentCommunicationsQueryDto,
@@ -118,6 +119,27 @@ export class CommunicationsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  getEmailSettings() {
+    const tenantId = this.getCurrentTenantId();
+
+    return this.prisma.tenantEmailConfig.upsert({
+      where: { tenantId },
+      create: { tenantId },
+      update: {},
+    });
+  }
+
+  updateEmailSettings(dto: UpdateTenantEmailConfigDto) {
+    const tenantId = this.getCurrentTenantId();
+    const data = this.buildEmailSettingsData(dto);
+
+    return this.prisma.tenantEmailConfig.upsert({
+      where: { tenantId },
+      create: { tenantId, ...data },
+      update: data,
+    });
   }
 
   /**
@@ -292,5 +314,28 @@ export class CommunicationsService {
     }
 
     return student;
+  }
+
+  private buildEmailSettingsData(dto: UpdateTenantEmailConfigDto) {
+    return {
+      ...(dto.senderName !== undefined
+        ? { senderName: dto.senderName.trim() }
+        : {}),
+      ...(dto.replyToEmail !== undefined
+        ? { replyToEmail: dto.replyToEmail?.trim() || null }
+        : {}),
+      ...(dto.emailFooter !== undefined
+        ? { emailFooter: dto.emailFooter?.trim() || null }
+        : {}),
+      ...(dto.enableManualPaymentEmails !== undefined
+        ? { enableManualPaymentEmails: dto.enableManualPaymentEmails }
+        : {}),
+      ...(dto.enableBoletaEmails !== undefined
+        ? { enableBoletaEmails: dto.enableBoletaEmails }
+        : {}),
+      ...(dto.enableReminderEmails !== undefined
+        ? { enableReminderEmails: dto.enableReminderEmails }
+        : {}),
+    };
   }
 }

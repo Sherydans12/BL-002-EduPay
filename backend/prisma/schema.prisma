@@ -87,6 +87,7 @@ model Tenant {
   charges            Charge[]
   notificationLogs   NotificationLog[]
   sentCommunications SentCommunication[]
+  emailConfig        TenantEmailConfig?
   users              User[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
@@ -309,6 +310,21 @@ model SentCommunication {
   @@index([tenantId, type, status])
   @@index([resendEmailId])
   @@map("sent_communications")
+}
+
+model TenantEmailConfig {
+  id                        String   @id @default(uuid())
+  tenantId                  String   @unique
+  tenant                    Tenant   @relation(fields: [tenantId], references: [id])
+  senderName                String   @default("Colegio Conquistadores")
+  replyToEmail              String?
+  emailFooter               String?
+  enableManualPaymentEmails Boolean  @default(true)
+  enableBoletaEmails        Boolean  @default(true)
+  enableReminderEmails      Boolean  @default(true)
+  updatedAt                 DateTime @updatedAt
+
+  @@map("tenant_email_configs")
 }
 
 model User {

@@ -10,6 +10,14 @@ describe('MailService', () => {
   const communicationsService = {
     logCommunication: jest.fn().mockResolvedValue({ id: 'comm-1' }),
     updateDelivery: jest.fn().mockResolvedValue({ id: 'comm-1' }),
+    getEmailSettings: jest.fn().mockResolvedValue({
+      senderName: 'Colegio Conquistadores',
+      replyToEmail: null,
+      emailFooter: null,
+      enableManualPaymentEmails: true,
+      enableBoletaEmails: true,
+      enableReminderEmails: true,
+    }),
   };
   const send = jest.fn();
 
@@ -78,6 +86,26 @@ describe('MailService', () => {
         resendEmailId: 'email-1',
       }),
     );
+    expect(communicationsService.logCommunication).not.toHaveBeenCalled();
+  });
+
+  it('omite el envío si el tenant deshabilita los recordatorios', async () => {
+    communicationsService.getEmailSettings.mockResolvedValueOnce({
+      senderName: 'Colegio Conquistadores',
+      replyToEmail: null,
+      emailFooter: null,
+      enableManualPaymentEmails: true,
+      enableBoletaEmails: true,
+      enableReminderEmails: false,
+    });
+
+    await service.sendReminder({
+      to: 'apoderado@example.com',
+      studentName: 'Ana Pérez',
+      amount: 45000,
+    });
+
+    expect(send).not.toHaveBeenCalled();
     expect(communicationsService.logCommunication).not.toHaveBeenCalled();
   });
 

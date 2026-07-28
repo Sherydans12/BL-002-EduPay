@@ -392,6 +392,28 @@ export interface SentCommunicationFilters {
   type?: CommunicationType;
 }
 
+export interface TenantEmailConfig {
+  id: string;
+  tenantId: string;
+  senderName: string;
+  replyToEmail?: string | null;
+  emailFooter?: string | null;
+  enableManualPaymentEmails: boolean;
+  enableBoletaEmails: boolean;
+  enableReminderEmails: boolean;
+  updatedAt: string;
+}
+
+export type UpdateTenantEmailConfigInput = Pick<
+  TenantEmailConfig,
+  | "senderName"
+  | "replyToEmail"
+  | "emailFooter"
+  | "enableManualPaymentEmails"
+  | "enableBoletaEmails"
+  | "enableReminderEmails"
+>;
+
 export type AccountStatementPayment = Omit<Payment, "paymentGroup"> & {
   paymentGroup?: Pick<
     PaymentGroup,
@@ -700,6 +722,12 @@ export const communicationsApi = {
   retry: (id: string) =>
     request<SentCommunication>(`/v1/communications/${id}/retry`, {
       method: "POST",
+    }),
+  getSettings: () => request<TenantEmailConfig>("/v1/communications/settings"),
+  updateSettings: (data: UpdateTenantEmailConfigInput) =>
+    request<TenantEmailConfig>("/v1/communications/settings", {
+      method: "PATCH",
+      body: JSON.stringify(data),
     }),
 };
 

@@ -1,15 +1,37 @@
-import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CommunicationsService } from './communications.service';
 import { FindSentCommunicationsQueryDto } from './dto/find-sent-communications-query.dto';
 import { RetryCommunicationParamsDto } from './dto/retry-communication-params.dto';
+import { UpdateTenantEmailConfigDto } from './dto/update-tenant-email-config.dto';
 
 @ApiTags('communications')
 @Controller('v1/communications')
 @UseGuards(JwtAuthGuard)
 export class CommunicationsController {
   constructor(private readonly communicationsService: CommunicationsService) {}
+
+  @Get('settings')
+  @ApiOperation({ summary: 'Obtener la configuración de correo del tenant' })
+  getEmailSettings() {
+    return this.communicationsService.getEmailSettings();
+  }
+
+  @Patch('settings')
+  @ApiOperation({ summary: 'Actualizar la configuración de correo del tenant' })
+  updateEmailSettings(@Body() dto: UpdateTenantEmailConfigDto) {
+    return this.communicationsService.updateEmailSettings(dto);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Listar correos enviados del colegio actual' })

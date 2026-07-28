@@ -21,6 +21,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { ConfirmActionModal } from "@/components/ui/confirm-action-modal";
 import { EmailTypesGuideModal } from "@/components/email-types-guide-modal";
+import { EmailSettingsModal } from "@/components/email-settings-modal";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -36,13 +37,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Tooltip,
@@ -493,23 +487,11 @@ export function CommunicationsInbox() {
           onOpenChange={setEmailGuideOpen}
         />
 
-        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-white">
-                Configuración de Envíos
-              </DialogTitle>
-              <DialogDescription className="text-[var(--color-text-secondary)]">
-                Próximamente podrás administrar remitentes, reglas de envío y
-                preferencias de notificación desde este espacio.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] p-5 text-sm text-[var(--color-text-muted)]">
-              La configuración avanzada de Resend estará disponible en una
-              siguiente etapa.
-            </div>
-          </DialogContent>
-        </Dialog>
+        <EmailSettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          onSaved={() => void fetchCommunications()}
+        />
 
         <ConfirmActionModal
           open={reminderConfirmationOpen}
