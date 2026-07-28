@@ -36,8 +36,10 @@ async function bootstrap() {
   const isProduction = config.get<string>('NODE_ENV') === 'production';
   const allowedOrigins = [
     process.env.PORTAL_URL,
+    process.env.FRONTEND_URL,
     'https://demo.edupay.baselogic.cl',
     'https://portal.edupay.baselogic.cl',
+    'https://edupay.baselogic.cl',
     'http://localhost:3000',
   ].filter(Boolean) as string[];
 
