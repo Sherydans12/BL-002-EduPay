@@ -34,21 +34,23 @@ async function bootstrap() {
 
   // ─── CORS ───────────────────────────────────────────────────
   const isProduction = config.get<string>('NODE_ENV') === 'production';
-  const portalOrigins = [
-    config.get<string>('PORTAL_URL'),
-    config.get<string>('NEXT_PUBLIC_APP_URL'),
-  ].filter((origin): origin is string => Boolean(origin));
-
-  if (portalOrigins.length === 0) {
-    console.error(
-      '[bootstrap] PORTAL_URL o NEXT_PUBLIC_APP_URL no está definido. ' +
-        'CORS denegará todos los orígenes cross-origin.',
-    );
-  }
+  const allowedOrigins = [
+    process.env.PORTAL_URL,
+    'https://demo.edupay.baselogic.cl',
+    'https://portal.edupay.baselogic.cl',
+    'http://localhost:3000',
+  ].filter(Boolean) as string[];
 
   app.enableCors({
-    origin: portalOrigins.length > 0 ? portalOrigins : false,
+    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-Tenant-ID',
+    ],
   });
 
   // ─── Archivos estáticos (uploads) ────────────────────────────
@@ -112,8 +114,8 @@ async function bootstrap() {
       res.status(204).end(),
   );
 
-  const port = config.get<number>('PORT') || 3001;
-  await app.listen(port);
+  const port = process.env.PORT || 3001;
+  await app.listen(port, '0.0.0.0');
   console.log(`🚀 EduPay API running on http://localhost:${port}/api`);
   if (!isProduction) {
     console.log(`📚 Swagger docs at http://localhost:${port}/api/docs`);
