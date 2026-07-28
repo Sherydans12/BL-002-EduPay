@@ -321,6 +321,9 @@ export class CommunicationsService {
       ...(dto.senderName !== undefined
         ? { senderName: dto.senderName.trim() }
         : {}),
+      ...(dto.senderEmail !== undefined
+        ? { senderEmail: dto.senderEmail?.trim() || null }
+        : {}),
       ...(dto.replyToEmail !== undefined
         ? { replyToEmail: dto.replyToEmail?.trim() || null }
         : {}),

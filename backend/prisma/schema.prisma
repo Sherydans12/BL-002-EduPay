@@ -317,6 +317,7 @@ model TenantEmailConfig {
   tenantId                  String   @unique
   tenant                    Tenant   @relation(fields: [tenantId], references: [id])
   senderName                String   @default("Colegio Conquistadores")
+  senderEmail               String?
   replyToEmail              String?
   emailFooter               String?
   enableManualPaymentEmails Boolean  @default(true)

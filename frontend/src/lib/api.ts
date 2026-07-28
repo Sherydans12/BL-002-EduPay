@@ -396,6 +396,7 @@ export interface TenantEmailConfig {
   id: string;
   tenantId: string;
   senderName: string;
+  senderEmail?: string | null;
   replyToEmail?: string | null;
   emailFooter?: string | null;
   enableManualPaymentEmails: boolean;
@@ -407,6 +408,7 @@ export interface TenantEmailConfig {
 export type UpdateTenantEmailConfigInput = Pick<
   TenantEmailConfig,
   | "senderName"
+  | "senderEmail"
   | "replyToEmail"
   | "emailFooter"
   | "enableManualPaymentEmails"

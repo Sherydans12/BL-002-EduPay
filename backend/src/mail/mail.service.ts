@@ -58,7 +58,6 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly resend: Resend;
   private readonly from: string;
-  private readonly isEmailEnabled: boolean;
 
   constructor(
     private readonly config: ConfigService,
@@ -67,8 +66,10 @@ export class MailService {
   ) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     this.resend = new Resend(apiKey || 're_placeholder_dev_no_email');
-    this.from = this.config.get<string>('RESEND_FROM', 'pagos@colegio.edu.cl');
-    this.isEmailEnabled = Boolean(apiKey);
+    this.from =
+      this.config.get<string>('MAIL_FROM')?.trim() ||
+      this.config.get<string>('RESEND_FROM')?.trim() ||
+      'notificaciones@baselogic.cl';
   }
 
   async sendPaymentConfirmation({
@@ -248,6 +249,20 @@ export class MailService {
     trackingCommunicationId?: string,
   ): Promise<void> {
     try {
+      if (!this.areEmailsEnabled()) {
+        console.log(
+          `[MailService] Envío simulado (ENABLE_EMAILS=false). Destinatario: ${data.to}`,
+        );
+        await this.logDelivery(
+          data,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          undefined,
+          trackingCommunicationId,
+        );
+        return;
+      }
+
       const resendEmailId = await this.sendViaResend(data);
       if (!resendEmailId) {
         this.logger.log(
@@ -295,7 +310,7 @@ export class MailService {
       throw new Error('Correo electrónico de destino inválido');
     }
 
-    if (!this.isEmailEnabled) {
+    if (!this.config.get<string>('RESEND_API_KEY')) {
       throw new Error(
         'Email deshabilitado en entorno local (sin RESEND_API_KEY)',
       );
@@ -305,7 +320,7 @@ export class MailService {
       ? await this.buildAttachment(data.attachment)
       : undefined;
     const result = await this.resend.emails.send({
-      from: this.formatSender(emailConfig.senderName),
+      from: this.formatSender(emailConfig.senderName, emailConfig.senderEmail),
       to: recipientEmail,
       subject: data.subject,
       html: this.withEmailFooter(data.html, emailConfig.emailFooter),
@@ -344,11 +359,33 @@ export class MailService {
     }
   }
 
-  private formatSender(senderName: string): string {
-    const senderEmail = this.from.match(/<([^>]+)>/)?.[1] ?? this.from.trim();
+  private areEmailsEnabled(): boolean {
+    const enableEmails = this.config.get<boolean>('ENABLE_EMAILS') as
+      | boolean
+      | string
+      | undefined;
+
+    return enableEmails !== false && enableEmails !== 'false';
+  }
+
+  private formatSender(
+    senderName: string,
+    tenantSenderEmail?: string | null,
+  ): string {
+    const senderEmail =
+      this.extractEmail(tenantSenderEmail) ??
+      this.extractEmail(this.from) ??
+      'notificaciones@baselogic.cl';
     const safeName = senderName.replace(/[\r\n"]/g, '').trim();
 
     return safeName ? `"${safeName}" <${senderEmail}>` : senderEmail;
+  }
+
+  private extractEmail(value?: string | null): string | null {
+    if (!value?.trim()) return null;
+
+    const email = value.match(/<([^>]+)>/)?.[1] ?? value.trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
   }
 
   private withEmailFooter(html: string, emailFooter: string | null): string {

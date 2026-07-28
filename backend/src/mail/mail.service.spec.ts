@@ -12,6 +12,7 @@ describe('MailService', () => {
     updateDelivery: jest.fn().mockResolvedValue({ id: 'comm-1' }),
     getEmailSettings: jest.fn().mockResolvedValue({
       senderName: 'Colegio Conquistadores',
+      senderEmail: null,
       replyToEmail: null,
       emailFooter: null,
       enableManualPaymentEmails: true,
@@ -20,10 +21,16 @@ describe('MailService', () => {
     }),
   };
   const send = jest.fn();
+  let configGet: jest.Mock;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     send.mockResolvedValue({ data: { id: 'email-1' }, error: null });
+    configGet = jest.fn((key: string, fallback?: string) => {
+      if (key === 'RESEND_API_KEY') return 're_test_key';
+      if (key === 'ENABLE_EMAILS') return true;
+      return fallback;
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -31,10 +38,7 @@ describe('MailService', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn((key: string, fallback?: string) => {
-              if (key === 'RESEND_API_KEY') return 're_test_key';
-              return fallback;
-            }),
+            get: configGet,
           },
         },
         {
@@ -61,6 +65,11 @@ describe('MailService', () => {
     });
 
     expect(send).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: '"Colegio Conquistadores" <notificaciones@baselogic.cl>',
+      }),
+    );
     expect(communicationsService.logCommunication).toHaveBeenCalledWith(
       expect.objectContaining({
         recipientEmail: 'apoderado@example.com',
@@ -92,6 +101,7 @@ describe('MailService', () => {
   it('omite el envío si el tenant deshabilita los recordatorios', async () => {
     communicationsService.getEmailSettings.mockResolvedValueOnce({
       senderName: 'Colegio Conquistadores',
+      senderEmail: null,
       replyToEmail: null,
       emailFooter: null,
       enableManualPaymentEmails: true,
@@ -107,6 +117,34 @@ describe('MailService', () => {
 
     expect(send).not.toHaveBeenCalled();
     expect(communicationsService.logCommunication).not.toHaveBeenCalled();
+  });
+
+  it('simula y registra DELIVERED cuando ENABLE_EMAILS es false', async () => {
+    const logger = jest
+      .spyOn(console, 'log')
+      .mockImplementation(() => undefined);
+    configGet.mockImplementation((key: string, fallback?: string) => {
+      if (key === 'RESEND_API_KEY') return 're_test_key';
+      if (key === 'ENABLE_EMAILS') return 'false';
+      return fallback;
+    });
+
+    await service.sendReminder({
+      to: 'apoderado@example.com',
+      studentName: 'Ana Pérez',
+      amount: 45000,
+    });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(logger).toHaveBeenCalledWith(
+      '[MailService] Envío simulado (ENABLE_EMAILS=false). Destinatario: apoderado@example.com',
+    );
+    expect(communicationsService.logCommunication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: DeliveryStatus.DELIVERED,
+      }),
+    );
+    logger.mockRestore();
   });
 
   it('registra FAILED y propaga el error de Resend', async () => {

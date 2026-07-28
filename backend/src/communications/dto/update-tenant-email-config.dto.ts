@@ -20,6 +20,12 @@ export class UpdateTenantEmailConfigDto {
   @IsEmail()
   @MaxLength(254)
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  senderEmail?: string | null;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(254)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   replyToEmail?: string | null;
 
   @IsOptional()
