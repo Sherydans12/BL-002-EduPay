@@ -1,10 +1,20 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CommunicationType, DeliveryStatus, type Prisma } from '@prisma/client';
+import {
+  CommunicationType,
+  DeliveryStatus,
+  type Prisma,
+  type TenantEmailConfig,
+} from '@prisma/client';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Resend } from 'resend';
 import { CommunicationsService } from '../communications/communications.service';
+import {
+  renderBoletaTemplate,
+  renderPaymentConfirmationTemplate,
+  renderReminderTemplate,
+} from './templates/email-templates';
 
 type PaymentConfirmationPayload = {
   to: string;
@@ -93,27 +103,12 @@ export class MailService {
       currency: 'CLP',
       maximumFractionDigits: 0,
     });
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; color: #111827;">
-        <h2 style="color: #1d4ed8; margin-bottom: 8px;">Comprobante de Pago</h2>
-        <p style="margin: 0 0 16px;">Estimado/a ${this.escapeHtml(recipientName ?? 'apoderado/a')}, informamos que se ha registrado un pago exitosamente en BaseLogic EduPay.</p>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-          <tr>
-            <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold; background: #f9fafb;">Alumno</td>
-            <td style="padding: 10px; border: 1px solid #e5e7eb;">${this.escapeHtml(studentName)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold; background: #f9fafb;">Monto</td>
-            <td style="padding: 10px; border: 1px solid #e5e7eb;">${formattedAmount}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold; background: #f9fafb;">Fecha</td>
-            <td style="padding: 10px; border: 1px solid #e5e7eb;">${formattedDate}</td>
-          </tr>
-        </table>
-        <p style="color: #6b7280; font-size: 12px;">Este es un correo automático, por favor no responder directamente a este mensaje.</p>
-      </div>
-    `;
+    const html = renderPaymentConfirmationTemplate({
+      recipientName,
+      studentName,
+      formattedAmount,
+      formattedDate,
+    });
 
     await this.sendTrackedEmail(
       {
@@ -153,18 +148,11 @@ export class MailService {
   }: BoletaNotificationPayload): Promise<void> {
     const numberLabel = boletaNumber ? ` N° ${boletaNumber}` : '';
     const subject = `Su boleta de pago está lista${numberLabel}`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-        <h2 style="margin: 0 0 16px;">Su boleta de pago está lista</h2>
-        <p>Estimado/a ${this.escapeHtml(recipientName ?? 'apoderado/a')},</p>
-        <p>
-          La boleta${this.escapeHtml(numberLabel)} asociada al pago de
-          ${this.escapeHtml(studentName)} se encuentra disponible y se adjunta
-          en este correo.
-        </p>
-        <p>Saludos cordiales,<br />Equipo de Administración</p>
-      </div>
-    `;
+    const html = renderBoletaTemplate({
+      recipientName,
+      studentName,
+      boletaNumber,
+    });
 
     await this.sendTrackedEmail(
       {
@@ -213,17 +201,13 @@ export class MailService {
         }).format(dueDate)
       : null;
     const subject = `Recordatorio de pago: ${conceptName}`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
-        <h2 style="margin: 0 0 16px;">Recordatorio de pago</h2>
-        <p>Estimado/a ${this.escapeHtml(recipientName ?? 'apoderado/a')},</p>
-        <p>
-          Le recordamos que ${this.escapeHtml(studentName)} mantiene
-          ${this.escapeHtml(conceptName)} por ${formattedAmount}${formattedDueDate ? `, con vencimiento el ${formattedDueDate}` : ''}.
-        </p>
-        <p>Si ya realizó el pago, por favor ignore este mensaje.</p>
-      </div>
-    `;
+    const html = renderReminderTemplate({
+      recipientName,
+      studentName,
+      conceptName,
+      formattedAmount,
+      formattedDueDate,
+    });
 
     await this.sendTrackedEmail(
       {
@@ -249,9 +233,11 @@ export class MailService {
     trackingCommunicationId?: string,
   ): Promise<void> {
     try {
-      if (!this.areEmailsEnabled()) {
-        console.log(
-          `[MailService] Envío simulado (ENABLE_EMAILS=false). Destinatario: ${data.to}`,
+      const emailConfig = await this.communicationsService.getEmailSettings();
+      const simulationReason = this.getSimulationReason(emailConfig);
+      if (simulationReason) {
+        this.logger.log(
+          `Envío simulado (${simulationReason}). Destinatario: ${data.to}`,
         );
         await this.logDelivery(
           data,
@@ -263,7 +249,7 @@ export class MailService {
         return;
       }
 
-      const resendEmailId = await this.sendViaResend(data);
+      const resendEmailId = await this.sendViaResend(data, emailConfig);
       if (!resendEmailId) {
         this.logger.log(
           `Email omitted by tenant configuration: ${data.type} to ${data.to}`,
@@ -298,8 +284,8 @@ export class MailService {
 
   private async sendViaResend(
     data: SendTrackedEmailData,
+    emailConfig: TenantEmailConfig,
   ): Promise<string | null> {
-    const emailConfig = await this.communicationsService.getEmailSettings();
     if (!this.isCommunicationEnabled(data.type, emailConfig)) {
       return null;
     }
@@ -366,6 +352,12 @@ export class MailService {
       | undefined;
 
     return enableEmails !== false && enableEmails !== 'false';
+  }
+
+  private getSimulationReason(config: TenantEmailConfig): string | null {
+    if (!this.areEmailsEnabled()) return 'ENABLE_EMAILS=false';
+    if (config.enableAllEmails === false) return 'enableAllEmails=false';
+    return null;
   }
 
   private formatSender(
@@ -461,14 +453,5 @@ export class MailService {
     return error instanceof Error
       ? error.message
       : 'Error de correo desconocido';
-  }
-
-  private escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
   }
 }

@@ -120,6 +120,24 @@ describe('CommunicationsService', () => {
     });
   });
 
+  it('actualiza el switch maestro del tenant actual', async () => {
+    prisma.tenantEmailConfig.upsert.mockResolvedValue({
+      tenantId: 'colegio-test',
+      enableAllEmails: false,
+    });
+
+    await tenantContext.run(
+      { tenantId: 'colegio-test', isSuperAdmin: false },
+      () => service.updateEmailSettings({ enableAllEmails: false }),
+    );
+
+    expect(prisma.tenantEmailConfig.upsert).toHaveBeenCalledWith({
+      where: { tenantId: 'colegio-test' },
+      create: { tenantId: 'colegio-test', enableAllEmails: false },
+      update: { enableAllEmails: false },
+    });
+  });
+
   it('reintenta una comunicación fallida del tenant actual y actualiza el mismo registro', async () => {
     prisma.sentCommunication.findFirst.mockResolvedValueOnce({
       id: '0bd3b1b8-e2bb-418a-a54e-ef9375363150',

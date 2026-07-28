@@ -15,6 +15,7 @@ describe('MailService', () => {
       senderEmail: null,
       replyToEmail: null,
       emailFooter: null,
+      enableAllEmails: true,
       enableManualPaymentEmails: true,
       enableBoletaEmails: true,
       enableReminderEmails: true,
@@ -104,6 +105,7 @@ describe('MailService', () => {
       senderEmail: null,
       replyToEmail: null,
       emailFooter: null,
+      enableAllEmails: true,
       enableManualPaymentEmails: true,
       enableBoletaEmails: true,
       enableReminderEmails: false,
@@ -121,7 +123,7 @@ describe('MailService', () => {
 
   it('simula y registra DELIVERED cuando ENABLE_EMAILS es false', async () => {
     const logger = jest
-      .spyOn(console, 'log')
+      .spyOn(Logger.prototype, 'log')
       .mockImplementation(() => undefined);
     configGet.mockImplementation((key: string, fallback?: string) => {
       if (key === 'RESEND_API_KEY') return 're_test_key';
@@ -137,12 +139,43 @@ describe('MailService', () => {
 
     expect(send).not.toHaveBeenCalled();
     expect(logger).toHaveBeenCalledWith(
-      '[MailService] Envío simulado (ENABLE_EMAILS=false). Destinatario: apoderado@example.com',
+      'Envío simulado (ENABLE_EMAILS=false). Destinatario: apoderado@example.com',
     );
     expect(communicationsService.logCommunication).toHaveBeenCalledWith(
       expect.objectContaining({
         status: DeliveryStatus.DELIVERED,
       }),
+    );
+    logger.mockRestore();
+  });
+
+  it('simula y registra DELIVERED cuando el tenant apaga el switch maestro', async () => {
+    const logger = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    communicationsService.getEmailSettings.mockResolvedValueOnce({
+      senderName: 'Colegio Conquistadores',
+      senderEmail: null,
+      replyToEmail: null,
+      emailFooter: null,
+      enableAllEmails: false,
+      enableManualPaymentEmails: true,
+      enableBoletaEmails: true,
+      enableReminderEmails: true,
+    });
+
+    await service.sendReminder({
+      to: 'apoderado@example.com',
+      studentName: 'Ana Pérez',
+      amount: 45000,
+    });
+
+    expect(send).not.toHaveBeenCalled();
+    expect(logger).toHaveBeenCalledWith(
+      'Envío simulado (enableAllEmails=false). Destinatario: apoderado@example.com',
+    );
+    expect(communicationsService.logCommunication).toHaveBeenCalledWith(
+      expect.objectContaining({ status: DeliveryStatus.DELIVERED }),
     );
     logger.mockRestore();
   });

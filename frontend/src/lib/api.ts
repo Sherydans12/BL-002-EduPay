@@ -399,6 +399,7 @@ export interface TenantEmailConfig {
   senderEmail?: string | null;
   replyToEmail?: string | null;
   emailFooter?: string | null;
+  enableAllEmails: boolean;
   enableManualPaymentEmails: boolean;
   enableBoletaEmails: boolean;
   enableReminderEmails: boolean;
@@ -411,6 +412,7 @@ export type UpdateTenantEmailConfigInput = Pick<
   | "senderEmail"
   | "replyToEmail"
   | "emailFooter"
+  | "enableAllEmails"
   | "enableManualPaymentEmails"
   | "enableBoletaEmails"
   | "enableReminderEmails"

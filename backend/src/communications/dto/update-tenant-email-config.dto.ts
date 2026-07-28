@@ -35,6 +35,10 @@ export class UpdateTenantEmailConfigDto {
 
   @IsOptional()
   @IsBoolean()
+  enableAllEmails?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   enableManualPaymentEmails?: boolean;
 
   @IsOptional()

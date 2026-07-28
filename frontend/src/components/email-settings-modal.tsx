@@ -37,6 +37,7 @@ const defaultSettings: EmailSettingsForm = {
   senderName: "Colegio Conquistadores",
   replyToEmail: "",
   emailFooter: "",
+  enableAllEmails: true,
   enableManualPaymentEmails: true,
   enableBoletaEmails: true,
   enableReminderEmails: true,
@@ -47,6 +48,7 @@ function toFormSettings(settings: TenantEmailConfig): EmailSettingsForm {
     senderName: settings.senderName,
     replyToEmail: settings.replyToEmail ?? "",
     emailFooter: settings.emailFooter ?? "",
+    enableAllEmails: settings.enableAllEmails,
     enableManualPaymentEmails: settings.enableManualPaymentEmails,
     enableBoletaEmails: settings.enableBoletaEmails,
     enableReminderEmails: settings.enableReminderEmails,
@@ -183,6 +185,25 @@ export function EmailSettingsModal({
           </div>
         ) : (
           <div className="space-y-6 pt-2">
+            <section className="space-y-3">
+              <div>
+                <h3 className="font-semibold text-white">
+                  Servicio de Correos Salientes
+                </h3>
+                <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                  Control maestro para todos los envíos de este colegio.
+                </p>
+              </div>
+              <EmailToggle
+                label="Servicio de Correos Salientes"
+                description="Al apagar este switch, no se enviará ningún correo automático ni manual desde la plataforma para este colegio."
+                checked={settings.enableAllEmails}
+                onCheckedChange={(checked) =>
+                  updateField("enableAllEmails", checked)
+                }
+              />
+            </section>
+
             <section className="space-y-4">
               <div>
                 <h3 className="font-semibold text-white">Identidad</h3>

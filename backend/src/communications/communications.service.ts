@@ -330,6 +330,9 @@ export class CommunicationsService {
       ...(dto.emailFooter !== undefined
         ? { emailFooter: dto.emailFooter?.trim() || null }
         : {}),
+      ...(dto.enableAllEmails !== undefined
+        ? { enableAllEmails: dto.enableAllEmails }
+        : {}),
       ...(dto.enableManualPaymentEmails !== undefined
         ? { enableManualPaymentEmails: dto.enableManualPaymentEmails }
         : {}),

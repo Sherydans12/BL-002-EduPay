@@ -320,6 +320,7 @@ model TenantEmailConfig {
   senderEmail               String?
   replyToEmail              String?
   emailFooter               String?
+  enableAllEmails           Boolean  @default(true)
   enableManualPaymentEmails Boolean  @default(true)
   enableBoletaEmails        Boolean  @default(true)
   enableReminderEmails      Boolean  @default(true)
