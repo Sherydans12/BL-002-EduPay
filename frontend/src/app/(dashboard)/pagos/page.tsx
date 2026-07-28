@@ -69,6 +69,7 @@ import {
 import { formatPaymentDate } from "@/lib/format-payment-date";
 import { METHOD_LABELS } from "@/lib/payment-method-labels";
 import { ConfirmActionModal } from "@/components/ui/confirm-action-modal";
+import { PendingBoletasTable } from "@/components/pending-boletas-table";
 
 const fieldClass =
   "w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm focus:border-[var(--color-primary)] outline-none transition-all";
@@ -137,6 +138,7 @@ export default function PagosMasterPage() {
   const [isResolvingBoleta, setIsResolvingBoleta] = useState(false);
   const [saveConfirmationOpen, setSaveConfirmationOpen] = useState(false);
   const [isVoidingGroup, setIsVoidingGroup] = useState(false);
+  const [pendingBoletasTotal, setPendingBoletasTotal] = useState(0);
 
   useEffect(() => {
     fetchAllCourses()
@@ -215,11 +217,6 @@ export default function PagosMasterPage() {
     filters.studentId != null
       ? students.find((s) => s.id === filters.studentId)
       : undefined;
-
-  const pendingGroups = useMemo(
-    () => groups.filter((group) => group.isBoletaPending),
-    [groups],
-  );
 
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -542,9 +539,9 @@ export default function PagosMasterPage() {
           <TabsTrigger value="historial">Historial General</TabsTrigger>
           <TabsTrigger value="pendientes">
             Bandeja de Pendientes
-            {pendingGroups.length > 0 && (
+            {pendingBoletasTotal > 0 && (
               <span className="ml-2 rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-200">
-                {pendingGroups.length}
+                {pendingBoletasTotal}
               </span>
             )}
           </TabsTrigger>
@@ -802,80 +799,10 @@ export default function PagosMasterPage() {
         </TabsContent>
 
         <TabsContent value="pendientes" className="mt-0">
-          <div className="glass rounded-2xl overflow-hidden shadow-xl border-[var(--color-border)]">
-            <div className="px-6 pt-4 pb-3 border-b border-[var(--color-border)]">
-              <p className="text-sm font-medium text-white">
-                Bandeja de Boletas Pendientes
-              </p>
-              <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                Transacciones manuales o automáticas que aún requieren número de
-                boleta.
-              </p>
-            </div>
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : pendingGroups.length === 0 ? (
-              <div className="text-center py-20 text-[var(--color-text-muted)]">
-                No hay boletas pendientes con los filtros actuales
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                      <th className="px-6 py-4">Fecha</th>
-                      <th className="px-6 py-4">Monto total</th>
-                      <th className="px-6 py-4">Método</th>
-                      <th className="px-6 py-4">Alumnos asociados</th>
-                      <th className="px-6 py-4 text-right">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingGroups.map((group) => (
-                      <tr
-                        key={group.id}
-                        className="border-t border-[var(--color-border)] transition-colors hover:bg-[var(--color-surface-hover)]"
-                      >
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-white">
-                            #{group.id}
-                          </div>
-                          <div className="text-xs text-[var(--color-text-muted)]">
-                            {formatPaymentDate(group.paymentDate)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 font-bold text-emerald-400 tabular-nums">
-                          ${group.totalAmount.toLocaleString("es-CL")}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--color-primary-light)] text-blue-300">
-                            {METHOD_LABELS[group.method] || group.method}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-white">
-                          {group.payments
-                            .map((payment) => payment.student.name)
-                            .join(", ")}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => openResolveBoletaDialog(group)}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-500/20 transition-all hover:bg-red-700 hover:shadow-red-500/30 active:scale-[0.98]"
-                          >
-                            <FileText className="w-4 h-4" />
-                            Completar Datos
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <PendingBoletasTable
+            onAttached={fetchGroups}
+            onTotalChange={setPendingBoletasTotal}
+          />
         </TabsContent>
       </Tabs>
 

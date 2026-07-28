@@ -618,11 +618,16 @@ export class PaymentsService implements OnModuleInit {
   private buildPaymentGroupWhere(
     filters: FilterPaymentsDto,
   ): Prisma.PaymentGroupWhereInput {
-    const { dateFrom, dateTo, courseId, studentId, method } = filters;
+    const { dateFrom, dateTo, courseId, studentId, method, isBoletaPending } =
+      filters;
     const where: Prisma.PaymentGroupWhereInput = { deletedAt: null };
 
     if (method) {
       where.method = method;
+    }
+
+    if (isBoletaPending !== undefined) {
+      where.isBoletaPending = isBoletaPending;
     }
 
     if (dateFrom || dateTo) {

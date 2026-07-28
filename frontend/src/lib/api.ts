@@ -269,19 +269,10 @@ export interface PaymentConcept {
 }
 
 export type ChargeStatus =
-  | "PENDING"
-  | "PARTIALLY_PAID"
-  | "PAID"
-  | "OVERDUE"
-  | "CANCELLED";
+  "PENDING" | "PARTIALLY_PAID" | "PAID" | "OVERDUE" | "CANCELLED";
 
 export type PaymentMethod =
-  | "CASH"
-  | "DEBIT"
-  | "CREDIT"
-  | "CHECK"
-  | "TRANSFER"
-  | "WEBPAY";
+  "CASH" | "DEBIT" | "CREDIT" | "CHECK" | "TRANSFER" | "WEBPAY";
 
 export interface Charge {
   id: number;
@@ -325,6 +316,7 @@ export interface Payment {
 
 export interface PaymentGroup {
   id: number;
+  buyOrder?: string | null;
   totalAmount: number;
   method: PaymentMethod;
   paymentDate: string;
@@ -597,6 +589,7 @@ export const paymentsApi = {
     studentId?: string;
     courseId?: string;
     method?: PaymentMethod;
+    isBoletaPending?: string;
   }) => {
     const query = params ? `?${new URLSearchParams(params).toString()}` : "";
     return request<PaginatedResponse<PaymentGroup>>(`/payments/groups${query}`);

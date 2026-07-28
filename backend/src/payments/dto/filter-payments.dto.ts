@@ -1,6 +1,13 @@
 import { PaymentMethod } from '@prisma/client';
-import { IsOptional, IsDateString, IsInt, Min, IsEnum } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsOptional,
+  IsDateString,
+  IsInt,
+  Min,
+  IsEnum,
+  IsBoolean,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class FilterPaymentsDto {
@@ -46,6 +53,21 @@ export class FilterPaymentsDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   method?: PaymentMethod;
+
+  @ApiPropertyOptional({
+    description: 'Filtrar transacciones por estado de boleta pendiente',
+    example: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === true || value === 'true'
+      ? true
+      : value === false || value === 'false'
+        ? false
+        : value,
+  )
+  @IsBoolean()
+  isBoletaPending?: boolean;
 
   @ApiPropertyOptional({
     description: 'Número de página (paginación)',
