@@ -1,8 +1,9 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CommunicationsService } from './communications.service';
 import { FindSentCommunicationsQueryDto } from './dto/find-sent-communications-query.dto';
+import { RetryCommunicationParamsDto } from './dto/retry-communication-params.dto';
 
 @ApiTags('communications')
 @Controller('v1/communications')
@@ -23,5 +24,15 @@ export class CommunicationsController {
       limit,
       filters,
     );
+  }
+
+  @Post(':id/retry')
+  @ApiOperation({ summary: 'Reintentar una comunicación fallida o rebotada' })
+  @ApiResponse({
+    status: 201,
+    description: 'La comunicación fue reenviada y su trazabilidad actualizada',
+  })
+  retryCommunication(@Param() params: RetryCommunicationParamsDto) {
+    return this.communicationsService.retryCommunication(params.id);
   }
 }

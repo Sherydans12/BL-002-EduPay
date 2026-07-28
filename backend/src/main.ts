@@ -1,3 +1,4 @@
+import { RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
@@ -9,11 +10,15 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { LoggedValidationPipe } from './common/pipes/logged-validation.pipe';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   const config = app.get(ConfigService);
 
   // Global prefix
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: [{ path: 'webhooks/resend', method: RequestMethod.POST }],
+  });
 
   // Global validation pipe
   app.useGlobalPipes(new LoggedValidationPipe());

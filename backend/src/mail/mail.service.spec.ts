@@ -9,6 +9,7 @@ describe('MailService', () => {
   let service: MailService;
   const communicationsService = {
     logCommunication: jest.fn().mockResolvedValue({ id: 'comm-1' }),
+    updateDelivery: jest.fn().mockResolvedValue({ id: 'comm-1' }),
   };
   const send = jest.fn();
 
@@ -57,8 +58,27 @@ describe('MailService', () => {
         recipientEmail: 'apoderado@example.com',
         type: CommunicationType.PAYMENT_REMINDER,
         status: DeliveryStatus.SENT,
+        resendEmailId: 'email-1',
       }),
     );
+  });
+
+  it('actualiza la comunicación original al reintentar', async () => {
+    await service.sendReminder({
+      to: 'apoderado@example.com',
+      studentName: 'Ana Pérez',
+      amount: 45000,
+      trackingCommunicationId: 'comm-1',
+    });
+
+    expect(communicationsService.updateDelivery).toHaveBeenCalledWith(
+      'comm-1',
+      expect.objectContaining({
+        status: DeliveryStatus.SENT,
+        resendEmailId: 'email-1',
+      }),
+    );
+    expect(communicationsService.logCommunication).not.toHaveBeenCalled();
   });
 
   it('registra FAILED y propaga el error de Resend', async () => {

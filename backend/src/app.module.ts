@@ -29,6 +29,7 @@ import { TenantMiddleware } from './core/tenant/tenant.middleware';
 import { TenantsModule } from './tenants/tenants.module';
 import { CommunicationsModule } from './communications/communications.module';
 import { CommunicationActionsModule } from './communications/communication-actions.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   controllers: [AppController],
@@ -46,6 +47,7 @@ import { CommunicationActionsModule } from './communications/communication-actio
     PaymentsModule,
     PaymentConceptsModule,
     CommunicationsModule,
+    WebhooksModule,
     MailModule,
     CommunicationActionsModule,
     ChargesModule,
@@ -67,6 +69,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(TenantMiddleware)
+      .exclude({ path: 'webhooks/resend', method: RequestMethod.POST })
       .forRoutes({ path: '*path', method: RequestMethod.ALL });
   }
 }

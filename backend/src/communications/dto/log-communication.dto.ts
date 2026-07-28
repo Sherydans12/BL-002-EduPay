@@ -25,6 +25,10 @@ export class LogCommunicationDto {
   status!: DeliveryStatus;
 
   @IsOptional()
+  @IsString()
+  resendEmailId?: string;
+
+  @IsOptional()
   @IsObject()
   metadata?: Prisma.InputJsonObject;
 

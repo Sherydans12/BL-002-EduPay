@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CommunicationType, DeliveryStatus, type Prisma } from '@prisma/client';
 import { promises as fs } from 'node:fs';
@@ -15,6 +15,7 @@ type PaymentConfirmationPayload = {
   amount: number;
   paymentDate: Date;
   boletaFileUrl?: string | null;
+  trackingCommunicationId?: string;
 };
 
 type BoletaNotificationPayload = {
@@ -25,6 +26,7 @@ type BoletaNotificationPayload = {
   paymentGroupId: number;
   boletaNumber?: string | null;
   boletaFileUrl: string;
+  trackingCommunicationId?: string;
 };
 
 type ReminderPayload = {
@@ -35,6 +37,7 @@ type ReminderPayload = {
   amount: number;
   dueDate?: Date;
   conceptName?: string;
+  trackingCommunicationId?: string;
 };
 
 type SendTrackedEmailData = {
@@ -59,6 +62,7 @@ export class MailService {
 
   constructor(
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => CommunicationsService))
     private readonly communicationsService: CommunicationsService,
   ) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
@@ -76,6 +80,7 @@ export class MailService {
     amount,
     paymentDate,
     boletaFileUrl,
+    trackingCommunicationId,
   }: PaymentConfirmationPayload): Promise<void> {
     const subject = 'Comprobante de Pago - BaseLogic EduPay';
     const formattedDate = new Intl.DateTimeFormat('es-CL', {
@@ -109,26 +114,30 @@ export class MailService {
       </div>
     `;
 
-    await this.sendTrackedEmail({
-      to,
-      recipientName,
-      type: CommunicationType.MANUAL_PAYMENT_RECEIPT,
-      subject,
-      html,
-      metadata: {
-        ...(paymentGroupId ? { paymentGroupId } : {}),
-        ...(studentId ? { studentId } : {}),
-        amount,
-        paymentDate: paymentDate.toISOString(),
-        ...(boletaFileUrl ? { boletaUrl: boletaFileUrl } : {}),
+    await this.sendTrackedEmail(
+      {
+        to,
+        recipientName,
+        type: CommunicationType.MANUAL_PAYMENT_RECEIPT,
+        subject,
+        html,
+        metadata: {
+          ...(paymentGroupId ? { paymentGroupId } : {}),
+          ...(studentId ? { studentId } : {}),
+          studentName,
+          amount,
+          paymentDate: paymentDate.toISOString(),
+          ...(boletaFileUrl ? { boletaUrl: boletaFileUrl } : {}),
+        },
+        attachment: boletaFileUrl
+          ? {
+              fileUrl: boletaFileUrl,
+              filename: path.basename(boletaFileUrl),
+            }
+          : undefined,
       },
-      attachment: boletaFileUrl
-        ? {
-            fileUrl: boletaFileUrl,
-            filename: path.basename(boletaFileUrl),
-          }
-        : undefined,
-    });
+      trackingCommunicationId,
+    );
   }
 
   async sendBoletaNotification({
@@ -139,6 +148,7 @@ export class MailService {
     paymentGroupId,
     boletaNumber,
     boletaFileUrl,
+    trackingCommunicationId,
   }: BoletaNotificationPayload): Promise<void> {
     const numberLabel = boletaNumber ? ` N° ${boletaNumber}` : '';
     const subject = `Su boleta de pago está lista${numberLabel}`;
@@ -155,25 +165,29 @@ export class MailService {
       </div>
     `;
 
-    await this.sendTrackedEmail({
-      to,
-      recipientName,
-      type: CommunicationType.BOLETA_EMITTED,
-      subject,
-      html,
-      metadata: {
-        paymentGroupId,
-        ...(studentId ? { studentId } : {}),
-        ...(boletaNumber ? { boletaNumber } : {}),
-        boletaUrl: boletaFileUrl,
+    await this.sendTrackedEmail(
+      {
+        to,
+        recipientName,
+        type: CommunicationType.BOLETA_EMITTED,
+        subject,
+        html,
+        metadata: {
+          paymentGroupId,
+          ...(studentId ? { studentId } : {}),
+          studentName,
+          ...(boletaNumber ? { boletaNumber } : {}),
+          boletaUrl: boletaFileUrl,
+        },
+        attachment: {
+          fileUrl: boletaFileUrl,
+          filename: boletaNumber
+            ? `boleta-${boletaNumber}.pdf`
+            : path.basename(boletaFileUrl),
+        },
       },
-      attachment: {
-        fileUrl: boletaFileUrl,
-        filename: boletaNumber
-          ? `boleta-${boletaNumber}.pdf`
-          : path.basename(boletaFileUrl),
-      },
-    });
+      trackingCommunicationId,
+    );
   }
 
   async sendReminder({
@@ -184,6 +198,7 @@ export class MailService {
     amount,
     dueDate,
     conceptName = 'cuota pendiente',
+    trackingCommunicationId,
   }: ReminderPayload): Promise<void> {
     const formattedAmount = amount.toLocaleString('es-CL', {
       style: 'currency',
@@ -209,29 +224,48 @@ export class MailService {
       </div>
     `;
 
-    await this.sendTrackedEmail({
-      to,
-      recipientName,
-      type: CommunicationType.PAYMENT_REMINDER,
-      subject,
-      html,
-      metadata: {
-        ...(studentId ? { studentId } : {}),
-        amount,
-        ...(dueDate ? { dueDate: dueDate.toISOString() } : {}),
-        conceptName,
+    await this.sendTrackedEmail(
+      {
+        to,
+        recipientName,
+        type: CommunicationType.PAYMENT_REMINDER,
+        subject,
+        html,
+        metadata: {
+          ...(studentId ? { studentId } : {}),
+          studentName,
+          amount,
+          ...(dueDate ? { dueDate: dueDate.toISOString() } : {}),
+          conceptName,
+        },
       },
-    });
+      trackingCommunicationId,
+    );
   }
 
-  private async sendTrackedEmail(data: SendTrackedEmailData): Promise<void> {
+  private async sendTrackedEmail(
+    data: SendTrackedEmailData,
+    trackingCommunicationId?: string,
+  ): Promise<void> {
     try {
-      await this.sendViaResend(data);
-      await this.logDelivery(data, DeliveryStatus.SENT);
+      const resendEmailId = await this.sendViaResend(data);
+      await this.logDelivery(
+        data,
+        DeliveryStatus.SENT,
+        undefined,
+        resendEmailId,
+        trackingCommunicationId,
+      );
       this.logger.log(`Email sent to ${data.to}: ${data.subject}`);
     } catch (error) {
       const errorMessage = this.toErrorMessage(error);
-      await this.logDelivery(data, DeliveryStatus.FAILED, errorMessage);
+      await this.logDelivery(
+        data,
+        DeliveryStatus.FAILED,
+        errorMessage,
+        undefined,
+        trackingCommunicationId,
+      );
       this.logger.error(
         `Failed to send email to ${data.to}: ${errorMessage}`,
         error instanceof Error ? error.stack : undefined,
@@ -240,7 +274,7 @@ export class MailService {
     }
   }
 
-  private async sendViaResend(data: SendTrackedEmailData): Promise<void> {
+  private async sendViaResend(data: SendTrackedEmailData): Promise<string> {
     const recipientEmail = data.to.trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
@@ -267,6 +301,12 @@ export class MailService {
     if (result.error) {
       throw new Error(result.error.message);
     }
+
+    if (!result.data?.id) {
+      throw new Error('Resend no devolvió el identificador del correo');
+    }
+
+    return result.data.id;
   }
 
   private async buildAttachment(attachment: {
@@ -297,14 +337,29 @@ export class MailService {
     data: SendTrackedEmailData,
     status: DeliveryStatus,
     errorMessage?: string,
+    resendEmailId?: string,
+    trackingCommunicationId?: string,
   ): Promise<void> {
     try {
+      if (trackingCommunicationId) {
+        await this.communicationsService.updateDelivery(
+          trackingCommunicationId,
+          {
+            status,
+            resendEmailId: resendEmailId ?? null,
+            errorMessage: errorMessage ?? null,
+          },
+        );
+        return;
+      }
+
       await this.communicationsService.logCommunication({
         recipientEmail: data.to,
         recipientName: data.recipientName,
         type: data.type,
         subject: data.subject,
         status,
+        resendEmailId,
         metadata: data.metadata,
         errorMessage,
       });

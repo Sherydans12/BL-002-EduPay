@@ -1,6 +1,14 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { CommunicationType, DeliveryStatus, Prisma } from '@prisma/client';
 import { tenantContext } from '../core/tenant/tenant.context';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FindSentCommunicationsQueryDto } from './dto/find-sent-communications-query.dto';
 import { LogCommunicationDto } from './dto/log-communication.dto';
@@ -10,9 +18,31 @@ type SentCommunicationFilters = Pick<
   'search' | 'status' | 'type'
 >;
 
+type CommunicationMetadata = {
+  amount?: number;
+  boletaNumber?: string;
+  boletaUrl?: string;
+  conceptName?: string;
+  dueDate?: string;
+  paymentDate?: string;
+  paymentGroupId?: number;
+  studentId?: number;
+  studentName?: string;
+};
+
+type DeliveryUpdate = {
+  status: DeliveryStatus;
+  resendEmailId?: string | null;
+  errorMessage?: string | null;
+};
+
 @Injectable()
 export class CommunicationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => MailService))
+    private readonly mailService: MailService,
+  ) {}
 
   logCommunication(data: LogCommunicationDto) {
     const tenantId = this.getCurrentTenantId();
@@ -25,6 +55,7 @@ export class CommunicationsService {
         type: data.type,
         subject: data.subject,
         status: data.status,
+        resendEmailId: data.resendEmailId ?? null,
         metadata: data.metadata,
         errorMessage: data.errorMessage ?? null,
       },
@@ -89,6 +120,128 @@ export class CommunicationsService {
     };
   }
 
+  /**
+   * Actualiza un registro que ya fue correlacionado con Resend. Este método no
+   * obtiene el tenant del contexto porque también lo usa el webhook público.
+   */
+  updateDelivery(id: string, data: DeliveryUpdate) {
+    return this.prisma.sentCommunication.update({
+      where: { id },
+      data: {
+        status: data.status,
+        ...(data.resendEmailId !== undefined
+          ? { resendEmailId: data.resendEmailId }
+          : {}),
+        ...(data.errorMessage !== undefined
+          ? { errorMessage: data.errorMessage }
+          : {}),
+      },
+    });
+  }
+
+  async retryCommunication(id: string) {
+    const tenantId = this.getCurrentTenantId();
+    const communication = await this.prisma.sentCommunication.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!communication) {
+      throw new NotFoundException('La comunicación no existe');
+    }
+
+    if (
+      communication.status !== DeliveryStatus.FAILED &&
+      communication.status !== DeliveryStatus.BOUNCED
+    ) {
+      throw new BadRequestException(
+        'Solo se pueden reintentar comunicaciones fallidas o rebotadas',
+      );
+    }
+
+    const metadata = this.readMetadata(communication.metadata);
+    const student = await this.findStudentForRetry(metadata.studentId);
+    const recipientName = communication.recipientName ?? student.guardian.name;
+    const studentName = metadata.studentName ?? student.name;
+
+    switch (communication.type) {
+      case CommunicationType.BOLETA_EMITTED: {
+        const paymentGroupId = this.requiredNumber(
+          metadata.paymentGroupId,
+          'paymentGroupId',
+        );
+        const boletaFileUrl = this.requiredString(
+          metadata.boletaUrl,
+          'boletaUrl',
+        );
+
+        await this.mailService.sendBoletaNotification({
+          to: communication.recipientEmail,
+          recipientName,
+          studentName,
+          studentId: student.id,
+          paymentGroupId,
+          boletaNumber: metadata.boletaNumber,
+          boletaFileUrl,
+          trackingCommunicationId: communication.id,
+        });
+        break;
+      }
+      case CommunicationType.MANUAL_PAYMENT_RECEIPT: {
+        const paymentDateValue = this.requiredString(
+          metadata.paymentDate,
+          'paymentDate',
+        );
+        const paymentDate = new Date(paymentDateValue);
+        if (Number.isNaN(paymentDate.getTime())) {
+          throw new BadRequestException('paymentDate no es una fecha válida');
+        }
+
+        await this.mailService.sendPaymentConfirmation({
+          to: communication.recipientEmail,
+          recipientName,
+          studentName,
+          studentId: student.id,
+          paymentGroupId: metadata.paymentGroupId,
+          amount: this.requiredNumber(metadata.amount, 'amount'),
+          paymentDate,
+          boletaFileUrl: metadata.boletaUrl,
+          trackingCommunicationId: communication.id,
+        });
+        break;
+      }
+      case CommunicationType.PAYMENT_REMINDER: {
+        const dueDate = metadata.dueDate
+          ? new Date(metadata.dueDate)
+          : undefined;
+        if (dueDate && Number.isNaN(dueDate.getTime())) {
+          throw new BadRequestException('dueDate no es una fecha válida');
+        }
+
+        await this.mailService.sendReminder({
+          to: communication.recipientEmail,
+          recipientName,
+          studentName,
+          studentId: student.id,
+          amount: this.requiredNumber(metadata.amount, 'amount'),
+          dueDate,
+          conceptName: metadata.conceptName,
+          trackingCommunicationId: communication.id,
+        });
+        break;
+      }
+      case CommunicationType.ACCOUNT_STATEMENT:
+        throw new BadRequestException(
+          'El reintento de estados de cuenta aún no está disponible',
+        );
+      default:
+        throw new BadRequestException('Tipo de comunicación no soportado');
+    }
+
+    return this.prisma.sentCommunication.findFirstOrThrow({
+      where: { id, tenantId },
+    });
+  }
+
   private getCurrentTenantId(): string {
     const tenantId = tenantContext.getStore()?.tenantId;
 
@@ -99,5 +252,45 @@ export class CommunicationsService {
     }
 
     return tenantId;
+  }
+
+  private readMetadata(
+    metadata: Prisma.JsonValue | null,
+  ): CommunicationMetadata {
+    if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') {
+      return {};
+    }
+
+    return metadata as CommunicationMetadata;
+  }
+
+  private requiredNumber(value: unknown, field: string): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new BadRequestException(`La metadata no contiene ${field}`);
+    }
+
+    return value;
+  }
+
+  private requiredString(value: unknown, field: string): string {
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new BadRequestException(`La metadata no contiene ${field}`);
+    }
+
+    return value;
+  }
+
+  private async findStudentForRetry(studentId: unknown) {
+    const id = this.requiredNumber(studentId, 'studentId');
+    const student = await this.prisma.student.findFirst({
+      where: { id, deletedAt: null },
+      include: { guardian: true },
+    });
+
+    if (!student) {
+      throw new NotFoundException('El alumno asociado ya no existe');
+    }
+
+    return student;
   }
 }
