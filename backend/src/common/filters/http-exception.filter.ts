@@ -80,11 +80,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = exception.message;
     }
 
-    // Log del error
-    this.logger.error(
-      `[${request.method}] ${request.url} → ${statusCode}`,
-      exception instanceof Error ? exception.stack : String(exception),
-    );
+    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      // Nunca exponer detalles de Prisma/PostgreSQL (ni mensajes internos) al
+      // cliente. El diagnóstico completo queda exclusivamente en los logs.
+      message = 'Error interno del servidor';
+      this.logger.error(
+        `[CRITICAL_SYSTEM_ERROR] [${request.method}] ${request.url} → ${statusCode}`,
+        exception instanceof Error
+          ? (exception.stack ?? exception.message)
+          : String(exception),
+      );
+    } else {
+      this.logger.warn(`[${request.method}] ${request.url} → ${statusCode}`);
+    }
 
     response.status(statusCode).json({
       statusCode,

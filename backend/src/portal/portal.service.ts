@@ -173,6 +173,11 @@ export class PortalService {
     const startedAtMs = Date.now();
 
     if (!tenantId?.trim()) {
+      this.logSyncFailure(
+        tenantId,
+        buyOrder,
+        new Error('No existe un tenant activo para sincronizar el pago'),
+      );
       throw new InternalServerErrorException(
         'No existe un tenant activo para sincronizar el pago',
       );
@@ -320,6 +325,8 @@ export class PortalService {
         };
       });
     } catch (error) {
+      this.logSyncFailure(tenantId, buyOrder, error);
+
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -410,6 +417,17 @@ export class PortalService {
     }
 
     this.logger.warn(metadata);
+  }
+
+  private logSyncFailure(
+    tenantId: string | undefined,
+    buyOrder: string,
+    error: unknown,
+  ): void {
+    this.logger.error(
+      `[PORTAL_PAYMENT_SYNC_FAILED] tenantId=${tenantId || 'missing'} buyOrder=${buyOrder}`,
+      error instanceof Error ? (error.stack ?? error.message) : String(error),
+    );
   }
 
   private assertIdempotentRetry(

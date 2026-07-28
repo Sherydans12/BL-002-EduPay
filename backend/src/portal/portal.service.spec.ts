@@ -41,6 +41,29 @@ describe('PortalService', () => {
     service = new PortalService(prisma as unknown as PrismaService);
   });
 
+  it('registra explícitamente un fallo de sincronización S2S', async () => {
+    const loggerError = jest.spyOn(Logger.prototype, 'error');
+
+    await expect(
+      service.syncPayment(
+        {
+          buyOrder: 'OC-S2S-FAIL',
+          amount: 1000,
+          paymentMethod: PaymentMethod.WEBPAY,
+          authorizationCode: '1234',
+          cardNumber: '1234',
+          chargeIds: [1],
+        },
+        '',
+      ),
+    ).rejects.toThrow('No existe un tenant activo para sincronizar el pago');
+
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.stringContaining('[PORTAL_PAYMENT_SYNC_FAILED]'),
+      expect.stringContaining('No existe un tenant activo'),
+    );
+  });
+
   it('retorna exists=false cuando el RUT no está registrado', async () => {
     prisma.guardian.findFirst.mockResolvedValue(null);
 

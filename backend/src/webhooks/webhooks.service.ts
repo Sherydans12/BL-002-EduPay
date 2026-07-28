@@ -101,6 +101,9 @@ export class WebhooksService {
   ): unknown {
     const webhookSecret = this.config.get<string>('RESEND_WEBHOOK_SECRET');
     if (!webhookSecret) {
+      this.logger.error(
+        '[RESEND_WEBHOOK_SIGNATURE_VERIFICATION_FAILED] RESEND_WEBHOOK_SECRET no está configurado',
+      );
       throw new ServiceUnavailableException(
         'RESEND_WEBHOOK_SECRET no está configurado',
       );
@@ -112,7 +115,11 @@ export class WebhooksService {
         headers,
         webhookSecret,
       });
-    } catch {
+    } catch (error) {
+      this.logger.error(
+        `[RESEND_WEBHOOK_SIGNATURE_VERIFICATION_FAILED] webhookId=${headers.id || 'unknown'}`,
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+      );
       throw new UnauthorizedException('Firma de webhook de Resend inválida');
     }
   }

@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { DeliveryStatus } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
@@ -111,6 +112,26 @@ describe('WebhooksService', () => {
           errorMessage: 'Mailbox unavailable',
         },
       }),
+    );
+  });
+
+  it('registra explícitamente un fallo de verificación de firma', async () => {
+    verify.mockImplementation(() => {
+      throw new Error('Firma Svix inválida');
+    });
+    const loggerError = jest.spyOn(Logger.prototype, 'error');
+
+    await expect(
+      service.processResendWebhook('{"type":"email.delivered"}', {
+        id: 'msg-invalid',
+        timestamp: '1',
+        signature: 'v1,invalid',
+      }),
+    ).rejects.toThrow('Firma de webhook de Resend inválida');
+
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.stringContaining('[RESEND_WEBHOOK_SIGNATURE_VERIFICATION_FAILED]'),
+      expect.stringContaining('Firma Svix inválida'),
     );
   });
 });
