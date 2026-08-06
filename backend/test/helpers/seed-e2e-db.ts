@@ -12,6 +12,7 @@ export type E2eSeedContext = {
 const E2E_PERMISSIONS = ['create:payment', 'view:payments', 'manage:payments'];
 
 export async function resetE2eDatabase(prisma: PrismaService): Promise<void> {
+  await prisma.guardianEmailWebhookEvent.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.paymentGroup.deleteMany();
   await prisma.student.deleteMany();
