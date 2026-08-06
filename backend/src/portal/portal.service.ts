@@ -6,10 +6,17 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ChargeStatus, PaymentSource, Prisma } from '@prisma/client';
+import {
+  ChargeStatus,
+  GuardianEmailUpdateSource,
+  PaymentSource,
+  Prisma,
+} from '@prisma/client';
 import { stripRut } from '../common/rut/rut.util';
+import { GuardianEmailWebhooksService } from '../guardian-email-webhooks/guardian-email-webhooks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SyncPortalPaymentDto } from './dto/sync-portal-payment.dto';
+import { UpdatePortalGuardianEmailDto } from './dto/update-guardian-email.dto';
 
 export type PortalInstallmentStatus = 'PAGADO' | 'VENCIDO' | 'PENDIENTE';
 
@@ -22,7 +29,10 @@ type WebpayAuditEvent =
 export class PortalService {
   private readonly logger = new Logger(PortalService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly guardianEmailWebhooks: GuardianEmailWebhooksService,
+  ) {}
 
   async findGuardian(rut: string) {
     const guardian = await this.prisma.guardian.findFirst({
@@ -31,27 +41,132 @@ export class PortalService {
         deletedAt: null,
       },
       select: {
+        id: true,
         rut: true,
         name: true,
         email: true,
+        updatedAt: true,
       },
     });
 
     if (!guardian) {
       return {
         exists: false,
+        id: null,
         rut: null,
         name: null,
         email: null,
+        updatedAt: null,
       };
     }
 
     return {
       exists: true,
+      id: guardian.id,
       rut: guardian.rut,
       name: guardian.name,
       email: guardian.email,
+      updatedAt: guardian.updatedAt,
     };
+  }
+
+  async updateGuardianEmail(
+    rut: string,
+    dto: UpdatePortalGuardianEmailDto,
+    tenantId: string,
+  ) {
+    const expectedUpdatedAt = new Date(dto.expectedUpdatedAt);
+    const normalizedEmail = dto.email.trim().toLowerCase();
+
+    return this.prisma.$transaction(async (tx) => {
+      const guardian = await tx.guardian.findFirst({
+        where: {
+          tenantId,
+          rutNormalized: stripRut(rut),
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          rut: true,
+          name: true,
+          email: true,
+          updatedAt: true,
+        },
+      });
+
+      if (!guardian) {
+        throw new NotFoundException('Apoderado no encontrado');
+      }
+
+      if (guardian.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+        throw new ConflictException(
+          'El apoderado fue modificado después de la lectura del Portal',
+        );
+      }
+
+      if (guardian.email === normalizedEmail) {
+        return {
+          id: guardian.id,
+          rut: guardian.rut,
+          name: guardian.name,
+          email: normalizedEmail,
+          updatedAt: guardian.updatedAt,
+        };
+      }
+
+      const updated = await tx.guardian.updateMany({
+        where: {
+          id: guardian.id,
+          tenantId,
+          updatedAt: expectedUpdatedAt,
+          deletedAt: null,
+        },
+        data: { email: normalizedEmail },
+      });
+
+      if (updated.count !== 1) {
+        throw new ConflictException(
+          'El apoderado fue modificado después de la lectura del Portal',
+        );
+      }
+
+      const result = await tx.guardian.findFirst({
+        where: { id: guardian.id, tenantId, deletedAt: null },
+        select: {
+          id: true,
+          tenantId: true,
+          rut: true,
+          name: true,
+          email: true,
+          updatedAt: true,
+        },
+      });
+      if (!result || !result.email) {
+        throw new InternalServerErrorException(
+          'No fue posible recuperar el apoderado actualizado',
+        );
+      }
+
+      await this.guardianEmailWebhooks.enqueue(tx, {
+        tenantId: result.tenantId,
+        guardianId: result.id,
+        guardianRut: result.rut,
+        email: result.email,
+        previousEmail: guardian.email,
+        guardianUpdatedAt: result.updatedAt,
+        source: GuardianEmailUpdateSource.PORTAL,
+        actorId: 'portal-s2s',
+      });
+
+      return {
+        id: result.id,
+        rut: result.rut,
+        name: result.name,
+        email: result.email,
+        updatedAt: result.updatedAt,
+      };
+    });
   }
 
   async getGuardianStatement(rut: string) {

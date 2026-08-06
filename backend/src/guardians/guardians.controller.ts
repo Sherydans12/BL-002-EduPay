@@ -8,11 +8,12 @@ import {
   Param,
   Query,
   ParseIntPipe,
+  Req,
   DefaultValuePipe,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -107,8 +108,9 @@ export class GuardiansController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateGuardianDto,
+    @Req() req: Request & { user: { id: string } },
   ) {
-    return this.guardiansService.update(id, dto);
+    return this.guardiansService.update(id, dto, req.user.id);
   }
 
   @Delete(':id')
