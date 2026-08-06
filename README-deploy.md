@@ -40,6 +40,12 @@ PORT=3001
 NODE_ENV=production
 JWT_SECRET=<cadena aleatoria ≥32 chars>
 FRONTEND_URL=https://tu-dominio.cl
+PORTAL_TENANT_KEYS='{"colegio-conquistadores":"<api-key-secreta>"}'
+GUARDIAN_EMAIL_WEBHOOKS='{"colegio-conquistadores":{"url":"https://portal.tu-dominio.cl/api/webhooks/edupay/guardian-email","secret":"<secreto-hmac-de-al-menos-32-caracteres>"}}'
+GUARDIAN_EMAIL_WEBHOOK_MAX_ATTEMPTS=8
+GUARDIAN_EMAIL_WEBHOOK_RETRY_BASE_SECONDS=60
+GUARDIAN_EMAIL_WEBHOOK_TIMEOUT_MS=10000
+GUARDIAN_EMAIL_WEBHOOK_BATCH_SIZE=20
 
 # Email — activar solo cuando SMTP esté configurado
 ENABLE_EMAILS=false
@@ -55,6 +61,9 @@ UPLOAD_DIR=uploads
 # Opcional: omitir migraciones al arranque (por defecto se aplican solas)
 # RUN_MIGRATIONS=false
 ```
+
+El contrato S2S de correo, la firma HMAC y la política de reintentos están
+documentados en `docs/PORTAL-GUARDIAN-EMAIL-S2S.md`.
 
 ### 2.3 Volumen persistente
 En la pestaña **Storages** del recurso backend, añade:

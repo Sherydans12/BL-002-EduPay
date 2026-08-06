@@ -10,6 +10,10 @@ import { PortalService } from './portal.service';
 
 describe('PortalService', () => {
   const tx = {
+    guardian: {
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
+    },
     paymentGroup: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -34,11 +38,19 @@ describe('PortalService', () => {
       callback(tx),
     ),
   };
+  const guardianEmailWebhooks = {
+    enqueue: jest.fn(),
+  };
   let service: PortalService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PortalService(prisma as unknown as PrismaService);
+    tx.guardian.findFirst.mockReset();
+    tx.guardian.updateMany.mockReset();
+    service = new PortalService(
+      prisma as unknown as PrismaService,
+      guardianEmailWebhooks as never,
+    );
   });
 
   it('registra explícitamente un fallo de sincronización S2S', async () => {
@@ -69,9 +81,11 @@ describe('PortalService', () => {
 
     await expect(service.findGuardian('12.345.678-5')).resolves.toEqual({
       exists: false,
+      id: null,
       rut: null,
       name: null,
       email: null,
+      updatedAt: null,
     });
 
     expect(prisma.guardian.findFirst).toHaveBeenCalledWith(
@@ -81,6 +95,186 @@ describe('PortalService', () => {
         }),
       }),
     );
+  });
+
+  it('retorna id, email y updatedAt cuando el apoderado existe', async () => {
+    const updatedAt = new Date('2026-07-30T16:20:00.000Z');
+    prisma.guardian.findFirst.mockResolvedValue({
+      id: 42,
+      rut: '12.345.678-5',
+      name: 'María González Pérez',
+      email: 'maria.gonzalez@example.cl',
+      updatedAt,
+    });
+
+    await expect(service.findGuardian('12.345.678-5')).resolves.toEqual({
+      exists: true,
+      id: 42,
+      rut: '12.345.678-5',
+      name: 'María González Pérez',
+      email: 'maria.gonzalez@example.cl',
+      updatedAt,
+    });
+  });
+
+  it('actualiza y normaliza el correo con concurrencia optimista', async () => {
+    const previousUpdatedAt = new Date('2026-07-30T16:20:00.000Z');
+    const nextUpdatedAt = new Date('2026-07-30T16:25:00.000Z');
+    tx.guardian.findFirst
+      .mockResolvedValueOnce({
+        id: 42,
+        tenantId: 'colegio-conquistadores',
+        rut: '12.345.678-5',
+        name: 'María González Pérez',
+        email: 'anterior@example.cl',
+        updatedAt: previousUpdatedAt,
+      })
+      .mockResolvedValueOnce({
+        id: 42,
+        tenantId: 'colegio-conquistadores',
+        rut: '12.345.678-5',
+        name: 'María González Pérez',
+        email: 'nuevo.correo@example.cl',
+        updatedAt: nextUpdatedAt,
+      });
+    tx.guardian.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.updateGuardianEmail(
+        '12.345.678-5',
+        {
+          email: ' Nuevo.Correo@Example.CL ',
+          expectedUpdatedAt: previousUpdatedAt.toISOString(),
+        },
+        'colegio-conquistadores',
+      ),
+    ).resolves.toEqual({
+      id: 42,
+      rut: '12.345.678-5',
+      name: 'María González Pérez',
+      email: 'nuevo.correo@example.cl',
+      updatedAt: nextUpdatedAt,
+    });
+
+    expect(tx.guardian.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 42,
+        tenantId: 'colegio-conquistadores',
+        updatedAt: previousUpdatedAt,
+        deletedAt: null,
+      },
+      data: { email: 'nuevo.correo@example.cl' },
+    });
+    expect(guardianEmailWebhooks.enqueue).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        tenantId: 'colegio-conquistadores',
+        guardianId: 42,
+        previousEmail: 'anterior@example.cl',
+        email: 'nuevo.correo@example.cl',
+        source: 'PORTAL',
+      }),
+    );
+  });
+
+  it('retorna 404 cuando el apoderado no existe en el tenant', async () => {
+    tx.guardian.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updateGuardianEmail(
+        '12.345.678-5',
+        {
+          email: 'nuevo@example.cl',
+          expectedUpdatedAt: '2026-07-30T16:20:00.000Z',
+        },
+        'colegio-conquistadores',
+      ),
+    ).rejects.toThrow('Apoderado no encontrado');
+  });
+
+  it('rechaza expectedUpdatedAt desactualizado con conflicto', async () => {
+    tx.guardian.findFirst.mockResolvedValue({
+      id: 42,
+      tenantId: 'colegio-conquistadores',
+      rut: '12.345.678-5',
+      name: 'María González Pérez',
+      email: 'actual@example.cl',
+      updatedAt: new Date('2026-07-30T16:25:00.000Z'),
+    });
+
+    await expect(
+      service.updateGuardianEmail(
+        '12.345.678-5',
+        {
+          email: 'nuevo@example.cl',
+          expectedUpdatedAt: '2026-07-30T16:20:00.000Z',
+        },
+        'colegio-conquistadores',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.guardian.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('permite un correo repetido porque no consulta unicidad', async () => {
+    const previousUpdatedAt = new Date('2026-07-30T16:20:00.000Z');
+    const nextUpdatedAt = new Date('2026-07-30T16:25:00.000Z');
+    tx.guardian.findFirst
+      .mockResolvedValueOnce({
+        id: 42,
+        tenantId: 'colegio-conquistadores',
+        rut: '12.345.678-5',
+        name: 'María González Pérez',
+        email: 'anterior@example.cl',
+        updatedAt: previousUpdatedAt,
+      })
+      .mockResolvedValueOnce({
+        id: 42,
+        tenantId: 'colegio-conquistadores',
+        rut: '12.345.678-5',
+        name: 'María González Pérez',
+        email: 'compartido@example.cl',
+        updatedAt: nextUpdatedAt,
+      });
+    tx.guardian.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.updateGuardianEmail(
+        '12.345.678-5',
+        {
+          email: 'compartido@example.cl',
+          expectedUpdatedAt: previousUpdatedAt.toISOString(),
+        },
+        'colegio-conquistadores',
+      ),
+    ).resolves.toMatchObject({ email: 'compartido@example.cl' });
+  });
+
+  it('no actualiza ni emite evento si el correo normalizado no cambia', async () => {
+    const updatedAt = new Date('2026-07-30T16:20:00.000Z');
+    tx.guardian.findFirst.mockResolvedValue({
+      id: 42,
+      tenantId: 'colegio-conquistadores',
+      rut: '12.345.678-5',
+      name: 'María González Pérez',
+      email: 'vigente@example.cl',
+      updatedAt,
+    });
+
+    await expect(
+      service.updateGuardianEmail(
+        '12.345.678-5',
+        {
+          email: ' VIGENTE@EXAMPLE.CL ',
+          expectedUpdatedAt: updatedAt.toISOString(),
+        },
+        'colegio-conquistadores',
+      ),
+    ).resolves.toMatchObject({
+      email: 'vigente@example.cl',
+      updatedAt,
+    });
+    expect(tx.guardian.updateMany).not.toHaveBeenCalled();
+    expect(guardianEmailWebhooks.enqueue).not.toHaveBeenCalled();
   });
 
   it('mapea cuotas pagadas, vencidas y pendientes para el portal', async () => {

@@ -15,6 +15,7 @@ const TENANT_MODELS = new Set([
   'NotificationLog',
   'SentCommunication',
   'TenantEmailConfig',
+  'GuardianEmailWebhookEvent',
 ]);
 
 const SYSTEM_MODELS = new Set(['User', 'Tenant', 'Role', 'Permission']);

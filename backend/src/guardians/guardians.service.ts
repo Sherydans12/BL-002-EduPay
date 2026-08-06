@@ -7,13 +7,17 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGuardianDto } from './dto/create-guardian.dto';
 import { UpdateGuardianDto } from './dto/update-guardian.dto';
-import { Prisma } from '@prisma/client';
+import { GuardianEmailUpdateSource, Prisma } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
 import { buildGuardianSearchWhere } from '../common/search/flexible-search';
+import { GuardianEmailWebhooksService } from '../guardian-email-webhooks/guardian-email-webhooks.service';
 
 @Injectable()
 export class GuardiansService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly guardianEmailWebhooks: GuardianEmailWebhooksService,
+  ) {}
 
   private async validateStudentIds(
     studentIds: number[],
@@ -195,7 +199,7 @@ export class GuardiansService {
     return guardian;
   }
 
-  async update(id: number, dto: UpdateGuardianDto) {
+  async update(id: number, dto: UpdateGuardianDto, actorId: string) {
     await this.findOne(id);
     const { studentIds, ...fields } = dto;
     const normalizedStudentIds = studentIds?.length
@@ -210,15 +214,45 @@ export class GuardiansService {
       ...(studentsRelation ? { students: studentsRelation } : {}),
     };
     try {
-      return await this.prisma.guardian.update({
-        where: { id },
-        data,
-        include: {
-          students: {
-            where: { deletedAt: null },
-            include: { course: true },
+      return await this.prisma.$transaction(async (tx) => {
+        const current = await tx.guardian.findFirst({
+          where: { id, deletedAt: null },
+          select: {
+            id: true,
+            tenantId: true,
+            rut: true,
+            email: true,
           },
-        },
+        });
+        if (!current) {
+          throw new NotFoundException(`Guardian #${id} not found`);
+        }
+
+        const updated = await tx.guardian.update({
+          where: { id },
+          data,
+          include: {
+            students: {
+              where: { deletedAt: null },
+              include: { course: true },
+            },
+          },
+        });
+
+        if (dto.email !== undefined && updated.email !== current.email) {
+          await this.guardianEmailWebhooks.enqueue(tx, {
+            tenantId: updated.tenantId,
+            guardianId: updated.id,
+            guardianRut: updated.rut,
+            email: updated.email,
+            previousEmail: current.email,
+            guardianUpdatedAt: updated.updatedAt,
+            source: GuardianEmailUpdateSource.EDUPAY_ADMIN,
+            actorId,
+          });
+        }
+
+        return updated;
       });
     } catch (error) {
       if (

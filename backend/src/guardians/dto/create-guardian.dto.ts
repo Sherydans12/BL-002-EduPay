@@ -40,6 +40,9 @@ export class CreateGuardianDto {
     description: 'Correo electrónico',
     example: 'maria@ejemplo.cl',
   })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsOptional()
   @IsEmail()
   email?: string;
