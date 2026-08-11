@@ -28,6 +28,7 @@ EduPay permite al personal administrativo de un colegio:
 | [docs/TESTING.md](docs/TESTING.md) | Suite de pruebas (unit + e2e), flujo de pagos, CI y cómo ejecutarlas |
 | [frontend/docs/UI-STYLES.md](frontend/docs/UI-STYLES.md) | Colores (`--color-*`), formularios, desplegables (`DropdownChevron`, `NativeSelectField`), glass, tablas |
 | [frontend/AGENTS.md](frontend/AGENTS.md) | Next.js en este repo + enlace a la guía UI |
+| [docs/ACADEMICO-INTEGRATION.md](docs/ACADEMICO-INTEGRATION.md) | Contrato S2S EduPay → Académico, autenticación, cursores, snapshots y tombstones |
 
 ---
 

@@ -96,17 +96,22 @@ model Tenant {
 }
 
 model Course {
-  id        Int       @id @default(autoincrement())
-  tenantId  String    @default("colegio-conquistadores")
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  name      String
-  students  Student[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id                         Int       @id @default(autoincrement())
+  integrationId              String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationCreatedSequence BigInt    @default(dbgenerated("nextval('integration_change_sequence'::regclass)"))
+  integrationVersion         BigInt    @default(dbgenerated("nextval('integration_change_sequence'::regclass)"))
+  tenantId                   String    @default("colegio-conquistadores")
+  tenant                     Tenant    @relation(fields: [tenantId], references: [id])
+  name                       String
+  students                   Student[]
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+  deletedAt                  DateTime?
 
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([tenantId, integrationVersion, integrationId])
+  @@index([tenantId, integrationCreatedSequence, integrationId])
   @@map("courses")
 }
 
@@ -133,31 +138,48 @@ model Guardian {
 }
 
 model Student {
-  id               Int                  @id @default(autoincrement())
-  tenantId         String               @default("colegio-conquistadores")
-  tenant           Tenant               @relation(fields: [tenantId], references: [id])
-  rut              String
+  id                         Int                  @id @default(autoincrement())
+  integrationId              String               @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  integrationCreatedSequence BigInt               @default(dbgenerated("nextval('integration_change_sequence'::regclass)"))
+  integrationVersion         BigInt               @default(dbgenerated("nextval('integration_change_sequence'::regclass)"))
+  tenantId                   String               @default("colegio-conquistadores")
+  tenant                     Tenant               @relation(fields: [tenantId], references: [id])
+  rut                        String
   /**
    * Derivado en BD para búsqueda sin puntos/guiones
    */
-  rutNormalized    String?              @default(dbgenerated()) @map("rut_normalized")
-  name             String
-  status           StudentStatus        @default(ACTIVE)
-  financialSetup   FinancialSetupStatus @default(PENDING)
-  courseId         Int
-  guardianId       Int
-  course           Course               @relation(fields: [courseId], references: [id])
-  guardian         Guardian             @relation(fields: [guardianId], references: [id])
-  payments         Payment[]
-  charges          Charge[]
-  notificationLogs NotificationLog[]
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  deletedAt        DateTime?
+  rutNormalized              String?              @default(dbgenerated()) @map("rut_normalized")
+  name                       String
+  firstName                  String?
+  lastName                   String?
+  status                     StudentStatus        @default(ACTIVE)
+  financialSetup             FinancialSetupStatus @default(PENDING)
+  courseId                   Int
+  guardianId                 Int
+  course                     Course               @relation(fields: [courseId], references: [id])
+  guardian                   Guardian             @relation(fields: [guardianId], references: [id])
+  payments                   Payment[]
+  charges                    Charge[]
+  notificationLogs           NotificationLog[]
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+  deletedAt                  DateTime?
 
   @@unique([tenantId, rut])
   @@index([tenantId])
+  @@index([tenantId, integrationVersion, integrationId])
+  @@index([tenantId, integrationCreatedSequence, integrationId])
   @@map("students")
+}
+
+/// Global, append-only registry used by database triggers to prevent an
+/// integration UUID from ever being reused by another source entity.
+model IntegrationIdentity {
+  integrationId String   @id @db.Uuid
+  entityType    String
+  createdAt     DateTime @default(now())
+
+  @@map("integration_id_registry")
 }
 
 model PaymentConcept {

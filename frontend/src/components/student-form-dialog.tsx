@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { toast } from "sonner";
 import { studentsApi } from "@/lib/api";
 import type { Student, Course, Guardian, StudentStatus } from "@/lib/api";
@@ -13,20 +12,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownChevron } from "@/components/ui/dropdown-chevron";
 import { cmdkCourseFilter, cmdkPersonFilter } from "@/lib/flexible-search";
-import { formatRut, isValidRut, sanitizeRutInput } from "@/lib/rut";
-
-const studentSchema = z.object({
-  rut: z
-    .string()
-    .min(1, "El RUT es requerido")
-    .refine((val) => isValidRut(val), "RUT inválido (formato: 12.345.678-9)"),
-  name: z.string().min(1, "El nombre es requerido").max(200, "Máximo 200 caracteres"),
-  courseId: z.number().min(1, "Seleccione un curso"),
-  guardianId: z.number().min(1, "Seleccione un apoderado"),
-  status: z.enum(["ACTIVE", "INACTIVE", "GRADUATED"]),
-});
-
-export type StudentFormData = z.infer<typeof studentSchema>;
+import { formatRut, sanitizeRutInput } from "@/lib/rut";
+import { studentSchema, type StudentFormData } from "@/lib/schemas/student.schema";
 
 export type StudentFormDialogProps = {
   open: boolean;
@@ -62,7 +49,8 @@ export function StudentFormDialog({
     if (editingStudent) {
       reset({
         rut: formatRut(editingStudent.rut),
-        name: editingStudent.name,
+        firstName: editingStudent.firstName ?? "",
+        lastName: editingStudent.lastName ?? "",
         courseId: editingStudent.courseId,
         guardianId: editingStudent.guardianId,
         status: editingStudent.status ?? "ACTIVE",
@@ -70,7 +58,8 @@ export function StudentFormDialog({
     } else {
       reset({
         rut: "",
-        name: "",
+        firstName: "",
+        lastName: "",
         courseId: defaultCourseId && defaultCourseId >= 1 ? defaultCourseId : undefined,
         guardianId: undefined,
         status: "ACTIVE" as StudentStatus,
@@ -105,6 +94,11 @@ export function StudentFormDialog({
           <DialogTitle className="text-xl font-bold">{editingStudent ? "Editar Alumno" : "Nuevo Alumno"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 overflow-visible">
+          {editingStudent && !editingStudent.integrationReady && (
+            <div className="rounded-xl border border-amber-400/35 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+              Este alumno aún no puede sincronizarse con Académico. Confirma sus nombres y apellidos por separado.
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="col-span-full md:col-span-1">
               <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">RUT *</label>
@@ -124,13 +118,22 @@ export function StudentFormDialog({
               {errors.rut && <p className="text-red-400 text-xs mt-1">{errors.rut.message}</p>}
             </div>
             <div className="col-span-full md:col-span-1">
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Nombre *</label>
+              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Nombres *</label>
               <input
-                {...register("name")}
-                placeholder="Nombre completo"
+                {...register("firstName")}
+                placeholder="Nombres"
                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
               />
-              {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
+              {errors.firstName && <p className="text-red-400 text-xs mt-1">{errors.firstName.message}</p>}
+            </div>
+            <div className="col-span-full md:col-span-1">
+              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Apellidos *</label>
+              <input
+                {...register("lastName")}
+                placeholder="Apellidos"
+                className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+              />
+              {errors.lastName && <p className="text-red-400 text-xs mt-1">{errors.lastName.message}</p>}
             </div>
 
             <div className="col-span-full">

@@ -5,6 +5,7 @@ import {
   Matches,
   IsEnum,
   IsOptional,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -29,12 +30,34 @@ export class CreateStudentDto {
   rut: string;
 
   @ApiProperty({
-    description: 'Nombre completo del alumno',
-    example: 'Juan González Muñoz',
+    description: 'Nombres validados del alumno',
+    example: 'Juan Carlos',
   })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
-  name: string;
+  @MaxLength(100)
+  firstName: string;
+
+  @ApiProperty({
+    description: 'Apellidos validados del alumno',
+    example: 'González Muñoz',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  lastName: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Nombre completo legacy. El servidor lo deriva desde firstName/lastName.',
+    deprecated: true,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(201)
+  name?: string;
 
   @ApiProperty({
     description: 'ID del curso al que pertenece',

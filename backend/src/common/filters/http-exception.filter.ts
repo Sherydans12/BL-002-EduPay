@@ -25,6 +25,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | string[] = 'Error interno del servidor';
+    let code: string | undefined;
 
     // ─── HttpException estándar de NestJS ─────────────────────
     if (exception instanceof HttpException) {
@@ -39,6 +40,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       ) {
         const res = exceptionResponse as Record<string, unknown>;
         message = (res.message as string | string[]) || exception.message;
+        code = typeof res.code === 'string' ? res.code : undefined;
       }
     }
 
@@ -80,25 +82,46 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = exception.message;
     }
 
+    if (
+      !code &&
+      statusCode === HttpStatus.BAD_REQUEST &&
+      request.url.includes('/v1/integrations/academico')
+    ) {
+      code = 'INVALID_INTEGRATION_REQUEST';
+    }
+
+    const logPath = request.url.includes('/v1/integrations/academico')
+      ? request.path
+      : request.url;
+
     if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
       // Nunca exponer detalles de Prisma/PostgreSQL (ni mensajes internos) al
       // cliente. El diagnóstico completo queda exclusivamente en los logs.
       message = 'Error interno del servidor';
       this.logger.error(
-        `[CRITICAL_SYSTEM_ERROR] [${request.method}] ${request.url} → ${statusCode}`,
+        `[CRITICAL_SYSTEM_ERROR] [${request.method}] ${logPath} → ${statusCode}`,
         exception instanceof Error
           ? (exception.stack ?? exception.message)
           : String(exception),
       );
     } else {
-      this.logger.warn(`[${request.method}] ${request.url} → ${statusCode}`);
+      this.logger.warn(
+        `[${request.method}] ${logPath} → ${statusCode}${code ? ` category=${code}` : ''}`,
+      );
     }
+
+    const correlationId =
+      typeof request.header === 'function'
+        ? request.header('x-correlation-id')
+        : undefined;
 
     response.status(statusCode).json({
       statusCode,
+      ...(code ? { code } : {}),
       message,
       timestamp: new Date().toISOString(),
       path: request.url,
+      ...(correlationId ? { correlationId } : {}),
     });
   }
 }

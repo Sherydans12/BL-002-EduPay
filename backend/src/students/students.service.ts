@@ -49,12 +49,22 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto) {
     await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
+    const name = this.legacyName(dto.firstName, dto.lastName);
 
     try {
-      return await this.prisma.student.create({
-        data: dto,
+      const student = await this.prisma.student.create({
+        data: {
+          rut: dto.rut,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          courseId: dto.courseId,
+          guardianId: dto.guardianId,
+          status: dto.status,
+          name,
+        },
         include: { course: true, guardian: true },
       });
+      return { ...student, integrationReady: true };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -103,11 +113,14 @@ export class StudentsService {
 
     const dataWithDebt = students.map(({ charges, ...student }) => {
       const overdueDebt = charges.reduce(
-        (sum, charge) =>
-          sum + Math.max(0, charge.amount - charge.paidAmount),
+        (sum, charge) => sum + Math.max(0, charge.amount - charge.paidAmount),
         0,
       );
-      return { ...student, overdueDebt };
+      return {
+        ...student,
+        overdueDebt,
+        integrationReady: this.isIntegrationReady(student),
+      };
     });
 
     return {
@@ -137,19 +150,38 @@ export class StudentsService {
       },
     });
     if (!student) throw new NotFoundException(`Student #${id} not found`);
-    return student;
+    return {
+      ...student,
+      integrationReady: this.isIntegrationReady(student),
+    };
   }
 
   async update(id: number, dto: UpdateStudentDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
     await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
+    const { name: requestedLegacyName, firstName, lastName, ...updates } = dto;
+    const nextFirstName = firstName ?? current.firstName;
+    const nextLastName = lastName ?? current.lastName;
+    const derivedLegacyName =
+      nextFirstName && nextLastName
+        ? this.legacyName(nextFirstName, nextLastName)
+        : requestedLegacyName?.trim();
 
     try {
-      return await this.prisma.student.update({
+      const student = await this.prisma.student.update({
         where: { id },
-        data: dto,
+        data: {
+          ...updates,
+          ...(firstName !== undefined ? { firstName } : {}),
+          ...(lastName !== undefined ? { lastName } : {}),
+          ...(derivedLegacyName ? { name: derivedLegacyName } : {}),
+        },
         include: { course: true, guardian: true },
       });
+      return {
+        ...student,
+        integrationReady: this.isIntegrationReady(student),
+      };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -202,5 +234,16 @@ export class StudentsService {
       ],
       rows,
     );
+  }
+
+  private legacyName(firstName: string, lastName: string): string {
+    return `${firstName.trim()} ${lastName.trim()}`;
+  }
+
+  private isIntegrationReady(student: {
+    firstName: string | null;
+    lastName: string | null;
+  }): boolean {
+    return Boolean(student.firstName?.trim() && student.lastName?.trim());
   }
 }

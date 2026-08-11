@@ -31,6 +31,7 @@ import { CommunicationsModule } from './communications/communications.module';
 import { CommunicationActionsModule } from './communications/communication-actions.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { HealthModule } from './health/health.module';
+import { AcademicoIntegrationModule } from './integrations/academico/academico-integration.module';
 
 @Module({
   controllers: [AppController],
@@ -57,6 +58,7 @@ import { HealthModule } from './health/health.module';
     AnalyticsModule,
     PortalModule,
     TenantsModule,
+    AcademicoIntegrationModule,
   ],
   providers: [
     {

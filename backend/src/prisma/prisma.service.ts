@@ -17,7 +17,13 @@ const TENANT_MODELS = new Set([
   'TenantEmailConfig',
 ]);
 
-const SYSTEM_MODELS = new Set(['User', 'Tenant', 'Role', 'Permission']);
+const SYSTEM_MODELS = new Set([
+  'User',
+  'Tenant',
+  'Role',
+  'Permission',
+  'IntegrationIdentity',
+]);
 
 export function isTenantScopedModel(model: string | undefined): boolean {
   return Boolean(

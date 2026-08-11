@@ -52,6 +52,8 @@ async function bootstrap() {
       'Authorization',
       'X-Requested-With',
       'X-Tenant-ID',
+      'X-Source-Tenant-ID',
+      'X-Correlation-ID',
     ],
   });
 
@@ -85,6 +87,16 @@ async function bootstrap() {
         },
         'portal-api-key',
       )
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'Opaque service token',
+          description:
+            'Dedicated EDUPAY_ACADEMICO_INTEGRATION_TOKEN; user JWTs are not accepted',
+        },
+        'academico-integration-token',
+      )
       .addTag('auth', 'Autenticación y login')
       .addTag('users', 'Gestión de usuarios')
       .addTag('roles', 'Gestión de roles y permisos')
@@ -94,6 +106,10 @@ async function bootstrap() {
       .addTag('payments', 'Registro y consulta de pagos')
       .addTag('reports', 'Reportes y resúmenes')
       .addTag('portal', 'Integración Server-to-Server con el Portal de Pagos')
+      .addTag(
+        'academico-integration',
+        'Contrato S2S versionado y de solo lectura para Académico',
+      )
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

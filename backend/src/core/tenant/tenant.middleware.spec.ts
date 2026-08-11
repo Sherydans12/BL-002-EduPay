@@ -23,6 +23,28 @@ describe('TenantMiddleware', () => {
     prisma.tenant.findUnique.mockResolvedValue({ id: 'colegio-pruebas' });
   });
 
+  it('deja el namespace Académico exclusivamente a su guard S2S', async () => {
+    const request = {
+      path: '/api/v1/integrations/academico/students',
+      header: jest.fn(() => 'untrusted-tenant'),
+    } as unknown as Request;
+    const next = jest.fn(() => {
+      expect(tenantContext.getStore()).toEqual({
+        tenantId: null,
+        isSuperAdmin: true,
+      });
+    }) as NextFunction;
+
+    await new TenantMiddleware(config, prisma as unknown as PrismaService).use(
+      request,
+      response,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(prisma.tenant.findUnique).not.toHaveBeenCalled();
+  });
+
   it('crea contexto desde un JWT de usuario tenant', async () => {
     const token = new JwtService({ secret }).sign({
       tenantId: 'colegio-pruebas',

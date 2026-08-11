@@ -224,8 +224,12 @@ export type FinancialSetupStatus = "PENDING" | "CONFIGURED";
 
 export interface Student {
   id: number;
+  integrationId: string;
   rut: string;
   name: string;
+  firstName: string | null;
+  lastName: string | null;
+  integrationReady: boolean;
   status: StudentStatus;
   financialSetup: FinancialSetupStatus;
   overdueDebt: number;
@@ -233,6 +237,15 @@ export interface Student {
   guardianId: number;
   course: Course;
   guardian: Guardian;
+}
+
+export interface StudentAdminInput {
+  rut: string;
+  firstName: string;
+  lastName: string;
+  courseId: number;
+  guardianId: number;
+  status?: StudentStatus;
 }
 
 export interface SetupFinancialPlanDto {
@@ -578,18 +591,12 @@ export const studentsApi = {
     return request<PaginatedResponse<Student>>(`/students${query}`);
   },
   getOne: (id: number) => request<Student>(`/students/${id}`),
-  create: (data: {
-    rut: string;
-    name: string;
-    courseId: number;
-    guardianId: number;
-    status?: StudentStatus;
-  }) =>
+  create: (data: StudentAdminInput) =>
     request<Student>("/students", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: number, data: Partial<Student>) =>
+  update: (id: number, data: Partial<StudentAdminInput>) =>
     request<Student>(`/students/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),

@@ -279,7 +279,14 @@ export default function StudentsPage() {
                 {students.map((s) => (
                   <tr key={s.id} className="hover:bg-[var(--color-surface-hover)] transition-colors">
                     <td className="px-6 py-4 text-sm font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">{s.rut}</td>
-                    <td className="px-6 py-4 font-medium text-white">{s.name}</td>
+                    <td className="px-6 py-4 font-medium text-white">
+                      <div>{s.name}</div>
+                      {!s.integrationReady && (
+                        <div className="mt-1 text-xs font-normal text-amber-300">
+                          Completar nombres para Académico
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={STATUS_BADGE_VARIANT[s.status ?? "ACTIVE"]}>
                         {STATUS_LABELS[s.status ?? "ACTIVE"]}

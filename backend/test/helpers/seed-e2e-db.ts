@@ -21,6 +21,7 @@ export async function resetE2eDatabase(prisma: PrismaService): Promise<void> {
   await prisma.user.deleteMany();
   await prisma.role.deleteMany();
   await prisma.permission.deleteMany();
+  await prisma.integrationIdentity.deleteMany();
 }
 
 export async function seedE2eDatabase(

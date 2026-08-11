@@ -28,6 +28,11 @@ export class TenantMiddleware implements NestMiddleware {
     _response: Response,
     next: NextFunction,
   ): Promise<void> {
+    if (/\/v1\/integrations\/academico(?:\/|$)/.test(request.path)) {
+      tenantContext.run({ tenantId: null, isSuperAdmin: true }, () => next());
+      return;
+    }
+
     const headerTenantId = request.header('x-tenant-id')?.trim();
     const payload = this.decodePanelToken(request);
     const roleName =

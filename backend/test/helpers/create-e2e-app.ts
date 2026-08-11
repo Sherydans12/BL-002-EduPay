@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Reflector } from '@nestjs/core';
 import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
 import { GlobalExceptionFilter } from '../../src/common/filters/http-exception.filter';
@@ -16,7 +17,7 @@ export async function createE2eApp(): Promise<INestApplication<App>> {
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new LoggedValidationPipe());
   app.useGlobalFilters(new GlobalExceptionFilter());
-  app.useGlobalInterceptors(new TransformInterceptor());
+  app.useGlobalInterceptors(new TransformInterceptor(app.get(Reflector)));
 
   await app.init();
   return app;

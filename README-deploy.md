@@ -41,6 +41,12 @@ NODE_ENV=production
 JWT_SECRET=<cadena aleatoria ≥32 chars>
 FRONTEND_URL=https://tu-dominio.cl
 
+# Integración S2S con Académico (solo backend; secretos aleatorios >=32 chars)
+EDUPAY_ACADEMICO_INTEGRATION_TOKEN=<secret-service-token>
+EDUPAY_ACADEMICO_CURSOR_SECRET=<secret-stable-cursor-hmac-key>
+EDUPAY_ACADEMICO_ALLOWED_TENANTS=colegio-conquistadores
+EDUPAY_ACADEMICO_RATE_LIMIT_PER_MINUTE=120
+
 # Email — activar solo cuando SMTP esté configurado
 ENABLE_EMAILS=false
 SMTP_HOST=smtp.ejemplo.cl
@@ -78,6 +84,10 @@ Para desactivar migraciones al arranque (solo casos excepcionales, p. ej. depura
 ```
 RUN_MIGRATIONS=false
 ```
+
+No agregue ninguna variable `EDUPAY_ACADEMICO_*` al recurso frontend ni use
+el prefijo `NEXT_PUBLIC_`. La rotación opcional usa temporalmente
+`EDUPAY_ACADEMICO_INTEGRATION_TOKEN_PREVIOUS`; retírelo al finalizar el solapamiento.
 
 ---
 
