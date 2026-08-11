@@ -108,6 +108,16 @@ export class PrismaService
     super({
       adapter,
       log: ['error', 'warn'],
+      omit: {
+        course: {
+          integrationCreatedSequence: true,
+          integrationVersion: true,
+        },
+        student: {
+          integrationCreatedSequence: true,
+          integrationVersion: true,
+        },
+      },
     });
 
     return this.$extends({

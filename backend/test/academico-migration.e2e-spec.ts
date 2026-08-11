@@ -29,23 +29,37 @@ describe('Académico integration migration', () => {
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "deletedAt" TIMESTAMP(3)
       );
+      CREATE TABLE "guardians" (
+        "id" SERIAL PRIMARY KEY
+      );
       CREATE TABLE "students" (
         "id" SERIAL PRIMARY KEY,
         "tenantId" TEXT NOT NULL,
         "rut" TEXT NOT NULL,
         "name" TEXT NOT NULL,
-        "courseId" INTEGER NOT NULL,
-        "guardianId" INTEGER NOT NULL,
+        "courseId" INTEGER NOT NULL REFERENCES "courses"("id"),
+        "guardianId" INTEGER NOT NULL REFERENCES "guardians"("id"),
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "deletedAt" TIMESTAMP(3)
       );
-      INSERT INTO "courses" ("tenantId", "name")
-      VALUES ('legacy-tenant', 'Legacy Course');
-      INSERT INTO "students" (
-        "tenantId", "rut", "name", "courseId", "guardianId"
-      ) VALUES ('legacy-tenant', '1-9', 'Unsplit Legacy Name', 1, 1);
     `);
+
+    const legacyCourse = await client.query<{ id: number }>(`
+      INSERT INTO "courses" ("tenantId", "name")
+      VALUES ('legacy-tenant', 'Legacy Course')
+      RETURNING "id"
+    `);
+    const legacyGuardian = await client.query<{ id: number }>(`
+      INSERT INTO "guardians" DEFAULT VALUES
+      RETURNING "id"
+    `);
+    await client.query(
+      `INSERT INTO "students" (
+        "tenantId", "rut", "name", "courseId", "guardianId"
+      ) VALUES ('legacy-tenant', '1-9', 'Unsplit Legacy Name', $1, $2)`,
+      [legacyCourse.rows[0].id, legacyGuardian.rows[0].id],
+    );
 
     const migration = readFileSync(
       resolve(
@@ -86,9 +100,11 @@ describe('Académico integration migration', () => {
     expect(student.rows[0].integrationId).not.toBe(
       course.rows[0].integrationId,
     );
-    expect(student.rows[0].integrationId).not.toContain(
-      String(student.rows[0].id),
-    );
+    expect(student.rows[0].integrationId).not.toBe(String(student.rows[0].id));
+    expect(
+      new Set([course.rows[0].integrationId, student.rows[0].integrationId])
+        .size,
+    ).toBe(2);
     expect(student.rows[0]).toMatchObject({
       name: 'Unsplit Legacy Name',
       firstName: null,

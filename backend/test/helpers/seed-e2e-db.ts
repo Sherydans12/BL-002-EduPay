@@ -9,7 +9,13 @@ export type E2eSeedContext = {
   courseId: number;
 };
 
-const E2E_PERMISSIONS = ['create:payment', 'view:payments', 'manage:payments'];
+const E2E_PERMISSIONS = [
+  'create:payment',
+  'view:payments',
+  'manage:payments',
+  'view:students',
+  'view:courses',
+];
 
 export async function resetE2eDatabase(prisma: PrismaService): Promise<void> {
   await prisma.payment.deleteMany();

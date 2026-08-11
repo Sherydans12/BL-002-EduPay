@@ -69,8 +69,9 @@ describe('Académico integration API', () => {
       data: { tenantId: TENANT_A, name: 'Course A2' },
       select: { id: true, integrationId: true },
     });
-    await prisma.course.create({
+    const courseB = await prisma.course.create({
       data: { tenantId: TENANT_B, name: 'Private Course B' },
+      select: { id: true },
     });
 
     const guardianA = await prisma.guardian.create({
@@ -131,12 +132,7 @@ describe('Académico integration API', () => {
         name: 'Private Student B',
         firstName: 'Private',
         lastName: 'Student B',
-        courseId: (
-          await prisma.course.findFirstOrThrow({
-            where: { tenantId: TENANT_B },
-            select: { id: true },
-          })
-        ).id,
+        courseId: courseB.id,
         guardianId: guardianB.id,
       },
     });

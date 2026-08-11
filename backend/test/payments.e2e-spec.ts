@@ -6,6 +6,12 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { createE2eApp } from './helpers/create-e2e-app';
 import { seedE2eDatabase, type E2eSeedContext } from './helpers/seed-e2e-db';
 
+function expectJsonSafeWithoutInternalOrdering(value: unknown): void {
+  const serialized = JSON.stringify(value);
+  expect(serialized).not.toContain('integrationCreatedSequence');
+  expect(serialized).not.toContain('integrationVersion');
+}
+
 describe('Payments (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -53,6 +59,7 @@ describe('Payments (e2e)', () => {
       studentId: ctx.studentId,
       conceptId: ctx.conceptId,
     });
+    expectJsonSafeWithoutInternalOrdering(res.body.data);
   });
 
   it('POST /api/payments/batch rechaza suma de allocations distinta a totalAmount', async () => {
@@ -117,6 +124,24 @@ describe('Payments (e2e)', () => {
 
     expect(res.body.data.length).toBeGreaterThanOrEqual(2);
     expect(res.body.meta.total).toBeGreaterThanOrEqual(2);
+    expect(res.body.data[0].payments[0].student.course).toBeDefined();
+    expectJsonSafeWithoutInternalOrdering(res.body.data);
+  });
+
+  it('ordinary Student and Course APIs omit internal integration ordering fields', async () => {
+    const student = await request(app.getHttpServer())
+      .get(`/api/students/${ctx.studentId}`)
+      .set('Authorization', `Bearer ${ctx.accessToken}`)
+      .expect(200);
+    expect(student.body.data.course).toBeDefined();
+    expectJsonSafeWithoutInternalOrdering(student.body.data);
+
+    const course = await request(app.getHttpServer())
+      .get(`/api/courses/${ctx.courseId}`)
+      .set('Authorization', `Bearer ${ctx.accessToken}`)
+      .expect(200);
+    expect(course.body.data.students[0]).toBeDefined();
+    expectJsonSafeWithoutInternalOrdering(course.body.data);
   });
 
   it('POST /api/payments/batch sin token responde 401', async () => {
