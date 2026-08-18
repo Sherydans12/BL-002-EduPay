@@ -57,8 +57,7 @@ export class CoursesService {
             .filter((charge) => charge.status === 'OVERDUE')
             .reduce(
               (studentTotal, charge) =>
-                studentTotal +
-                Math.max(0, charge.amount - charge.paidAmount),
+                studentTotal + Math.max(0, charge.amount - charge.paidAmount),
               0,
             ),
         0,
