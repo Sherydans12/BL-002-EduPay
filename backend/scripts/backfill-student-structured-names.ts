@@ -1,3 +1,5 @@
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import {
   parseStudentRoster,
@@ -31,7 +33,9 @@ function parseArgs(args: readonly string[]): ScriptOptions {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const prisma = new PrismaClient();
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const adapter = new PrismaPg(pool);
+  const prisma = new PrismaClient({ adapter });
 
   try {
     const students = await prisma.student.findMany({
