@@ -41,7 +41,6 @@ async function main(): Promise<void> {
     const students = await prisma.student.findMany({
       where: {
         tenantId: options.tenantId,
-        deletedAt: null,
       },
       select: {
         id: true,
