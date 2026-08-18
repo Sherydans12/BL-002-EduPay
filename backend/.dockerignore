@@ -12,4 +12,5 @@ README*.md
 scripts/*
 !scripts/rescue-prod.js
 !scripts/seed-demo-tenant.ts
+!scripts/backfill-student-structured-names.ts
 test
