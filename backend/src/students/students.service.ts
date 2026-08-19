@@ -2,10 +2,14 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { ReviewStudentNameDto } from './dto/review-student-name.dto';
+import { validateNameTokenPreservation } from './student-name-validation.util';
 import { Prisma, StudentStatus } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
 import { buildStudentSearchWhere } from '../common/search/flexible-search';
@@ -235,6 +239,145 @@ export class StudentsService {
       rows,
     );
   }
+
+  async getNameReviewQueue(tenantId?: string) {
+    const where: Prisma.StudentWhereInput = {
+      deletedAt: null,
+      status: StudentStatus.ACTIVE,
+      ...(tenantId ? { tenantId } : {}),
+      OR: [
+        { firstName: null },
+        { firstName: '' },
+        { lastName: null },
+        { lastName: '' },
+      ],
+    };
+
+    const students = await this.prisma.student.findMany({
+      where,
+      orderBy: [{ courseId: 'asc' }, { name: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        integrationId: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        courseId: true,
+        course: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    const items = students.map((s) => ({
+      id: s.id,
+      integrationId: s.integrationId,
+      name: s.name,
+      firstName: s.firstName ?? '',
+      lastName: s.lastName ?? '',
+      status: s.status,
+      course: s.course,
+      reason: 'STUDENT_STRUCTURED_NAME_MISSING',
+      tokenCount: s.name.split(/\s+/).filter(Boolean).length,
+    }));
+
+    return {
+      data: items,
+      meta: {
+        pendingCount: items.length,
+      },
+    };
+  }
+
+  async reviewStudentName(
+    id: number,
+    dto: ReviewStudentNameDto,
+    actor?: { id?: number; email?: string; role?: string },
+  ) {
+    const student = await this.prisma.student.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        integrationId: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        courseId: true,
+        course: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!student) {
+      throw new NotFoundException(`Student #${id} not found`);
+    }
+
+    const validation = validateNameTokenPreservation(
+      student.name,
+      dto.firstName,
+      dto.lastName,
+    );
+
+    if (!validation.valid) {
+      throw new BadRequestException(
+        validation.reason ||
+          'Los nombres y apellidos deben conservar exactamente las palabras del nombre original.',
+      );
+    }
+
+    const cleanFirstName = dto.firstName.trim().replace(/\s+/g, ' ');
+    const cleanLastName = dto.lastName.trim().replace(/\s+/g, ' ');
+
+    const previousClassification =
+      !student.firstName?.trim() || !student.lastName?.trim()
+        ? 'STUDENT_STRUCTURED_NAME_MISSING'
+        : 'STRUCTURED';
+
+    const updated = await this.prisma.student.update({
+      where: { id },
+      data: {
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
+      },
+      select: {
+        id: true,
+        integrationId: true,
+        name: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        courseId: true,
+        course: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(
+      `[STUDENT_NAME_REVIEW_AUDIT] studentId=${student.id} integrationId=${student.integrationId} actorId=${actor?.id ?? 'system'} actorRole=${actor?.role ?? 'admin'} previousClassification=${previousClassification} newClassification=STRUCTURED timestamp=${new Date().toISOString()}`,
+    );
+
+    return {
+      data: {
+        ...updated,
+        integrationReady: true,
+      },
+    };
+  }
+
+  private readonly logger = new Logger('StudentNameReview');
 
   private legacyName(firstName: string, lastName: string): string {
     return `${firstName.trim()} ${lastName.trim()}`;

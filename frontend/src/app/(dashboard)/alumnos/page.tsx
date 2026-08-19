@@ -7,7 +7,7 @@ import type { StudentStatus } from "@/lib/api";
 import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
 import type { Student, Course, Guardian } from "@/lib/api";
 import { toast } from "sonner";
-import { FileSpreadsheet, FileText, TriangleAlert } from "lucide-react";
+import { FileSpreadsheet, FileText, Sparkles, TriangleAlert } from "lucide-react";
 import { StudentFormDialog } from "@/components/student-form-dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -200,6 +200,13 @@ export default function StudentsPage() {
           <p className="text-[var(--color-text-secondary)] mt-1">Gestión de alumnos del colegio</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/alumnos/pendientes"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-sm font-medium transition-all"
+          >
+            <Sparkles className="w-4 h-4" />
+            Pendientes Académico
+          </Link>
           <button
             onClick={handleExportExcel}
             disabled={isExporting}

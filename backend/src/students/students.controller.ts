@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Req,
   ParseIntPipe,
   DefaultValuePipe,
   Res,
@@ -23,6 +24,7 @@ import {
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { ReviewStudentNameDto } from './dto/review-student-name.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
@@ -41,6 +43,36 @@ export class StudentsController {
   @ApiResponse({ status: 409, description: 'RUT duplicado' })
   create(@Body() dto: CreateStudentDto) {
     return this.studentsService.create(dto);
+  }
+
+  @Get('name-review/queue')
+  @RequirePermissions('view:students')
+  @ApiOperation({
+    summary: 'Listar cola de alumnos pendientes de estructuración de nombres para Académico',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cola de alumnos pendientes con motivo STUDENT_STRUCTURED_NAME_MISSING',
+  })
+  getNameReviewQueue(@Req() req: { user?: { tenantId?: string } }) {
+    return this.studentsService.getNameReviewQueue(req.user?.tenantId);
+  }
+
+  @Post(':id/name-review')
+  @RequirePermissions('manage:students')
+  @ApiOperation({
+    summary: 'Guardar partición de nombres estructurados validando preservación exacta de palabras',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID del alumno' })
+  @ApiResponse({ status: 200, description: 'Estructuración guardada exitosamente' })
+  @ApiResponse({ status: 400, description: 'Validación de palabras fallida o datos inválidos' })
+  @ApiResponse({ status: 404, description: 'Alumno no encontrado' })
+  reviewStudentName(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReviewStudentNameDto,
+    @Req() req: { user?: { id?: number; email?: string; role?: string } },
+  ) {
+    return this.studentsService.reviewStudentName(id, dto, req.user);
   }
 
   @Get('export')

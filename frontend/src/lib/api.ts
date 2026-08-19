@@ -248,6 +248,21 @@ export interface StudentAdminInput {
   status?: StudentStatus;
 }
 
+export interface PendingStudentReviewItem {
+  id: number;
+  integrationId: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  status: StudentStatus;
+  course: {
+    id: number;
+    name: string;
+  };
+  reason: string;
+  tokenCount: number;
+}
+
 export interface SetupFinancialPlanDto {
   charges: Array<{ conceptId: number; amount: number; dueDate: string }>;
   paymentAllocations?: Array<{
@@ -607,6 +622,18 @@ export const studentsApi = {
     const params = courseId ? `?courseId=${courseId}` : "";
     return requestBlob(`/students/export${params}`);
   },
+  getNameReviewQueue: () =>
+    request<{ data: PendingStudentReviewItem[]; meta: { pendingCount: number } }>(
+      "/students/name-review/queue",
+    ),
+  reviewName: (id: number, data: { firstName: string; lastName: string }) =>
+    request<{ data: Student; integrationReady: boolean }>(
+      `/students/${id}/name-review`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
 };
 
 // ─── Payments ─────────────────────────────────────────────────
