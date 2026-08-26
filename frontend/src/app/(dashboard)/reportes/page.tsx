@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, Fragment } from "react";
 import Link from "next/link";
 import {
   paymentsApi,
@@ -675,10 +675,7 @@ export default function ReportsPage() {
                     </thead>
                     <tbody className="divide-y divide-[var(--color-border)]">
                       {filteredMatrixCourses.map((courseGroup) => (
-                        <div
-                          key={`group-${courseGroup.courseId}`}
-                          className="contents"
-                        >
+                        <Fragment key={`group-${courseGroup.courseId}`}>
                           {/* Banner de Curso */}
                           <tr className="bg-blue-950/40 text-xs font-semibold text-blue-200">
                             <td
@@ -799,7 +796,7 @@ export default function ReportsPage() {
                               </tr>
                             );
                           })}
-                        </div>
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
