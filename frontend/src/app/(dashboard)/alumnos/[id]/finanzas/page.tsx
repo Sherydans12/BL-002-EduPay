@@ -21,16 +21,23 @@ import {
   Search,
   Wand2,
   ShieldCheck,
+  Pencil,
+  Users,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { chargesApi, resolveUploadUrl, studentsApi } from "@/lib/api";
+import { chargesApi, guardiansApi, resolveUploadUrl, studentsApi } from "@/lib/api";
+import { fetchAllCourses } from "@/lib/fetch-all-pages";
 import type {
   AccountStatementPayment,
   Charge,
   ChargeStatus,
+  Course,
+  Guardian,
   NotificationLog,
   NotificationStatus,
   Student,
@@ -42,6 +49,8 @@ import {
   PaymentReceiptModal,
   type PaymentReceiptData,
 } from "@/app/(dashboard)/pagos/nuevo/PaymentReceiptModal";
+import { EditStudentFinancialDialog } from "./EditStudentFinancialDialog";
+import { EditGuardianFinancialDialog } from "./EditGuardianFinancialDialog";
 
 type Movement =
   | {
@@ -172,6 +181,17 @@ export default function StudentFinancialStatementPage() {
   const [movementSearch, setMovementSearch] = useState("");
   const [receiptModalData, setReceiptModalData] = useState<PaymentReceiptData | null>(null);
 
+  // References and edit modals
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [guardians, setGuardians] = useState<Guardian[]>([]);
+  const [editStudentOpen, setEditStudentOpen] = useState(false);
+  const [editGuardianOpen, setEditGuardianOpen] = useState(false);
+
+  useEffect(() => {
+    fetchAllCourses().then(setCourses).catch(() => {});
+    guardiansApi.getAll(1, 200).then((res) => setGuardians(res.data)).catch(() => {});
+  }, []);
+
   const fetchFinancialStatement = async () => {
     if (!Number.isFinite(studentId) || studentId <= 0) return;
     setLoading(true);
@@ -194,6 +214,14 @@ export default function StudentFinancialStatementPage() {
   useEffect(() => {
     void fetchFinancialStatement();
   }, [studentId]);
+
+  // Siblings calculation
+  const siblings = useMemo(() => {
+    if (!student?.guardian?.students) return [];
+    return student.guardian.students.filter(
+      (s) => Number(s.id) !== Number(student.id),
+    );
+  }, [student]);
 
   const movements = useMemo(
     () =>
@@ -342,9 +370,10 @@ export default function StudentFinancialStatementPage() {
           </div>
         </div>
 
-        {/* Tarjeta de Información del Alumno y Apoderado */}
-        <div className="glass rounded-2xl border border-[var(--color-border)] p-5 sm:p-6 shadow-sm">
+        {/* Tarjeta de Información del Alumno y Apoderado con Edición */}
+        <div className="glass rounded-2xl border border-[var(--color-border)] p-5 sm:p-6 shadow-sm space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            {/* Alumno */}
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 border border-blue-400/30 flex items-center justify-center text-white text-xl font-bold shrink-0 shadow-md">
                 {student.name.charAt(0).toUpperCase()}
@@ -373,6 +402,16 @@ export default function StudentFinancialStatementPage() {
                       </>
                     )}
                   </Badge>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEditStudentOpen(true)}
+                    className="h-7 gap-1 rounded-lg border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 text-xs text-white hover:bg-[var(--color-surface-hover)] shadow-sm"
+                  >
+                    <Pencil className="size-3 text-blue-400" />
+                    Editar Alumno
+                  </Button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--color-text-secondary)]">
@@ -381,16 +420,33 @@ export default function StudentFinancialStatementPage() {
                   <Badge variant="secondary" className="text-xs">
                     {student.course?.name ?? "Sin curso"}
                   </Badge>
+                  {student.status && student.status !== "ACTIVE" && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      {student.status === "INACTIVE" ? "Inactivo" : "Egresado"}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Datos de Contacto del Apoderado */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 lg:gap-6 bg-[var(--color-bg)]/40 p-3.5 rounded-xl border border-[var(--color-border)]/60 text-xs">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)] block">
-                  Apoderado Titular
-                </span>
+            {/* Datos de Contacto del Apoderado con Edición */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 lg:gap-6 bg-[var(--color-bg)]/40 p-4 rounded-xl border border-[var(--color-border)]/60 text-xs">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)] block">
+                    Apoderado Titular
+                  </span>
+                  {student.guardian && (
+                    <button
+                      type="button"
+                      onClick={() => setEditGuardianOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                    >
+                      <Pencil className="size-2.5" />
+                      Editar
+                    </button>
+                  )}
+                </div>
                 <span className="font-semibold text-white text-sm block">
                   {student.guardian?.name ?? "Sin apoderado asignado"}
                 </span>
@@ -402,21 +458,71 @@ export default function StudentFinancialStatementPage() {
               </div>
 
               <div className="space-y-1 border-t sm:border-t-0 sm:border-l border-[var(--color-border)] sm:pl-4 pt-2 sm:pt-0">
-                {student.guardian?.email && (
+                {student.guardian?.email ? (
                   <div className="flex items-center gap-1.5 text-[var(--color-text-secondary)] hover:text-white">
                     <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                     <span className="truncate max-w-[200px]">{student.guardian.email}</span>
                   </div>
+                ) : (
+                  <span className="text-[11px] text-[var(--color-text-muted)] italic block">
+                    Sin correo registrado
+                  </span>
                 )}
-                {student.guardian?.phone && (
+                {student.guardian?.phone ? (
                   <div className="flex items-center gap-1.5 text-[var(--color-text-secondary)] hover:text-white">
                     <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     <span>{student.guardian.phone}</span>
                   </div>
+                ) : (
+                  <span className="text-[11px] text-[var(--color-text-muted)] italic block">
+                    Sin teléfono registrado
+                  </span>
                 )}
               </div>
             </div>
           </div>
+
+          {/* Banner Inteligente de Hermanos / Grupo Familiar */}
+          {siblings.length > 0 && (
+            <div className="rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-transparent p-3.5 text-xs text-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/25 text-blue-300 shrink-0 shadow-sm">
+                  <Users className="size-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-xs">
+                      Grupo Familiar en el Colegio
+                    </span>
+                    <Badge className="border-blue-400/40 bg-blue-500/20 text-[10px] text-blue-200">
+                      {siblings.length + 1} alumnos a cargo
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-blue-200/80 mt-0.5">
+                    Hermanos vinculados al mismo apoderado ({student.guardian?.name}):
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {siblings.map((sib) => (
+                  <Link
+                    key={sib.id}
+                    href={`/alumnos/${sib.id}/finanzas`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-blue-400/40 bg-[var(--color-surface)]/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600/30 hover:border-blue-300 transition-all group shadow-sm"
+                  >
+                    <span>{sib.name}</span>
+                    {sib.course && (
+                      <span className="text-[10px] text-blue-300 font-normal">
+                        ({sib.course.name})
+                      </span>
+                    )}
+                    <ArrowUpRight className="size-3 text-blue-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -928,6 +1034,25 @@ export default function StudentFinancialStatementPage() {
           data={receiptModalData}
         />
       )}
+
+      {/* Modal de Edición del Alumno */}
+      <EditStudentFinancialDialog
+        open={editStudentOpen}
+        onOpenChange={setEditStudentOpen}
+        student={student}
+        courses={courses}
+        guardians={guardians}
+        onSaved={fetchFinancialStatement}
+      />
+
+      {/* Modal de Edición del Apoderado con Sincronización Familiar */}
+      <EditGuardianFinancialDialog
+        open={editGuardianOpen}
+        onOpenChange={setEditGuardianOpen}
+        guardian={student.guardian}
+        currentStudent={student}
+        onSaved={fetchFinancialStatement}
+      />
     </div>
   );
 }

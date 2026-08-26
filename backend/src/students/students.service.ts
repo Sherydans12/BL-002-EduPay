@@ -143,7 +143,15 @@ export class StudentsService {
       where: { id, deletedAt: null },
       include: {
         course: true,
-        guardian: true,
+        guardian: {
+          include: {
+            students: {
+              where: { deletedAt: null },
+              include: { course: true },
+              orderBy: { name: 'asc' },
+            },
+          },
+        },
         payments: {
           where: {
             deletedAt: null,
