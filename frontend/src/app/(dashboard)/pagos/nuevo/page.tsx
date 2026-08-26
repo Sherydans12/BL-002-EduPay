@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import { fetchAllStudents, fetchAllGuardians } from "@/lib/fetch-all-pages";
 import type { Student, Guardian, Charge, PaymentConcept } from "@/lib/api";
+import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import { toast } from "sonner";
 import {
   Popover,
@@ -71,13 +72,7 @@ function FieldError({ message }: { message?: string }) {
   );
 }
 
-function formatCLP(amount: number): string {
-  return amount.toLocaleString("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  });
-}
+
 
 function getTodayString(): string {
   return new Date().toISOString().split("T")[0];

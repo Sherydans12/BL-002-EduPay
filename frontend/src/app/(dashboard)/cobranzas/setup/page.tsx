@@ -36,6 +36,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { toast } from "sonner";
+import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -111,13 +112,7 @@ function getFinancialSetup(student: Student): FinancialSetupStatus {
   return student.financialSetup ?? "PENDING";
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+const formatCurrency = formatCLP;
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("es-CL", {
@@ -530,7 +525,7 @@ export default function FinancialSetupRadarPage() {
         ? { id: Number(fields[index].id) }
         : {}),
       conceptId: Number(charge.conceptId ?? fields[index]?.conceptId),
-      amount: Number(charge.amount ?? fields[index]?.amount),
+      amount: parseCLP(charge.amount ?? fields[index]?.amount),
       dueDate: charge.dueDate || fields[index]?.dueDate || "",
     }));
     const paymentAllocations = paymentHistory.map((payment) => {

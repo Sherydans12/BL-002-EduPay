@@ -220,7 +220,7 @@ export class ChargesService {
           deletedAt: null,
           paymentGroup: { is: { deletedAt: null } },
         },
-        include: { paymentGroup: true },
+        include: { paymentGroup: true, concept: true },
         orderBy: [{ paymentDate: 'asc' }, { id: 'asc' }],
       }),
       this.prisma.notificationLog.findMany({

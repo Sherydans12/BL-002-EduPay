@@ -17,6 +17,7 @@ import {
   getGroupPayerLabel,
 } from "@/lib/payment-group-utils";
 import { cmdkPersonFilter } from "@/lib/flexible-search";
+import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import { toast } from "sonner";
 import {
   Search,
@@ -106,13 +107,7 @@ function toDateInputValue(value: string): string {
   return value.includes("T") ? value.split("T")[0] : value.slice(0, 10);
 }
 
-function formatCLP(amount: number): string {
-  return amount.toLocaleString("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  });
-}
+
 
 export default function PagosMasterPage() {
   const [groups, setGroups] = useState<PaymentGroup[]>([]);

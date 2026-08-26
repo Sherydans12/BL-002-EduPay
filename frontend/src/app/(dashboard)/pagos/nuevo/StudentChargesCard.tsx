@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Student, Charge, PaymentConcept } from "@/lib/api";
+import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import { Badge } from "@/components/ui/badge";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import {
@@ -40,13 +41,7 @@ interface StudentChargesCardProps {
   onAddSibling?: (sibling: Student) => void;
 }
 
-function formatCLP(amount: number): string {
-  return amount.toLocaleString("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  });
-}
+
 
 function formatChargeDate(date: string): string {
   return new Intl.DateTimeFormat("es-CL", {
