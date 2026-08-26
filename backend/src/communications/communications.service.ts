@@ -6,12 +6,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CommunicationType, DeliveryStatus, Prisma } from '@prisma/client';
+import { ChargeStatus, CommunicationType, DeliveryStatus, Prisma } from '@prisma/client';
 import { tenantContext } from '../core/tenant/tenant.context';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FindSentCommunicationsQueryDto } from './dto/find-sent-communications-query.dto';
 import { LogCommunicationDto } from './dto/log-communication.dto';
+import { SendCustomCommunicationDto } from './dto/send-custom-communication.dto';
 import { UpdateTenantEmailConfigDto } from './dto/update-tenant-email-config.dto';
 
 type SentCommunicationFilters = Pick<
@@ -118,6 +119,115 @@ export class CommunicationsService {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  async getCommunicationStats() {
+    const tenantId = this.getCurrentTenantId();
+    const now = new Date();
+
+    const [
+      totalSent,
+      deliveredCount,
+      bouncedCount,
+      failedCount,
+      sentViaResendCount,
+      overdueCharges,
+    ] = await Promise.all([
+      this.prisma.sentCommunication.count({ where: { tenantId } }),
+      this.prisma.sentCommunication.count({
+        where: { tenantId, status: DeliveryStatus.DELIVERED },
+      }),
+      this.prisma.sentCommunication.count({
+        where: { tenantId, status: DeliveryStatus.BOUNCED },
+      }),
+      this.prisma.sentCommunication.count({
+        where: {
+          tenantId,
+          status: { in: [DeliveryStatus.FAILED, DeliveryStatus.COMPLAINED] },
+        },
+      }),
+      this.prisma.sentCommunication.count({
+        where: { tenantId, status: DeliveryStatus.SENT },
+      }),
+      this.prisma.charge.findMany({
+        where: {
+          deletedAt: null,
+          status: {
+            in: [
+              ChargeStatus.PENDING,
+              ChargeStatus.PARTIALLY_PAID,
+              ChargeStatus.OVERDUE,
+            ],
+          },
+          dueDate: { lte: now },
+          student: {
+            deletedAt: null,
+            guardian: {
+              deletedAt: null,
+              email: { not: null },
+            },
+          },
+        },
+        select: {
+          amount: true,
+          paidAmount: true,
+          studentId: true,
+        },
+      }),
+    ]);
+
+    const totalOverdueAmount = overdueCharges.reduce(
+      (acc, c) => acc + Math.max(c.amount - c.paidAmount, 0),
+      0,
+    );
+    const uniqueStudentsWithOverdue = new Set(
+      overdueCharges.map((c) => c.studentId),
+    ).size;
+
+    const deliveryRate =
+      totalSent > 0 ? Math.round((deliveredCount / totalSent) * 100) : 100;
+
+    return {
+      totalSent,
+      deliveredCount,
+      bouncedCount,
+      failedCount,
+      sentViaResendCount,
+      deliveryRate,
+      pendingRemindersCount: uniqueStudentsWithOverdue,
+      totalOverdueAmount,
+    };
+  }
+
+  async sendCustomCommunication(dto: SendCustomCommunicationDto) {
+    let studentName: string | undefined;
+    let courseName: string | undefined;
+
+    if (dto.studentId) {
+      const student = await this.prisma.student.findFirst({
+        where: { id: dto.studentId, deletedAt: null },
+        include: { course: true, guardian: true },
+      });
+      if (student) {
+        studentName = student.name;
+        courseName = student.course?.name;
+      }
+    }
+
+    await this.mailService.sendCustomMessage({
+      to: dto.recipientEmail.trim(),
+      recipientName: dto.recipientName?.trim(),
+      studentName,
+      studentId: dto.studentId,
+      courseName,
+      subject: dto.subject.trim(),
+      message: dto.message.trim(),
+    });
+
+    return {
+      success: true,
+      message: 'Comunicación enviada exitosamente',
     };
   }
 

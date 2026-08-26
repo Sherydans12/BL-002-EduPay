@@ -20,6 +20,7 @@ import { CommunicationsService } from './communications.service';
 import { FindSentCommunicationsQueryDto } from './dto/find-sent-communications-query.dto';
 import { PreviewEmailTemplateQueryDto } from './dto/preview-email-template-query.dto';
 import { RetryCommunicationParamsDto } from './dto/retry-communication-params.dto';
+import { SendCustomCommunicationDto } from './dto/send-custom-communication.dto';
 import { UpdateTenantEmailConfigDto } from './dto/update-tenant-email-config.dto';
 
 @ApiTags('communications')
@@ -30,6 +31,22 @@ export class CommunicationsController {
     private readonly communicationsService: CommunicationsService,
     private readonly config: ConfigService,
   ) {}
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Obtener métricas y KPIs de comunicaciones y entregabilidad' })
+  getCommunicationStats() {
+    return this.communicationsService.getCommunicationStats();
+  }
+
+  @Post('custom')
+  @ApiOperation({ summary: 'Enviar una comunicación personalizada a un apoderado o alumno' })
+  @ApiResponse({
+    status: 201,
+    description: 'Comunicación personalizada enviada y registrada',
+  })
+  sendCustomCommunication(@Body() dto: SendCustomCommunicationDto) {
+    return this.communicationsService.sendCustomCommunication(dto);
+  }
 
   @Get('templates/preview')
   @Public()

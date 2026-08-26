@@ -420,6 +420,55 @@ export interface SentCommunicationFilters {
   type?: CommunicationType;
 }
 
+export interface CommunicationStats {
+  totalSent: number;
+  deliveredCount: number;
+  bouncedCount: number;
+  failedCount: number;
+  sentViaResendCount: number;
+  deliveryRate: number;
+  pendingRemindersCount: number;
+  totalOverdueAmount: number;
+}
+
+export interface ReminderChargeDetail {
+  id: number;
+  conceptName: string;
+  amount: number;
+  dueDate: string;
+}
+
+export interface ReminderStudentPreview {
+  studentId: number;
+  studentName: string;
+  studentRut: string | null;
+  courseId: number | null;
+  courseName: string;
+  guardianName: string;
+  guardianEmail: string;
+  guardianPhone: string | null;
+  totalOverdueAmount: number;
+  chargesCount: number;
+  charges: ReminderChargeDetail[];
+}
+
+export interface RemindersPreviewResponse {
+  totalRecipients: number;
+  totalStudents: number;
+  totalCharges: number;
+  totalOverdueAmount: number;
+  students: ReminderStudentPreview[];
+}
+
+export interface SendCustomCommunicationInput {
+  recipientEmail: string;
+  recipientName?: string;
+  subject: string;
+  message: string;
+  studentId?: number;
+  courseId?: number;
+}
+
 export interface TenantEmailConfig {
   id: string;
   tenantId: string;
@@ -750,13 +799,38 @@ export const communicationsApi = {
       `/v1/communications${query}`,
     );
   },
-  sendPaymentReminders: () =>
+  getStats: () => request<CommunicationStats>("/v1/communications/stats"),
+  getRemindersPreview: (
+    filters: { courseId?: number; studentId?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.courseId != null)
+      params.set("courseId", String(filters.courseId));
+    if (filters.studentId != null)
+      params.set("studentId", String(filters.studentId));
+    const query = params.size > 0 ? `?${params.toString()}` : "";
+    return request<RemindersPreviewResponse>(
+      `/v1/communications/reminders/preview${query}`,
+    );
+  },
+  sendPaymentReminders: (
+    data: { courseId?: number; studentId?: number } = {},
+  ) =>
     request<{
       processed: number;
+      totalCharges: number;
       sent: number;
       failed: number;
       skipped: number;
-    }>("/v1/communications/reminders", { method: "POST" }),
+    }>("/v1/communications/reminders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  sendCustom: (data: SendCustomCommunicationInput) =>
+    request<{ success: boolean; message: string }>("/v1/communications/custom", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   retry: (id: string) =>
     request<SentCommunication>(`/v1/communications/${id}/retry`, {
       method: "POST",

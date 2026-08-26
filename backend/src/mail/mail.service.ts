@@ -12,8 +12,11 @@ import { Resend } from 'resend';
 import { CommunicationsService } from '../communications/communications.service';
 import {
   renderBoletaTemplate,
+  renderConsolidatedReminderTemplate,
+  renderCustomMessageTemplate,
   renderPaymentConfirmationTemplate,
   renderReminderTemplate,
+  type ConsolidatedReminderCharge,
 } from './templates/email-templates';
 
 type PaymentConfirmationPayload = {
@@ -47,6 +50,33 @@ type ReminderPayload = {
   amount: number;
   dueDate?: Date;
   conceptName?: string;
+  trackingCommunicationId?: string;
+};
+
+type ConsolidatedReminderPayload = {
+  to: string;
+  recipientName?: string;
+  studentName: string;
+  studentId?: number;
+  courseName?: string;
+  totalAmount: number;
+  charges: Array<{
+    conceptName: string;
+    amount: number;
+    dueDate?: Date | null;
+  }>;
+  paymentPortalUrl?: string;
+  trackingCommunicationId?: string;
+};
+
+type CustomMessagePayload = {
+  to: string;
+  recipientName?: string;
+  studentName?: string;
+  studentId?: number;
+  courseName?: string;
+  subject: string;
+  message: string;
   trackingCommunicationId?: string;
 };
 
@@ -222,6 +252,104 @@ export class MailService {
           amount,
           ...(dueDate ? { dueDate: dueDate.toISOString() } : {}),
           conceptName,
+        },
+      },
+      trackingCommunicationId,
+    );
+  }
+
+  async sendConsolidatedReminder({
+    to,
+    recipientName,
+    studentName,
+    studentId,
+    courseName,
+    totalAmount,
+    charges,
+    paymentPortalUrl,
+    trackingCommunicationId,
+  }: ConsolidatedReminderPayload): Promise<void> {
+    const totalFormattedAmount = totalAmount.toLocaleString('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+      maximumFractionDigits: 0,
+    });
+
+    const renderedCharges: ConsolidatedReminderCharge[] = charges.map((c) => ({
+      conceptName: c.conceptName,
+      formattedAmount: c.amount.toLocaleString('es-CL', {
+        style: 'currency',
+        currency: 'CLP',
+        maximumFractionDigits: 0,
+      }),
+      formattedDueDate: c.dueDate
+        ? new Intl.DateTimeFormat('es-CL', {
+            dateStyle: 'short',
+            timeZone: 'UTC',
+          }).format(c.dueDate)
+        : undefined,
+    }));
+
+    const subject = `Aviso de cobranza: Estado de cuotas de ${studentName}`;
+    const html = renderConsolidatedReminderTemplate({
+      recipientName,
+      studentName,
+      courseName,
+      totalFormattedAmount,
+      charges: renderedCharges,
+      paymentPortalUrl,
+    });
+
+    await this.sendTrackedEmail(
+      {
+        to,
+        recipientName,
+        type: CommunicationType.PAYMENT_REMINDER,
+        subject,
+        html,
+        metadata: {
+          ...(studentId ? { studentId } : {}),
+          studentName,
+          ...(courseName ? { courseName } : {}),
+          amount: totalAmount,
+          chargesCount: charges.length,
+          conceptsSummary: charges.map((c) => c.conceptName).join(', '),
+        },
+      },
+      trackingCommunicationId,
+    );
+  }
+
+  async sendCustomMessage({
+    to,
+    recipientName,
+    studentName,
+    studentId,
+    courseName,
+    subject,
+    message,
+    trackingCommunicationId,
+  }: CustomMessagePayload): Promise<void> {
+    const html = renderCustomMessageTemplate({
+      recipientName,
+      studentName,
+      courseName,
+      subject,
+      message,
+    });
+
+    await this.sendTrackedEmail(
+      {
+        to,
+        recipientName,
+        type: CommunicationType.ACCOUNT_STATEMENT,
+        subject,
+        html,
+        metadata: {
+          ...(studentId ? { studentId } : {}),
+          ...(studentName ? { studentName } : {}),
+          ...(courseName ? { courseName } : {}),
+          isCustomMessage: true,
         },
       },
       trackingCommunicationId,
