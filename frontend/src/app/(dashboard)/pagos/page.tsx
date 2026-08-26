@@ -750,7 +750,14 @@ export default function PagosMasterPage() {
                                               {p.student.course?.name ?? "—"}
                                             </td>
                                             <td className="py-2.5 pr-4 text-[var(--color-text-secondary)]">
-                                              {p.concept?.name ?? "—"}
+                                              <div className="flex items-center gap-2">
+                                                <span>{p.concept?.name ?? "—"}</span>
+                                                {p.chargeId == null && (
+                                                  <span className="text-[10px] bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-1.5 py-0.5 rounded font-medium">
+                                                    Saldo a Favor
+                                                  </span>
+                                                )}
+                                              </div>
                                             </td>
                                             <td className="py-2.5 text-right font-semibold text-emerald-400/90 tabular-nums">
                                               $

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -12,10 +13,11 @@ import {
   paymentsApi,
   chargesApi,
   guardiansApi,
+  conceptsApi,
   buildPaymentBatchFormData,
 } from "@/lib/api";
 import { fetchAllStudents, fetchAllGuardians } from "@/lib/fetch-all-pages";
-import type { Student, Guardian, Charge } from "@/lib/api";
+import type { Student, Guardian, Charge, PaymentConcept } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Popover,
@@ -32,70 +34,41 @@ import {
 } from "@/components/ui/command";
 import {
   DropdownChevron,
-  NativeSelectField,
 } from "@/components/ui/dropdown-chevron";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { cmdkPersonFilter } from "@/lib/flexible-search";
 import { useDropzone } from "react-dropzone";
 import {
   UploadCloud,
   FileText,
   X,
-  Info,
-  Trash2,
   Users,
+  Search,
+  ArrowLeft,
+  Calendar,
+  Sparkles,
+  Keyboard,
+  Receipt,
+  CheckCircle2,
+  AlertTriangle,
+  UserCheck,
   Plus,
-  Zap,
+  Lock,
 } from "lucide-react";
-
-const METHODS = [
-  { value: "CASH", label: "Efectivo" },
-  { value: "DEBIT", label: "Débito" },
-  { value: "CREDIT", label: "Crédito" },
-  { value: "CHECK", label: "Cheque" },
-  { value: "TRANSFER", label: "Transferencia" },
-] as const;
+import { StudentChargesCard } from "./StudentChargesCard";
+import { PaymentMethodDetails } from "./PaymentMethodDetails";
+import { PaymentReceiptModal, type ReceiptData } from "./PaymentReceiptModal";
 
 const inputBase =
-  "w-full px-4 py-3 rounded-xl bg-[var(--color-bg)] border text-white focus:ring-1 outline-none transition-all";
+  "w-full px-3.5 py-2.5 rounded-xl bg-[var(--color-bg)] border text-white focus:ring-1 outline-none transition-all text-sm";
 const inputOk = `${inputBase} border-[var(--color-border)] focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)]`;
 const inputErr = `${inputBase} border-red-500/60 focus:border-red-400 focus:ring-red-400`;
+const inputReadOnly = `${inputBase} border-[var(--color-border)]/50 bg-[var(--color-bg)]/50 text-[var(--color-text-muted)] cursor-not-allowed select-none font-mono`;
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <p className="mt-1.5 text-xs text-red-400 animate-fade-in">{message}</p>
+    <p className="mt-1 text-xs text-red-400 animate-fade-in">{message}</p>
   );
-}
-
-function buildAllocationRow(student: Student): {
-  studentId: number;
-  chargeId: number | undefined;
-  conceptId: number | undefined;
-  amount: number | undefined;
-} {
-  return {
-    studentId: student.id,
-    chargeId: undefined,
-    conceptId: undefined,
-    amount: undefined,
-  };
-}
-
-function formatChargeDate(date: string): string {
-  return new Intl.DateTimeFormat("es-CL", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(date));
 }
 
 function formatCLP(amount: number): string {
@@ -106,8 +79,14 @@ function formatCLP(amount: number): string {
   });
 }
 
-function getChargeBalance(charge: Charge): number {
-  return Math.max(charge.amount - charge.paidAmount, 0);
+function getTodayString(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function getYesterdayString(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split("T")[0];
 }
 
 export default function NewPaymentPage() {
@@ -115,17 +94,40 @@ export default function NewPaymentPage() {
   const searchParams = useSearchParams();
   const requestedStudentId = Number(searchParams.get("studentId"));
   const autoSelectedStudentIdRef = useRef<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [students, setStudents] = useState<Student[]>([]);
   const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
-  const [pendingCharges, setPendingCharges] = useState<
-    Record<number, Charge[]>
-  >({});
+  const [concepts, setConcepts] = useState<PaymentConcept[]>([]);
+  const [pendingCharges, setPendingCharges] = useState<Record<number, Charge[]>>({});
+  const [loadingCharges, setLoadingCharges] = useState<Record<number, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [guardianOpen, setGuardianOpen] = useState(false);
-  const [studentOpen, setStudentOpen] = useState(false);
-  const [siblingSuggestions, setSiblingSuggestions] = useState<Student[]>([]);
+
+  // Search popovers
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchMode, setSearchMode] = useState<"STUDENT" | "GUARDIAN">("STUDENT");
+
+  // Selected students tracked as an ordered list of student IDs
+  const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
+
+  // Boleta mode: "EMITTED" (has SII boleta now) vs "PENDING" (emit later)
+  const [boletaMode, setBoletaMode] = useState<"EMITTED" | "PENDING">("EMITTED");
+
+  // Track initial presence of guardian contact data to lock registered fields
+  const [initialGuardianState, setInitialGuardianState] = useState<{
+    hasRut: boolean;
+    hasPhone: boolean;
+    hasEmail: boolean;
+  }>({
+    hasRut: false,
+    hasPhone: false,
+    hasEmail: false,
+  });
+
+  // Success modal state
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
   const {
     register,
@@ -142,7 +144,7 @@ export default function NewPaymentPage() {
       totalAmount: 0,
       allocations: [],
       method: "CASH",
-      paymentDate: new Date().toISOString().split("T")[0],
+      paymentDate: getTodayString(),
       payerName: "",
       payerRut: "",
       guardianName: "",
@@ -165,41 +167,37 @@ export default function NewPaymentPage() {
   const useAltPayer = watch("useAltPayer");
   const allocations = useWatch({ control, name: "allocations" });
   const boletaFile = watch("boleta");
+  const selectedMethod = watch("method");
+  const paymentDate = watch("paymentDate");
+  const referenceCode = watch("referenceCode") ?? "";
+  const notes = watch("notes") ?? "";
 
   const studentById = useMemo(
     () => new Map(students.map((s) => [s.id, s])),
     [students],
   );
 
-  const primaryStudent = useMemo(() => {
-    const firstId = allocations?.[0]?.studentId;
-    return firstId ? studentById.get(firstId) : undefined;
-  }, [allocations, studentById]);
+  const selectedStudents = useMemo(() => {
+    const uniqueIds = Array.from(new Set(selectedStudentIds));
+    return uniqueIds
+      .map((id) => studentById.get(id))
+      .filter((s): s is Student => Boolean(s));
+  }, [selectedStudentIds, studentById]);
 
-  const primaryStudentId = primaryStudent?.id;
-  const primaryPendingCharges = primaryStudentId
-    ? (pendingCharges[primaryStudentId] ?? [])
-    : [];
-  const primaryDebtRows = primaryPendingCharges
-    .map((charge) => ({
-      charge,
-      balance: getChargeBalance(charge),
-    }))
-    .filter((row) => row.balance > 0);
-  const primaryDebtTotal = primaryDebtRows.reduce(
-    (total, row) => total + row.balance,
-    0,
-  );
+  const primaryStudent = selectedStudents[0];
 
+  // Load students, guardians, and concepts on mount
   useEffect(() => {
     Promise.all([
       fetchAllStudents().then(setStudents),
       fetchAllGuardians().then(setGuardians),
+      conceptsApi.getAll().then(setConcepts).catch(() => []),
     ])
       .catch(() => {})
       .finally(() => setStudentsLoaded(true));
   }, []);
 
+  // Update totalAmount whenever allocations change
   useEffect(() => {
     const sum =
       allocations?.reduce((acc, row) => acc + (Number(row.amount) || 0), 0) ??
@@ -207,18 +205,27 @@ export default function NewPaymentPage() {
     setValue("totalAmount", sum, { shouldValidate: true });
   }, [allocations, setValue]);
 
+  // Sync guardian fields from student
   const syncGuardianFromStudent = useCallback(
     (student: Student) => {
       if (useAltPayer) return;
       const g = student.guardian;
+      if (!g) return;
       setValue("guardianName", g.name ?? "");
       setValue("guardianRut", g.rut ?? "");
       setValue("guardianEmail", g.email ?? "");
       setValue("guardianPhone", g.phone ?? "");
+
+      setInitialGuardianState({
+        hasRut: Boolean(g.rut && g.rut.trim().length > 0),
+        hasPhone: Boolean(g.phone && g.phone.trim().length > 0),
+        hasEmail: Boolean(g.email && g.email.trim().length > 0),
+      });
     },
     [useAltPayer, setValue],
   );
 
+  // Sync guardian fields from guardian record
   const syncGuardianFromGuardianRecord = useCallback(
     (guardian: Guardian) => {
       if (useAltPayer) return;
@@ -226,31 +233,96 @@ export default function NewPaymentPage() {
       setValue("guardianRut", guardian.rut ?? "");
       setValue("guardianEmail", guardian.email ?? "");
       setValue("guardianPhone", guardian.phone ?? "");
+
+      setInitialGuardianState({
+        hasRut: Boolean(guardian.rut && guardian.rut.trim().length > 0),
+        hasPhone: Boolean(guardian.phone && guardian.phone.trim().length > 0),
+        hasEmail: Boolean(guardian.email && guardian.email.trim().length > 0),
+      });
     },
     [useAltPayer, setValue],
   );
 
-  const updateSiblingSuggestions = useCallback(
-    (currentIds: Set<number>, guardianId: number) => {
-      const siblings = students.filter(
-        (s) => s.guardianId === guardianId && !currentIds.has(s.id),
-      );
-      setSiblingSuggestions(siblings);
-    },
-    [students],
-  );
-
+  // Load pending charges for a student
   const loadPendingCharges = useCallback(async (student: Student) => {
-    const charges = await chargesApi.getPendingCharges(student.id);
-    setPendingCharges((prev) => ({ ...prev, [student.id]: charges }));
-
-    if (charges.length === 0) {
-      toast.warning(`${student.name} no tiene cuotas pendientes registradas`);
+    setLoadingCharges((prev) => ({ ...prev, [student.id]: true }));
+    try {
+      const charges = await chargesApi.getPendingCharges(student.id);
+      setPendingCharges((prev) => ({ ...prev, [student.id]: charges }));
+      return charges;
+    } catch {
+      toast.error(`Error al cargar cuotas de ${student.name}`);
+      return [];
+    } finally {
+      setLoadingCharges((prev) => ({ ...prev, [student.id]: false }));
     }
-
-    return charges;
   }, []);
 
+  // Add a student to the payment view
+  const handleAddStudent = useCallback(
+    async (student: Student, autoSelectCharges = true) => {
+      if (student.financialSetup === "PENDING") {
+        toast.error(
+          "Alumno sin deuda configurada. Vaya a Setup Financiero primero.",
+        );
+        return;
+      }
+
+      let alreadyAdded = false;
+      setSelectedStudentIds((prev) => {
+        if (prev.includes(student.id)) {
+          alreadyAdded = true;
+          return prev;
+        }
+        return [...prev, student.id];
+      });
+
+      if (alreadyAdded) {
+        toast.info(`${student.name} ya está en la lista`);
+        return;
+      }
+
+      const charges = await loadPendingCharges(student);
+
+      if (selectedStudentIds.length === 0) {
+        syncGuardianFromStudent(student);
+      }
+
+      // Auto-select pending charges for quick cashier flow if available
+      if (autoSelectCharges && charges.length > 0) {
+        const currentAllocations = getValues("allocations") ?? [];
+        const existingChargeIds = new Set(
+          currentAllocations.map((a) => a.chargeId).filter(Boolean)
+        );
+
+        charges.forEach((charge) => {
+          if (!existingChargeIds.has(charge.id)) {
+            const balance = Math.max(charge.amount - charge.paidAmount, 0);
+            if (balance > 0) {
+              append({
+                studentId: student.id,
+                chargeId: charge.id,
+                conceptId: charge.conceptId,
+                amount: balance,
+              });
+            }
+          }
+        });
+      }
+
+      setSearchOpen(false);
+      toast.success(`${student.name} añadido al cobro`);
+    },
+    [
+      append,
+      getValues,
+      loadPendingCharges,
+      selectedStudentIds.length,
+      syncGuardianFromStudent,
+    ],
+  );
+
+  // Select a guardian and load all of their children
   const handleSelectGuardian = useCallback(
     async (guardian: Guardian) => {
       const children = students.filter((s) => s.guardianId === guardian.id);
@@ -264,51 +336,45 @@ export default function NewPaymentPage() {
       );
       if (pendingChild) {
         toast.error(
-          "Alumno sin deuda configurada. Vaya a Setup Financiero primero.",
+          "Hay alumnos con setup financiero pendiente. Configure primero.",
         );
         return;
       }
 
-      await Promise.all(children.map(loadPendingCharges));
-      replace(children.map(buildAllocationRow));
+      // Clear existing allocations and load all children
+      remove();
+      const uniqueChildrenIds = Array.from(new Set(children.map((c) => c.id)));
+      setSelectedStudentIds(uniqueChildrenIds);
       syncGuardianFromGuardianRecord(guardian);
-      setSiblingSuggestions([]);
-      setGuardianOpen(false);
-      toast.success(`${children.length} alumno(s) añadido(s) al pago`);
-    },
-    [students, loadPendingCharges, replace, syncGuardianFromGuardianRecord],
-  );
 
-  const handleAddStudent = useCallback(
-    async (student: Student) => {
-      if (student.financialSetup === "PENDING") {
-        toast.error(
-          "Alumno sin deuda configurada. Vaya a Setup Financiero primero.",
-        );
-        return;
+      for (const child of children) {
+        const charges = await loadPendingCharges(child);
+        charges.forEach((charge) => {
+          const balance = Math.max(charge.amount - charge.paidAmount, 0);
+          if (balance > 0) {
+            append({
+              studentId: child.id,
+              chargeId: charge.id,
+              conceptId: charge.conceptId,
+              amount: balance,
+            });
+          }
+        });
       }
 
-      const current = getValues("allocations") ?? [];
-      await loadPendingCharges(student);
-
-      append(buildAllocationRow(student));
-      syncGuardianFromStudent(student);
-
-      const nextIds = new Set(current.map((a) => a.studentId));
-      nextIds.add(student.id);
-      updateSiblingSuggestions(nextIds, student.guardianId);
-
-      setStudentOpen(false);
+      setSearchOpen(false);
+      toast.success(`${children.length} alumno(s) cargado(s) para ${guardian.name}`);
     },
     [
       append,
-      getValues,
       loadPendingCharges,
-      syncGuardianFromStudent,
-      updateSiblingSuggestions,
+      remove,
+      students,
+      syncGuardianFromGuardianRecord,
     ],
   );
 
+  // Auto-select requested student from URL query param if present
   useEffect(() => {
     if (
       !studentsLoaded ||
@@ -330,13 +396,7 @@ export default function NewPaymentPage() {
       return;
     }
 
-    void handleAddStudent(requestedStudent).catch((err: unknown) => {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "No fue posible cargar la deuda del alumno",
-      );
-    });
+    void handleAddStudent(requestedStudent);
   }, [
     handleAddStudent,
     requestedStudentId,
@@ -344,94 +404,143 @@ export default function NewPaymentPage() {
     studentsLoaded,
   ]);
 
-  const handleAddSibling = useCallback(
-    async (sibling: Student) => {
-      if (sibling.financialSetup === "PENDING") {
-        toast.error(
-          "Alumno sin deuda configurada. Vaya a Setup Financiero primero.",
-        );
-        return;
-      }
-
-      const current = getValues("allocations") ?? [];
-      await loadPendingCharges(sibling);
-
-      append(buildAllocationRow(sibling));
-      setSiblingSuggestions((prev) => prev.filter((s) => s.id !== sibling.id));
-
-      if (current.length === 0) {
-        syncGuardianFromStudent(sibling);
-      }
+  // Remove a student and all their allocations
+  const handleRemoveStudent = useCallback(
+    (studentId: number) => {
+      setSelectedStudentIds((prev) => {
+        const next = prev.filter((id) => id !== studentId);
+        if (next.length === 0) {
+          setInitialGuardianState({
+            hasRut: false,
+            hasPhone: false,
+            hasEmail: false,
+          });
+        }
+        return next;
+      });
+      const currentAllocations = getValues("allocations") ?? [];
+      const filtered = currentAllocations.filter((a) => a.studentId !== studentId);
+      replace(filtered);
     },
-    [append, getValues, loadPendingCharges, syncGuardianFromStudent],
+    [getValues, replace],
   );
 
-  const handleChargeSelect = useCallback(
-    (index: number, rawChargeId: string) => {
-      const chargeId = Number(rawChargeId);
-      const studentId = getValues(`allocations.${index}.studentId`);
-      const charge = pendingCharges[studentId]?.find(
-        (item) => item.id === chargeId,
+  // Toggle individual charge on/off
+  const handleToggleCharge = useCallback(
+    (charge: Charge, checked: boolean) => {
+      const currentAllocations = getValues("allocations") ?? [];
+      if (checked) {
+        const balance = Math.max(charge.amount - charge.paidAmount, 0);
+        append({
+          studentId: charge.studentId,
+          chargeId: charge.id,
+          conceptId: charge.conceptId,
+          amount: balance > 0 ? balance : charge.amount,
+        });
+      } else {
+        const filtered = currentAllocations.filter((a) => a.chargeId !== charge.id);
+        replace(filtered);
+      }
+    },
+    [append, getValues, replace],
+  );
+
+  // Change amount on a selected charge
+  const handleAmountChange = useCallback(
+    (chargeId: number, amount: number | undefined) => {
+      const currentAllocations = getValues("allocations") ?? [];
+      const index = currentAllocations.findIndex((a) => a.chargeId === chargeId);
+      if (index !== -1) {
+        setValue(`allocations.${index}.amount`, amount, { shouldValidate: true });
+      }
+    },
+    [getValues, setValue],
+  );
+
+  // Select all charges for a student
+  const handleSelectAllCharges = useCallback(
+    (studentId: number) => {
+      const charges = pendingCharges[studentId] ?? [];
+      const currentAllocations = getValues("allocations") ?? [];
+      const otherAllocations = currentAllocations.filter((a) => a.studentId !== studentId);
+
+      const allStudentAllocations = charges.map((c) => ({
+        studentId,
+        chargeId: c.id,
+        conceptId: c.conceptId,
+        amount: Math.max(c.amount - c.paidAmount, 0),
+      }));
+
+      replace([...otherAllocations, ...allStudentAllocations]);
+    },
+    [getValues, pendingCharges, replace],
+  );
+
+  // Select only overdue charges for a specific student
+  const handleSelectOverdueCharges = useCallback(
+    (studentId: number) => {
+      const charges = pendingCharges[studentId] ?? [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const currentAllocations = getValues("allocations") ?? [];
+      const otherAllocations = currentAllocations.filter((a) => a.studentId !== studentId);
+
+      const overdueAllocations = charges
+        .filter((c) => new Date(c.dueDate) < today && c.amount - c.paidAmount > 0)
+        .map((c) => ({
+          studentId,
+          chargeId: c.id,
+          conceptId: c.conceptId,
+          amount: Math.max(c.amount - c.paidAmount, 0),
+        }));
+
+      replace([...otherAllocations, ...overdueAllocations]);
+    },
+    [getValues, pendingCharges, replace],
+  );
+
+  // Clear all charges for a student
+  const handleClearCharges = useCallback(
+    (studentId: number) => {
+      const currentAllocations = getValues("allocations") ?? [];
+      const filtered = currentAllocations.filter((a) => a.studentId !== studentId);
+      replace(filtered);
+    },
+    [getValues, replace],
+  );
+
+  // Add a standalone custom credit (abono libre / saldo a favor) for a student
+  const handleAddCustomCredit = useCallback(
+    (studentId: number, conceptId: number, amount: number) => {
+      append({
+        studentId,
+        chargeId: undefined,
+        conceptId,
+        amount,
+      });
+      toast.success(`Abono a cuenta de ${formatCLP(amount)} añadido`);
+    },
+    [append],
+  );
+
+  // Sibling suggestions for each student
+  const getSiblingSuggestions = useCallback(
+    (student: Student) => {
+      const currentSet = new Set(selectedStudentIds);
+      return students.filter(
+        (s) => s.guardianId === student.guardianId && !currentSet.has(s.id),
       );
-
-      if (!charge) {
-        setValue(`allocations.${index}.chargeId`, undefined, {
-          shouldValidate: true,
-        });
-        setValue(`allocations.${index}.conceptId`, undefined, {
-          shouldValidate: true,
-        });
-        setValue(`allocations.${index}.amount`, undefined, {
-          shouldValidate: true,
-        });
-        return;
-      }
-
-      setValue(`allocations.${index}.chargeId`, charge.id, {
-        shouldValidate: true,
-      });
-      setValue(`allocations.${index}.conceptId`, charge.conceptId, {
-        shouldValidate: true,
-      });
-      setValue(`allocations.${index}.amount`, getChargeBalance(charge), {
-        shouldValidate: true,
-      });
     },
-    [getValues, pendingCharges, setValue],
+    [selectedStudentIds, students],
   );
 
-  const handleLiquidateStudentDebt = useCallback(() => {
-    if (!primaryStudent) return;
-
-    const rows = primaryDebtRows.map(({ charge, balance }) => ({
-      studentId: primaryStudent.id,
-      chargeId: charge.id,
-      conceptId: charge.conceptId,
-      amount: balance,
-    }));
-
-    if (rows.length === 0) {
-      toast.warning(`${primaryStudent.name} no tiene deuda pendiente`);
-      return;
-    }
-
-    remove();
-    rows.forEach((row) => append(row));
-    setValue("totalAmount", primaryDebtTotal, { shouldValidate: true });
-    toast.success(`Deuda de ${primaryStudent.name} cargada al pago`);
-  }, [
-    append,
-    primaryDebtRows,
-    primaryDebtTotal,
-    primaryStudent,
-    remove,
-    setValue,
-  ]);
-
+  // Dropzone for boleta PDF
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       if (acceptedFiles.length > 0) {
         setValue("boleta", acceptedFiles[0], { shouldValidate: true });
+        setBoletaMode("EMITTED");
       }
     },
     [setValue],
@@ -455,22 +564,63 @@ export default function NewPaymentPage() {
     },
   });
 
+  // Global keyboard shortcuts (Ctrl+Enter for Submit, Ctrl+F for Search)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const submitBtn = document.getElementById("submit-payment-btn");
+        if (submitBtn) submitBtn.click();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Form submit handler
   async function onSubmit(data: PaymentFormData) {
+    if (data.allocations.length === 0) {
+      toast.error("Debe seleccionar al menos una cuota o abono para registrar el pago");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const firstStudent = students.find(
         (s) => s.id === data.allocations[0]?.studentId,
       );
       if (!data.useAltPayer && firstStudent) {
-        await guardiansApi.update(firstStudent.guardianId, {
+        const updatePayload: {
+          name: string;
+          rut?: string;
+          email?: string;
+          phone?: string;
+        } = {
           name: (data.guardianName ?? "").trim(),
-          rut: data.guardianRut?.trim() || null,
-          email: data.guardianEmail?.trim() || null,
-          phone: data.guardianPhone?.trim() || null,
-        });
+        };
+
+        if (data.guardianRut?.trim()) {
+          updatePayload.rut = data.guardianRut.trim();
+        }
+        if (data.guardianEmail?.trim()) {
+          updatePayload.email = data.guardianEmail.trim();
+        }
+        if (data.guardianPhone?.trim()) {
+          updatePayload.phone = data.guardianPhone.trim();
+        }
+
+        try {
+          await guardiansApi.update(firstStudent.guardianId, updatePayload);
+        } catch (updateErr) {
+          console.warn("No se pudieron actualizar los datos del apoderado:", updateErr);
+        }
       }
 
-      const isBoletaPending = !data.boletaNumber?.trim();
+      const isBoletaPending = boletaMode === "PENDING" || !data.boletaNumber?.trim();
 
       const fd = buildPaymentBatchFormData({
         totalAmount: data.totalAmount,
@@ -483,26 +633,79 @@ export default function NewPaymentPage() {
 
           return {
             studentId: a.studentId,
-            chargeId: a.chargeId as number,
+            chargeId: a.chargeId ? (a.chargeId as number) : undefined,
             conceptId: charge?.conceptId ?? (a.conceptId as number),
             amount: a.amount as number,
           };
         }),
-        boletaNumber: data.boletaNumber,
+        boletaNumber: boletaMode === "EMITTED" ? data.boletaNumber : undefined,
         isBoletaPending,
         notes: data.notes,
-        boleta: data.boleta,
+        boleta: boletaMode === "EMITTED" ? data.boleta : undefined,
       });
 
-      await paymentsApi.createBatch(fd);
+      const response = await paymentsApi.createBatch(fd);
+      const groupId = response && typeof response === "object" && "id" in response
+        ? Number((response as { id: number }).id)
+        : undefined;
+
+      // Prepare receipt data
+      const receiptItems = data.allocations.map((a) => {
+        const student = studentById.get(a.studentId);
+        const charge = pendingCharges[a.studentId]?.find((c) => c.id === a.chargeId);
+        const conceptObj = concepts.find((c) => c.id === (charge?.conceptId ?? a.conceptId));
+        const conceptName = charge?.concept?.name ?? conceptObj?.name ?? "Abono a Cuenta";
+        return {
+          studentName: student?.name ?? `Alumno #${a.studentId}`,
+          courseName: student?.course?.name,
+          rut: student?.rut,
+          conceptName: a.chargeId ? conceptName : `Abono Libre / Saldo a Favor (${conceptName})`,
+          amount: a.amount as number,
+        };
+      });
+
+      setReceiptData({
+        groupId,
+        paymentDate: data.paymentDate,
+        totalAmount: data.totalAmount,
+        method: data.method,
+        referenceCode: data.referenceCode,
+        boletaNumber: boletaMode === "EMITTED" ? data.boletaNumber : undefined,
+        isBoletaPending,
+        payerName: data.useAltPayer ? data.payerName : undefined,
+        guardianName: !data.useAltPayer ? data.guardianName : undefined,
+        notes: data.notes,
+        items: receiptItems,
+      });
+
+      // Clear the background form state immediately so no stale data remains behind the modal
+      reset({
+        totalAmount: 0,
+        allocations: [],
+        method: "CASH",
+        paymentDate: getTodayString(),
+        payerName: "",
+        payerRut: "",
+        guardianName: "",
+        guardianRut: "",
+        guardianEmail: "",
+        guardianPhone: "",
+        referenceCode: "",
+        notes: "",
+        boletaNumber: "",
+        useAltPayer: false,
+        boleta: undefined,
+      });
+      setSelectedStudentIds([]);
+      setBoletaMode("EMITTED");
+      setInitialGuardianState({ hasRut: false, hasPhone: false, hasEmail: false });
+
+      setReceiptModalOpen(true);
       toast.success(
         data.allocations.length > 1
-          ? `Pago agrupado registrado (${data.allocations.length} alumnos)`
+          ? `Pago agrupado registrado exitosamente (${data.allocations.length} cuotas/abonos)`
           : "Pago registrado exitosamente",
       );
-      reset();
-      setSiblingSuggestions([]);
-      setTimeout(() => router.push("/reportes"), 1500);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Error al registrar pago";
@@ -512,167 +715,316 @@ export default function NewPaymentPage() {
     }
   }
 
+  const handleStartNewPayment = () => {
+    setReceiptModalOpen(false);
+    reset({
+      totalAmount: 0,
+      allocations: [],
+      method: "CASH",
+      paymentDate: getTodayString(),
+      payerName: "",
+      payerRut: "",
+      guardianName: "",
+      guardianRut: "",
+      guardianEmail: "",
+      guardianPhone: "",
+      referenceCode: "",
+      notes: "",
+      boletaNumber: "",
+      useAltPayer: false,
+      boleta: undefined,
+    });
+    setSelectedStudentIds([]);
+    setBoletaMode("EMITTED");
+    setInitialGuardianState({ hasRut: false, hasPhone: false, hasEmail: false });
+  };
+
+  const totalAmountValue = Number(watch("totalAmount")) || 0;
+  const totalAllocationsCount = fields.length;
+
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in pb-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Registrar Pago</h1>
-        <p className="text-[var(--color-text-secondary)] mt-1">
-          Un cobro puede incluir varios alumnos (hermanos) con una sola boleta
-        </p>
+    <div className="max-w-7xl mx-auto animate-fade-in pb-16 space-y-6">
+      {/* Cabecera Principal con Navegación y Atajos */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/pagos"
+              className="p-2 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white hover:border-[var(--color-border-subtle)] transition-all"
+              title="Volver al historial de pagos"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2.5">
+              <span>Punto de Venta / Registro de Pago</span>
+            </h1>
+          </div>
+          <p className="text-xs sm:text-sm text-[var(--color-text-secondary)] pl-11">
+            Cobro rápido en ventanilla con soporte multi-alumno, cálculo de vuelto y comprobante de caja.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start md:self-auto pl-11 md:pl-0">
+          <span className="text-[11px] text-[var(--color-text-muted)] hidden lg:inline-flex items-center gap-1.5 bg-[var(--color-bg)] px-3 py-1.5 rounded-lg border border-[var(--color-border)]">
+            <Keyboard className="w-3.5 h-3.5 text-blue-400" />
+            Atajos: <kbd className="font-mono bg-[var(--color-surface)] px-1 rounded text-white">Ctrl+F</kbd> Buscar · <kbd className="font-mono bg-[var(--color-surface)] px-1 rounded text-white">Ctrl+Enter</kbd> Cobrar
+          </span>
+        </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="grid grid-cols-1 lg:grid-cols-12 gap-8"
-      >
-        <input type="hidden" {...register("totalAmount", { valueAsNumber: true })} />
-
-        <div className="lg:col-span-4 space-y-6">
-          <div className="glass rounded-2xl p-6 space-y-5">
-            <h2 className="text-lg font-semibold text-white">Controles TPV</h2>
-
-            <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Buscar por Alumno
-                </label>
-                <Popover open={studentOpen} onOpenChange={setStudentOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={`${inputOk} flex items-center gap-2 text-left`}
-                    >
-                      <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
-                        Añadir un alumno al pago...
-                      </span>
-                      <DropdownChevron />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
-                    align="start"
+      {/* Buscador Universal Rápido */}
+      <div className="glass rounded-2xl p-4 sm:p-5 border border-[var(--color-border)] shadow-md">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          <div className="flex-1">
+            <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={`${inputOk} flex items-center justify-between gap-3 text-left py-3 cursor-pointer shadow-inner`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Search className="w-4 h-4 text-blue-400 shrink-0" />
+                    <span className="min-w-0 truncate text-[var(--color-text-secondary)] text-sm">
+                      {searchMode === "STUDENT"
+                        ? "Buscar alumno por nombre, apellido o RUT (Ctrl+F)..."
+                        : "Buscar apoderado para cargar todos sus hijos..."}
+                    </span>
+                  </div>
+                  <DropdownChevron />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[min(550px,calc(100vw-2rem))] p-0 z-[60] bg-[var(--color-surface)] border-[var(--color-border)] text-white shadow-2xl"
+                align="start"
+              >
+                <div className="flex items-center border-b border-[var(--color-border)] p-2 gap-1 bg-[var(--color-bg)]/80">
+                  <button
+                    type="button"
+                    onClick={() => setSearchMode("STUDENT")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      searchMode === "STUDENT"
+                        ? "bg-blue-600 text-white shadow"
+                        : "text-[var(--color-text-secondary)] hover:text-white"
+                    }`}
                   >
-                    <Command filter={cmdkPersonFilter} className="bg-transparent">
-                      <CommandInput placeholder="Buscar por nombre o RUT..." />
-                      <CommandList>
-                        <CommandEmpty>No se encontró el alumno.</CommandEmpty>
-                        <CommandGroup>
-                          {students.map((s) => (
-                            <CommandItem
-                              key={s.id}
-                              value={`${s.name}\t${s.rut}`}
-                              onSelect={() => void handleAddStudent(s)}
-                              className="cursor-pointer"
-                            >
-                              <div className="flex flex-col">
-                                <span>{s.name}</span>
-                                <span className="text-xs text-[var(--color-text-muted)]">
-                                  {s.rut} — {s.course.name}
-                                </span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Buscar por Apoderado
-                </label>
-                <Popover open={guardianOpen} onOpenChange={setGuardianOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className={`${inputOk} flex items-center gap-2 text-left`}
-                    >
-                      <Users className="w-4 h-4 shrink-0 text-[var(--color-text-muted)]" />
-                      <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
-                        Cargar todos los hijos de un apoderado...
-                      </span>
-                      <DropdownChevron />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
-                    align="start"
+                    <UserCheck className="w-3.5 h-3.5" />
+                    Por Alumno
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchMode("GUARDIAN")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      searchMode === "GUARDIAN"
+                        ? "bg-blue-600 text-white shadow"
+                        : "text-[var(--color-text-secondary)] hover:text-white"
+                    }`}
                   >
-                    <Command filter={cmdkPersonFilter} className="bg-transparent">
-                      <CommandInput placeholder="Nombre o RUT del apoderado..." />
-                      <CommandList>
-                        <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
-                        <CommandGroup>
-                          {guardians.map((g) => (
+                    <Users className="w-3.5 h-3.5" />
+                    Por Apoderado (Cargar Hermanos)
+                  </button>
+                </div>
+
+                <Command filter={cmdkPersonFilter} className="bg-transparent">
+                  <CommandInput
+                    ref={searchInputRef}
+                    placeholder={
+                      searchMode === "STUDENT"
+                        ? "Escribe nombre, apellido o RUT del alumno..."
+                        : "Escribe nombre o RUT del apoderado..."
+                    }
+                    className="text-white placeholder:text-[var(--color-text-muted)]"
+                  />
+                  <CommandList className="max-h-72">
+                    <CommandEmpty className="py-6 text-center text-xs text-[var(--color-text-muted)]">
+                      No se encontraron resultados.
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {searchMode === "STUDENT"
+                        ? students.map((s) => {
+                            const isAlreadyAdded = selectedStudentIds.includes(s.id);
+                            return (
+                              <CommandItem
+                                key={s.id}
+                                value={`${s.name}\t${s.rut}\t${s.course?.name ?? ""}`}
+                                onSelect={() => void handleAddStudent(s)}
+                                className="cursor-pointer py-2.5 px-3 hover:bg-[var(--color-surface-hover)] transition-colors flex items-center justify-between"
+                              >
+                                <div className="flex flex-col min-w-0 pr-2">
+                                  <span className="font-semibold text-white truncate text-sm">
+                                    {s.name}
+                                  </span>
+                                  <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-2">
+                                    <span className="font-mono">{s.rut}</span>
+                                    <span>·</span>
+                                    <span>{s.course?.name}</span>
+                                    {s.guardian && <span>· Apod: {s.guardian.name}</span>}
+                                  </span>
+                                </div>
+                                {isAlreadyAdded ? (
+                                  <span className="text-[10px] font-semibold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                                    Añadido
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-[var(--color-text-muted)]">
+                                    + Añadir
+                                  </span>
+                                )}
+                              </CommandItem>
+                            );
+                          })
+                        : guardians.map((g) => (
                             <CommandItem
                               key={g.id}
                               value={`${g.name}\t${g.rut ?? ""}`}
                               onSelect={() => void handleSelectGuardian(g)}
-                              className="cursor-pointer"
+                              className="cursor-pointer py-2.5 px-3 hover:bg-[var(--color-surface-hover)] transition-colors flex items-center justify-between"
                             >
-                              <div className="flex flex-col">
-                                <span>{g.name}</span>
-                                <span className="text-xs text-[var(--color-text-muted)]">
-                                  {g.rut ?? "Sin RUT"}
-                                  {` · ${g.students.length} alumno(s)`}
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-white truncate text-sm">
+                                  {g.name}
+                                </span>
+                                <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-2">
+                                  <span className="font-mono">{g.rut ?? "Sin RUT"}</span>
+                                  {g.phone && <span>· 📞 {g.phone}</span>}
                                 </span>
                               </div>
+                              <span className="text-xs font-semibold text-emerald-300 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
+                                {g.students.length} alumno(s)
+                              </span>
                             </CommandItem>
                           ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <input type="hidden" {...register("totalAmount", { valueAsNumber: true })} />
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Columna Principal: Tarjetas de Alumnos y Cuotas */}
+          <div className="lg:col-span-7 space-y-6">
+            {selectedStudents.length === 0 ? (
+              <div className="glass rounded-2xl p-10 border border-dashed border-[var(--color-border)] text-center space-y-4 animate-fade-in">
+                <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto shadow-inner">
+                  <Search className="w-8 h-8 opacity-80" />
+                </div>
+                <div className="space-y-1 max-w-md mx-auto">
+                  <h3 className="text-lg font-bold text-white">
+                    Comienza añadiendo un alumno o apoderado
+                  </h3>
+                  <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+                    Utiliza la barra de búsqueda superior para seleccionar el alumno a cobrar. Las cuotas pendientes se cargarán de forma automática con su saldo al día.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSearchOpen(true)}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-semibold transition-all inline-flex items-center gap-2"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    Abrir buscador de alumnos
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Alumnos en esta transacción ({selectedStudents.length})</span>
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setSearchOpen(true)}
+                    className="text-xs font-semibold text-blue-300 hover:text-blue-200 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Añadir otro alumno
+                  </button>
+                </div>
+
+                {selectedStudents.map((student) => (
+                  <StudentChargesCard
+                    key={student.id}
+                    student={student}
+                    charges={pendingCharges[student.id] ?? []}
+                    concepts={concepts}
+                    loadingCharges={loadingCharges[student.id]}
+                    allocations={allocations?.filter((a) => a.studentId === student.id) ?? []}
+                    onToggleCharge={handleToggleCharge}
+                    onAmountChange={handleAmountChange}
+                    onAddCustomCredit={handleAddCustomCredit}
+                    onSelectAllCharges={handleSelectAllCharges}
+                    onSelectOverdueCharges={handleSelectOverdueCharges}
+                    onClearCharges={handleClearCharges}
+                    onRemoveStudent={handleRemoveStudent}
+                    siblingSuggestions={getSiblingSuggestions(student)}
+                    onAddSibling={(sibling) => void handleAddStudent(sibling)}
+                  />
+                ))}
+
+                <FieldError message={errors.allocations?.message as string | undefined} />
+              </div>
+            )}
+          </div>
+
+          {/* Columna Lateral Sticky: Panel de Cobro y Transacción */}
+          <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-6">
+            {/* Tarjeta de Resumen y Total */}
+            <div className="glass rounded-2xl p-6 space-y-5 border border-emerald-500/30 shadow-xl bg-gradient-to-b from-emerald-950/20 to-transparent">
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border)]">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                    <Receipt className="w-3.5 h-3.5" />
+                    Total a Cobrar
+                  </span>
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    {totalAllocationsCount} cuota(s) · {selectedStudents.length} alumno(s)
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-3xl font-extrabold font-mono text-emerald-300 tracking-tight">
+                    {formatCLP(totalAmountValue)}
+                  </span>
+                </div>
               </div>
 
-              {siblingSuggestions.length > 0 && (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 animate-fade-in space-y-2">
-                  <div className="flex items-start gap-2 text-sm text-amber-100/90">
-                    <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
-                    <span>
-                      {siblingSuggestions.length === 1
-                        ? "Este alumno tiene un hermano registrado:"
-                        : "Este alumno tiene hermanos registrados:"}
-                    </span>
+              {/* Selector Rápido de Fecha */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+                    Fecha del Pago *
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setValue("paymentDate", getTodayString(), { shouldValidate: true })}
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                        paymentDate === getTodayString()
+                          ? "bg-blue-600 text-white"
+                          : "bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:text-white"
+                      }`}
+                    >
+                      Hoy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setValue("paymentDate", getYesterdayString(), { shouldValidate: true })}
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all ${
+                        paymentDate === getYesterdayString()
+                          ? "bg-blue-600 text-white"
+                          : "bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:text-white"
+                      }`}
+                    >
+                      Ayer
+                    </button>
                   </div>
-                  <ul className="space-y-2">
-                    {siblingSuggestions.map((sibling) => (
-                      <li
-                        key={sibling.id}
-                        className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                      >
-                        <span className="text-white">
-                          {sibling.name}
-                          <span className="text-[var(--color-text-muted)] ml-1">
-                            ({sibling.course.name})
-                          </span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => void handleAddSibling(sibling)}
-                          className="px-3 py-1 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-500/30 transition-colors"
-                        >
-                          Añadir
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
                 </div>
-              )}
-
-              <FieldError
-                message={errors.allocations?.message as string | undefined}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-5">
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Fecha de Pago *
-                </label>
                 <input
                   type="date"
                   {...register("paymentDate")}
@@ -680,461 +1032,364 @@ export default function NewPaymentPage() {
                 />
                 <FieldError message={errors.paymentDate?.message} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+
+              {/* Selector de Método de Pago y Campos Contextuales */}
+              <div className="space-y-2 pt-2 border-t border-[var(--color-border)]/70">
+                <label className="block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                   Método de Pago *
                 </label>
-                <NativeSelectField>
-                  <select
-                    {...register("method")}
-                    className={errors.method ? inputErr : inputOk}
-                  >
-                    {METHODS.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </NativeSelectField>
+                <PaymentMethodDetails
+                  method={selectedMethod}
+                  onChangeMethod={(m) => setValue("method", m, { shouldValidate: true })}
+                  totalAmount={totalAmountValue}
+                  referenceCode={referenceCode}
+                  onChangeReferenceCode={(code) => setValue("referenceCode", code)}
+                  notes={notes}
+                  onChangeNotes={(n) => setValue("notes", n)}
+                />
                 <FieldError message={errors.method?.message} />
               </div>
             </div>
-          </div>
 
-          <div className="glass rounded-2xl p-6 space-y-5">
-            <h2 className="text-lg font-semibold text-white">
-              Boleta / Comprobante
-            </h2>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                N° de Boleta
-              </label>
-              <input
-                type="text"
-                placeholder="Opcional"
-                {...register("boletaNumber")}
-                className={errors.boletaNumber ? inputErr : inputOk}
-              />
-              <FieldError message={errors.boletaNumber?.message} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Archivo PDF de Boleta
-              </label>
-              <div
-                {...getRootProps()}
-                className={`w-full px-4 py-8 rounded-xl bg-[var(--color-bg)] border-2 border-dashed cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
-                  isDragActive
-                    ? "border-[var(--color-primary)] bg-[var(--color-primary-light)]"
-                    : errors.boleta
-                      ? "border-red-500/60 text-red-400"
-                      : "border-[var(--color-border)] hover:border-[var(--color-primary)] text-[var(--color-text-muted)]"
-                }`}
-              >
-                <input {...getInputProps()} />
-                {boletaFile ? (
-                  <div className="flex items-center justify-between w-full px-2">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <FileText className="w-8 h-8 text-violet-400 shrink-0" />
-                      <div className="text-left overflow-hidden">
-                        <p className="text-sm font-medium text-white truncate max-w-[200px]">
-                          {boletaFile.name}
-                        </p>
-                        <p className="text-xs text-[var(--color-text-muted)]">
-                          {(boletaFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setValue("boleta", undefined, { shouldValidate: true });
-                      }}
-                      className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <UploadCloud className="w-10 h-10 text-[var(--color-text-muted)]" />
-                    <div className="text-center">
-                      <p className="text-sm text-white">
-                        Arrastra y suelta tu archivo aquí
-                      </p>
-                      <p className="text-xs mt-1 text-[var(--color-text-muted)]">
-                        Máximo 10MB (solo PDF)
-                      </p>
-                    </div>
-                  </>
-                )}
+            {/* Tarjeta de Boleta / Comprobante */}
+            <div className="glass rounded-2xl p-5 space-y-4 border border-[var(--color-border)]">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  <span>Documento / Boleta</span>
+                </h3>
               </div>
-              <FieldError message={errors.boleta?.message} />
-            </div>
-          </div>
 
-          <div className="glass rounded-2xl p-6 space-y-5">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold text-white">Pagador</h2>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  {...register("useAltPayer")}
-                  className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)] bg-[var(--color-bg)]"
-                />
-                <span className="text-sm text-[var(--color-text-secondary)]">
-                  ¿Paga un tercero?
-                </span>
-              </label>
-            </div>
-            {!useAltPayer ? (
-              fields.length === 0 ? (
-                <p className="text-sm text-amber-200/90">
-                  Añadí al menos un alumno para cargar los datos del apoderado.
-                </p>
-              ) : (
-                <div className="space-y-4 animate-fade-in">
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    Datos del apoderado
-                    {primaryStudent ? ` (${primaryStudent.guardian.name})` : ""}.
+              {/* Selector de Modo de Boleta */}
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)]">
+                <button
+                  type="button"
+                  onClick={() => setBoletaMode("EMITTED")}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                    boletaMode === "EMITTED"
+                      ? "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 shadow-sm"
+                      : "text-[var(--color-text-muted)] hover:text-white"
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Boleta Emitida
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBoletaMode("PENDING")}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                    boletaMode === "PENDING"
+                      ? "bg-amber-500/20 text-amber-200 border border-amber-500/40 shadow-sm"
+                      : "text-[var(--color-text-muted)] hover:text-white"
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Emitir Después
+                </button>
+              </div>
+
+              {boletaMode === "PENDING" ? (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-100/90 space-y-1 animate-fade-in">
+                  <p className="font-semibold text-amber-200">
+                    Bandeja de Boletas Pendientes
                   </p>
-                  <div className="space-y-4">
+                  <p className="text-[11px] text-amber-100/80">
+                    El pago se registrará de inmediato y quedará disponible en el historial para adjuntar el N° de boleta del SII posteriormente.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 animate-fade-in">
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">
+                      N° de Boleta SII *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej. BOL-10492"
+                      {...register("boletaNumber")}
+                      className={errors.boletaNumber ? inputErr : inputOk}
+                    />
+                    <FieldError message={errors.boletaNumber?.message} />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">
+                      PDF de Boleta (Opcional)
+                    </label>
+                    <div
+                      {...getRootProps()}
+                      className={`w-full px-3 py-4 rounded-xl bg-[var(--color-bg)] border-2 border-dashed cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
+                        isDragActive
+                          ? "border-blue-500 bg-blue-500/10"
+                          : errors.boleta
+                            ? "border-red-500/60 text-red-400"
+                            : "border-[var(--color-border)] hover:border-blue-400 text-[var(--color-text-muted)]"
+                      }`}
+                    >
+                      <input {...getInputProps()} />
+                      {boletaFile ? (
+                        <div className="flex items-center justify-between w-full px-2">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <FileText className="w-6 h-6 text-blue-400 shrink-0" />
+                            <div className="text-left overflow-hidden">
+                              <p className="text-xs font-medium text-white truncate max-w-[180px]">
+                                {boletaFile.name}
+                              </p>
+                              <p className="text-[10px] text-[var(--color-text-muted)]">
+                                {(boletaFile.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setValue("boleta", undefined, { shouldValidate: true });
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-6 h-6 text-[var(--color-text-muted)]" />
+                          <div className="text-center">
+                            <p className="text-xs text-white">Arrastra el archivo PDF aquí</p>
+                            <p className="text-[10px] text-[var(--color-text-muted)]">Máximo 10MB</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Tarjeta de Pagador */}
+            <div className="glass rounded-2xl p-5 space-y-4 border border-[var(--color-border)]">
+              <div className="flex items-center justify-between gap-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-400" />
+                  <span>Datos del Pagador</span>
+                </h3>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    {...register("useAltPayer")}
+                    className="w-4 h-4 rounded border-[var(--color-border)] text-blue-600 focus:ring-blue-500 bg-[var(--color-bg)]"
+                  />
+                  <span className="text-xs text-[var(--color-text-secondary)] font-medium">
+                    ¿Paga un tercero?
+                  </span>
+                </label>
+              </div>
+
+              {!useAltPayer ? (
+                selectedStudents.length === 0 ? (
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    Añade un alumno para cargar los datos de contacto del apoderado.
+                  </p>
+                ) : (
+                  <div className="space-y-3 animate-fade-in text-xs">
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                        Nombre del apoderado *
+                      <label className="block font-medium text-[var(--color-text-secondary)] mb-1">
+                        Nombre Apoderado *
                       </label>
                       <input
                         type="text"
-                        autoComplete="name"
                         {...register("guardianName")}
                         className={errors.guardianName ? inputErr : inputOk}
                       />
                       <FieldError message={errors.guardianName?.message} />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                          RUT
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block font-medium text-[var(--color-text-secondary)]">
+                            RUT
+                          </label>
+                          {initialGuardianState.hasRut ? (
+                            <span className="text-[10px] text-blue-300/80 font-mono flex items-center gap-0.5" title="Dato registrado en base de datos">
+                              <Lock className="w-2.5 h-2.5" /> Registrado
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-300 font-medium flex items-center gap-0.5" title="Puedes completar el RUT y se guardará al pagar">
+                              <Sparkles className="w-2.5 h-2.5" /> Completar
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
+                          readOnly={initialGuardianState.hasRut}
+                          placeholder={initialGuardianState.hasRut ? undefined : "12.345.678-9"}
                           {...register("guardianRut")}
-                          className={errors.guardianRut ? inputErr : inputOk}
+                          className={
+                            initialGuardianState.hasRut
+                              ? inputReadOnly
+                              : errors.guardianRut
+                                ? inputErr
+                                : inputOk
+                          }
                         />
                         <FieldError message={errors.guardianRut?.message} />
                       </div>
+
                       <div>
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                          Teléfono
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block font-medium text-[var(--color-text-secondary)]">
+                            Teléfono
+                          </label>
+                          {initialGuardianState.hasPhone ? (
+                            <span className="text-[10px] text-blue-300/80 font-mono flex items-center gap-0.5" title="Dato registrado en base de datos">
+                              <Lock className="w-2.5 h-2.5" /> Registrado
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-300 font-medium flex items-center gap-0.5" title="Puedes completar el teléfono y se guardará al pagar">
+                              <Sparkles className="w-2.5 h-2.5" /> Completar
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="tel"
+                          readOnly={initialGuardianState.hasPhone}
+                          placeholder={initialGuardianState.hasPhone ? undefined : "+56 9 1234 5678"}
                           {...register("guardianPhone")}
-                          className={errors.guardianPhone ? inputErr : inputOk}
+                          className={
+                            initialGuardianState.hasPhone
+                              ? inputReadOnly
+                              : errors.guardianPhone
+                                ? inputErr
+                                : inputOk
+                          }
                         />
+                        <FieldError message={errors.guardianPhone?.message} />
                       </div>
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                        Correo
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-medium text-[var(--color-text-secondary)]">
+                          Correo Electrónico (Notificación)
+                        </label>
+                        {initialGuardianState.hasEmail ? (
+                          <span className="text-[10px] text-blue-300/80 font-mono flex items-center gap-0.5" title="Dato registrado en base de datos">
+                            <Lock className="w-2.5 h-2.5" /> Registrado
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-300 font-medium flex items-center gap-0.5" title="Puedes completar el correo y se guardará al pagar">
+                            <Sparkles className="w-2.5 h-2.5" /> Completar
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="email"
+                        readOnly={initialGuardianState.hasEmail}
+                        placeholder={initialGuardianState.hasEmail ? undefined : "apoderado@ejemplo.cl"}
                         {...register("guardianEmail")}
-                        className={errors.guardianEmail ? inputErr : inputOk}
+                        className={
+                          initialGuardianState.hasEmail
+                            ? inputReadOnly
+                            : errors.guardianEmail
+                              ? inputErr
+                              : inputOk
+                        }
                       />
                       <FieldError message={errors.guardianEmail?.message} />
                     </div>
                   </div>
-                </div>
-              )
-            ) : (
-              <div className="space-y-4 animate-fade-in">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                    Nombre del Pagador *
-                  </label>
-                  <input
-                    type="text"
-                    {...register("payerName")}
-                    className={errors.payerName ? inputErr : inputOk}
-                  />
-                  <FieldError message={errors.payerName?.message} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                    RUT del Pagador
-                  </label>
-                  <input
-                    type="text"
-                    {...register("payerRut")}
-                    className={errors.payerRut ? inputErr : inputOk}
-                  />
-                  <FieldError message={errors.payerRut?.message} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="glass rounded-2xl p-6 space-y-5">
-            <h2 className="text-lg font-semibold text-white">Notas</h2>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Código de Referencia
-              </label>
-              <input
-                type="text"
-                placeholder="Opcional"
-                {...register("referenceCode")}
-                className={errors.referenceCode ? inputErr : inputOk}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Notas del cobro
-              </label>
-              <input
-                type="text"
-                placeholder="Opcional"
-                {...register("notes")}
-                className={errors.notes ? inputErr : inputOk}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-8 space-y-6">
-          {primaryStudent && (
-            <Card className="border border-emerald-400/20 bg-emerald-950/20 text-white ring-emerald-400/20">
-              <CardHeader className="border-b border-emerald-400/10">
-                <CardTitle>Resumen de Deuda Pendiente</CardTitle>
-                <CardDescription className="text-emerald-100/75">
-                  {primaryStudent.name} · {primaryStudent.course.name}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {primaryDebtRows.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-emerald-300/25 px-4 py-6 text-center text-sm text-emerald-100/75">
-                    No hay cuotas pendientes para este alumno.
-                  </p>
-                ) : (
-                  <div className="divide-y divide-emerald-300/10 rounded-xl border border-emerald-300/10 bg-black/10">
-                    {primaryDebtRows.map(({ charge, balance }) => (
-                      <div
-                        key={charge.id}
-                        className="flex items-center justify-between gap-4 px-4 py-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">
-                            {charge.concept.name}
-                          </p>
-                          <p className="text-xs text-emerald-100/60">
-                            Vence: {formatChargeDate(charge.dueDate)}
-                          </p>
-                        </div>
-                        <p className="shrink-0 text-sm font-semibold text-emerald-100">
-                          {formatCLP(balance)}
-                        </p>
-                      </div>
-                    ))}
+                )
+              ) : (
+                <div className="space-y-3 animate-fade-in text-xs">
+                  <div>
+                    <label className="block font-medium text-[var(--color-text-secondary)] mb-1">
+                      Nombre del Pagador *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Nombre completo"
+                      {...register("payerName")}
+                      className={errors.payerName ? inputErr : inputOk}
+                    />
+                    <FieldError message={errors.payerName?.message} />
                   </div>
-                )}
-
-                <div className="flex items-center justify-between rounded-xl bg-emerald-400/10 px-4 py-3">
-                  <span className="text-sm font-medium text-emerald-100/80">
-                    Total Adeudado
-                  </span>
-                  <span className="text-xl font-bold text-white">
-                    {formatCLP(primaryDebtTotal)}
-                  </span>
+                  <div>
+                    <label className="block font-medium text-[var(--color-text-secondary)] mb-1">
+                      RUT del Pagador
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="12.345.678-9"
+                      {...register("payerRut")}
+                      className={errors.payerRut ? inputErr : inputOk}
+                    />
+                    <FieldError message={errors.payerRut?.message} />
+                  </div>
                 </div>
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full"
-                  onClick={handleLiquidateStudentDebt}
-                  disabled={primaryDebtRows.length === 0}
-                >
-                  <Zap className="w-4 h-4" />
-                  Liquidar toda la deuda (Auto-completar)
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="glass rounded-2xl p-6 space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-white">
-                  Asignaciones del pago
-                </h2>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Cuotas que se pagarán en esta transacción.
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-right">
-                <p className="text-xs uppercase text-[var(--color-text-muted)]">
-                  Total a cobrar
-                </p>
-                <p className="text-2xl font-bold text-white">
-                  {formatCLP(Number(watch("totalAmount")) || 0)}
-                </p>
-              </div>
+              )}
             </div>
 
-            <FieldError message={errors.totalAmount?.message} />
+            {/* Tarjeta de Notas y Referencia */}
+            <div className="glass rounded-2xl p-5 space-y-3 border border-[var(--color-border)]">
+              <label className="block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+                Observaciones / Notas Internas
+              </label>
+              <input
+                type="text"
+                placeholder="Notas adicionales sobre este pago (opcional)"
+                {...register("notes")}
+                className={inputOk}
+              />
+            </div>
 
-            {fields.length === 0 ? (
-              <p className="text-sm text-[var(--color-text-muted)] text-center py-10 border border-dashed border-[var(--color-border)] rounded-xl">
-                Usá los buscadores para añadir alumnos. Al seleccionar uno,
-                podés liquidar toda su deuda en un clic.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {fields.map((field, index) => {
-                  const student = studentById.get(
-                    allocations?.[index]?.studentId,
-                  );
-                  const rowStudentId = allocations?.[index]?.studentId;
-                  const rowCharges = rowStudentId
-                    ? (pendingCharges[rowStudentId] ?? [])
-                    : [];
-                  const rowChargeId = allocations?.[index]?.chargeId;
-                  const rowErrors = errors.allocations?.[index];
+            {/* Botón Principal de Envío */}
+            <div className="space-y-2 pt-2">
+              <button
+                id="submit-payment-btn"
+                type="submit"
+                disabled={submitting || totalAllocationsCount === 0 || totalAmountValue <= 0}
+                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-white font-bold text-base shadow-xl shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-40 disabled:hover:scale-100 disabled:shadow-none flex items-center justify-center gap-3 cursor-pointer"
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Registrando transacción...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+                    <span>
+                      {totalAllocationsCount > 0
+                        ? `Registrar Pago · ${formatCLP(totalAmountValue)}`
+                        : "Seleccione cuotas para cobrar"}
+                    </span>
+                  </>
+                )}
+              </button>
 
-                  return (
-                    <div
-                      key={field.id}
-                      className="p-4 rounded-xl bg-[var(--color-bg)]/60 border border-[var(--color-border)] space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-medium text-white truncate">
-                            {student?.name ??
-                              `Alumno #${allocations?.[index]?.studentId}`}
-                          </p>
-                          <p className="text-xs text-[var(--color-text-muted)]">
-                            {student?.rut ?? "—"} · {student?.course.name ?? "—"}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (student) append(buildAllocationRow(student));
-                            }}
-                            disabled={!student}
-                            className="p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40"
-                            title="Añadir otra glosa a este alumno"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              remove(index);
-                              setSiblingSuggestions([]);
-                            }}
-                            className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Quitar fila"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                            Cuota *
-                          </label>
-                          <NativeSelectField>
-                            <select
-                              value={rowChargeId ?? ""}
-                              onChange={(e) =>
-                                handleChargeSelect(index, e.target.value)
-                              }
-                              className={`${rowErrors?.chargeId ? inputErr : inputOk} py-2.5`}
-                              disabled={rowCharges.length === 0}
-                            >
-                              <option value="">Seleccionar cuota...</option>
-                              {rowCharges.map((charge) => (
-                                <option key={charge.id} value={charge.id}>
-                                  {charge.concept.name} (Vence:{" "}
-                                  {formatChargeDate(charge.dueDate)}) - Saldo:{" "}
-                                  {formatCLP(getChargeBalance(charge))}
-                                </option>
-                              ))}
-                            </select>
-                          </NativeSelectField>
-                          {rowCharges.length === 0 && (
-                            <p className="mt-1.5 text-xs text-amber-300">
-                              No hay cuotas pendientes para este alumno.
-                            </p>
-                          )}
-                          <FieldError message={rowErrors?.chargeId?.message} />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
-                            Monto ($) *
-                          </label>
-                          <Controller
-                            control={control}
-                            name={`allocations.${index}.amount`}
-                            render={({ field: amountField }) => (
-                              <input
-                                type="number"
-                                min={1}
-                                step={1}
-                                name={amountField.name}
-                                ref={amountField.ref}
-                                onBlur={amountField.onBlur}
-                                value={amountField.value ?? ""}
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  amountField.onChange(
-                                    raw === "" ? undefined : Number(raw),
-                                  );
-                                }}
-                                className={`${rowErrors?.amount ? inputErr : inputOk} py-2.5`}
-                              />
-                            )}
-                          />
-                          <FieldError message={rowErrors?.amount?.message} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center justify-between px-2 text-[11px] text-[var(--color-text-muted)]">
+                <span>Atajo: <kbd className="font-mono bg-[var(--color-bg)] px-1 rounded border border-[var(--color-border)] text-white">Ctrl+Enter</kbd></span>
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="hover:underline text-[var(--color-text-secondary)]"
+                >
+                  Cancelar y volver
+                </button>
               </div>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-4">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-6 py-3 rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-all"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || fields.length === 0}
-              className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
-            >
-              {submitting
-                ? "Registrando..."
-                : fields.length > 1
-                  ? `Registrar pago (${fields.length} alumnos)`
-                  : "Registrar Pago"}
-            </button>
+            </div>
           </div>
         </div>
       </form>
+
+      {/* Modal de Comprobante Pos-Pago */}
+      <PaymentReceiptModal
+        open={receiptModalOpen}
+        onClose={() => setReceiptModalOpen(false)}
+        onNewPayment={handleStartNewPayment}
+        receiptData={receiptData}
+      />
     </div>
   );
 }

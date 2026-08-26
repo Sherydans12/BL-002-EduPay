@@ -11,6 +11,7 @@ import {
   FileText,
   ReceiptText,
   Wallet,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -247,6 +248,7 @@ export default function StudentFinancialStatementPage() {
             </div>
             <Button
               className="bg-emerald-600 text-white hover:bg-emerald-700"
+              nativeButton={false}
               render={
                 <Link href={`/pagos/nuevo?studentId=${student.id}`} />
               }
@@ -257,7 +259,7 @@ export default function StudentFinancialStatementPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:min-w-[620px]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:min-w-[750px]">
           <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
@@ -291,6 +293,34 @@ export default function StudentFinancialStatementPage() {
               {formatCurrency(statement.summary.totalOverdue)}
             </div>
           </section>
+          {statement.summary.totalPaid > statement.summary.totalInvoiced ? (
+            <section className="rounded-xl border border-emerald-400/40 bg-emerald-500/20 p-4 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-400/30 animate-fade-in">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-200 flex items-center gap-1">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-300" />
+                  Saldo a Favor
+                </span>
+                <span className="text-[10px] font-semibold bg-emerald-400/30 text-emerald-100 px-2 py-0.5 rounded-full">
+                  Crédito OK
+                </span>
+              </div>
+              <div className="mt-3 text-2xl font-extrabold tabular-nums text-emerald-200">
+                +{formatCurrency(statement.summary.totalPaid - statement.summary.totalInvoiced)}
+              </div>
+            </section>
+          ) : (
+            <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                  Saldo Deudor
+                </span>
+                <Wallet className="h-4 w-4 text-[var(--color-text-muted)]" />
+              </div>
+              <div className="mt-3 text-2xl font-bold tabular-nums text-white">
+                {formatCurrency(Math.max(statement.summary.totalInvoiced - statement.summary.totalPaid, 0))}
+              </div>
+            </section>
+          )}
         </div>
       </div>
 
@@ -366,10 +396,19 @@ export default function StudentFinancialStatementPage() {
                         className={`px-5 py-4 text-right font-mono text-sm font-semibold tabular-nums ${
                           movement.balance > 0
                             ? "text-red-300"
-                            : "text-emerald-300"
+                            : movement.balance < 0
+                              ? "text-emerald-300"
+                              : "text-white"
                         }`}
                       >
-                        {formatCurrency(movement.balance)}
+                        {movement.balance < 0 ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-500/30 text-xs">
+                            <Sparkles className="w-3 h-3" />
+                            +{formatCurrency(Math.abs(movement.balance))} (A favor)
+                          </span>
+                        ) : (
+                          formatCurrency(movement.balance)
+                        )}
                       </td>
                       <td className="px-5 py-4 text-right">
                         {movement.kind === "charge" ? (

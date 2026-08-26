@@ -179,18 +179,10 @@ export const paymentSchema = z
     }
 
     data.allocations.forEach((row, index) => {
-      if (!row.chargeId) {
+      if (!row.conceptId && !row.chargeId) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Debe seleccionar una cuota",
-          path: ["allocations", index, "chargeId"],
-        });
-      }
-
-      if (!row.conceptId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Debe seleccionar un concepto",
+          message: "Debe seleccionar una cuota o concepto",
           path: ["allocations", index, "conceptId"],
         });
       }
