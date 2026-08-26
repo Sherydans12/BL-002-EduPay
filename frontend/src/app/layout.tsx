@@ -21,8 +21,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={cn("h-full", "antialiased", inter.variable, "font-sans", geist.variable)}>
-      <body className="min-h-full bg-[var(--color-bg)]">
+    <html lang="es" className={cn("dark", "h-full", "antialiased", inter.variable, "font-sans", geist.variable)}>
+      <body className="min-h-full bg-[var(--color-bg)] text-[var(--color-text)]">
         {children}
         <Toaster richColors position="bottom-right" />
       </body>

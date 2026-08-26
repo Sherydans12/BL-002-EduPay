@@ -597,8 +597,9 @@ export default function ReportsPage() {
                     onClick={fetchMatrix}
                     disabled={loadingMatrix}
                     variant="outline"
-                    className="h-10 border-[var(--color-border)] text-xs text-white"
+                    className="h-10 rounded-xl border-[var(--color-border)] bg-[var(--color-surface)] px-4 text-xs font-semibold text-white hover:bg-[var(--color-surface-hover)] shadow-sm"
                   >
+                    {loadingMatrix && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
                     Actualizar
                   </Button>
                 </div>

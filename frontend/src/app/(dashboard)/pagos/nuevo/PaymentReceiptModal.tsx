@@ -278,7 +278,7 @@ export function PaymentReceiptModal({
               type="button"
               variant="outline"
               onClick={handlePrint}
-              className="gap-2 text-xs border-blue-500/40 text-blue-300 hover:bg-blue-500/10 flex-1 sm:flex-initial"
+              className="gap-2 text-xs border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 flex-1 sm:flex-initial"
             >
               <Printer className="w-4 h-4" />
               Imprimir Comprobante
