@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ChargeStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { isMatriculaConcept } from '../common/concepts/concept-classifier.helper';
 
 const MONTH_LABELS = [
   'Ene',
@@ -44,8 +45,7 @@ export class AnalyticsService {
       totalCourses,
       currentMonthRevenueResult,
       prevMonthRevenueResult,
-      overdueCharges,
-      totalExpectedRevenueResult,
+      yearCharges,
       paymentsThisYear,
       recentPayments,
       coursesWithCharges,
@@ -78,23 +78,20 @@ export class AnalyticsService {
       this.prisma.charge.findMany({
         where: {
           deletedAt: null,
-          status: ChargeStatus.OVERDUE,
-        },
-        select: {
-          amount: true,
-          paidAmount: true,
-          studentId: true,
-        },
-      }),
-      this.prisma.charge.aggregate({
-        where: {
-          deletedAt: null,
           createdAt: {
             gte: yearStart,
             lt: nextYearStart,
           },
         },
-        _sum: { amount: true },
+        select: {
+          id: true,
+          amount: true,
+          paidAmount: true,
+          dueDate: true,
+          status: true,
+          studentId: true,
+          concept: { select: { name: true } },
+        },
       }),
       this.prisma.payment.findMany({
         where: {
@@ -138,7 +135,12 @@ export class AnalyticsService {
               id: true,
               charges: {
                 where: { deletedAt: null },
-                select: { amount: true, paidAmount: true, status: true },
+                select: {
+                  amount: true,
+                  paidAmount: true,
+                  dueDate: true,
+                  status: true,
+                },
               },
             },
           },
@@ -146,15 +148,91 @@ export class AnalyticsService {
       }),
     ]);
 
-    const totalOverdueDebt = overdueCharges.reduce(
-      (total, charge) => total + Math.max(charge.amount - charge.paidAmount, 0),
+    // Segmentación Blindada de Cargos (Matrículas vs Mensualidades / Otros)
+    let totalOverdueDebt = 0;
+    const overdueStudentIds = new Set<number>();
+    let totalExpectedRevenue = 0;
+
+    // Métricas específicas de Matrícula
+    const matriculaStudentMap = new Map<
+      number,
+      { expected: number; paid: number }
+    >();
+
+    // Métricas específicas de Mensualidades
+    let monthlyExpected = 0;
+    let monthlyCollected = 0;
+    let monthlyOverdue = 0;
+
+    for (const charge of yearCharges) {
+      totalExpectedRevenue += charge.amount;
+      const isDue = charge.dueDate <= now;
+      const pending = Math.max(0, charge.amount - charge.paidAmount);
+      const isOverdue =
+        charge.status === ChargeStatus.OVERDUE || (isDue && pending > 0);
+
+      if (isOverdue) {
+        totalOverdueDebt += pending;
+        overdueStudentIds.add(charge.studentId);
+      }
+
+      const isMatr = isMatriculaConcept(charge.concept?.name);
+
+      if (isMatr) {
+        const current = matriculaStudentMap.get(charge.studentId) || {
+          expected: 0,
+          paid: 0,
+        };
+        current.expected += charge.amount;
+        current.paid += charge.paidAmount;
+        matriculaStudentMap.set(charge.studentId, current);
+      } else {
+        monthlyExpected += charge.amount;
+        monthlyCollected += charge.paidAmount;
+        if (isOverdue) {
+          monthlyOverdue += pending;
+        }
+      }
+    }
+
+    // Cálculo consolidado de Salud de Matrícula
+    let matriculaPaidStudentsCount = 0;
+    let matriculaPendingStudentsCount = 0;
+    let matriculaTotalExpected = 0;
+    let matriculaTotalCollected = 0;
+
+    for (const [, val] of matriculaStudentMap) {
+      matriculaTotalExpected += val.expected;
+      matriculaTotalCollected += val.paid;
+      if (val.paid >= val.expected && val.expected > 0) {
+        matriculaPaidStudentsCount++;
+      } else {
+        matriculaPendingStudentsCount++;
+      }
+    }
+
+    const matriculaStudentsTotal = matriculaStudentMap.size;
+    const matriculaHealthRate =
+      matriculaStudentsTotal > 0
+        ? Math.round(
+            (matriculaPaidStudentsCount / matriculaStudentsTotal) * 100,
+          )
+        : 100;
+
+    // Cálculo consolidado de Salud de Mensualidades
+    const monthlyHealthRate =
+      monthlyExpected > 0
+        ? Math.round((monthlyCollected / monthlyExpected) * 100)
+        : 100;
+
+    // Alumnos al día vs morosos
+    const alumnosMorososCount = overdueStudentIds.size;
+    const alumnosAlDiaCount = Math.max(
       0,
+      totalActiveStudents - alumnosMorososCount,
     );
 
-    const overdueStudentIds = new Set(overdueCharges.map((c) => c.studentId));
-    const alumnosMorososCount = overdueStudentIds.size;
-    const alumnosAlDiaCount = Math.max(0, totalActiveStudents - alumnosMorososCount);
-
+    // Ingresos mensuales
     const revenueByMonth = MONTH_LABELS.map((month) => ({
       month,
       total: 0,
@@ -167,7 +245,6 @@ export class AnalyticsService {
       revenueByMonth[monthIndex].total += payment.amount;
     }
 
-    const totalExpectedRevenue = totalExpectedRevenueResult._sum.amount ?? 0;
     const currentMonthRevenue = currentMonthRevenueResult._sum.amount ?? 0;
     const prevMonthRevenue = prevMonthRevenueResult._sum.amount ?? 0;
     const currentMonthTransactions = currentMonthRevenueResult._count.id ?? 0;
@@ -197,8 +274,13 @@ export class AnalyticsService {
           for (const charge of student.charges) {
             expected += charge.amount;
             collected += charge.paidAmount;
-            if (charge.status === 'OVERDUE') {
-              overdue += Math.max(0, charge.amount - charge.paidAmount);
+            const isDue = charge.dueDate <= now;
+            const pending = Math.max(0, charge.amount - charge.paidAmount);
+            if (
+              charge.status === ChargeStatus.OVERDUE ||
+              (isDue && pending > 0)
+            ) {
+              overdue += pending;
             }
           }
         }
@@ -245,6 +327,20 @@ export class AnalyticsService {
       revenueByMonth,
       topCourses,
       recentPayments: formattedRecentPayments,
+      matriculaBreakdown: {
+        totalStudentsWithMatricula: matriculaStudentsTotal,
+        paidStudentsCount: matriculaPaidStudentsCount,
+        pendingStudentsCount: matriculaPendingStudentsCount,
+        totalExpectedAmount: matriculaTotalExpected,
+        totalCollectedAmount: matriculaTotalCollected,
+        healthRate: matriculaHealthRate,
+      },
+      mensualidadesBreakdown: {
+        totalExpectedAmount: monthlyExpected,
+        totalCollectedAmount: monthlyCollected,
+        totalOverdueAmount: monthlyOverdue,
+        healthRate: monthlyHealthRate,
+      },
     };
   }
 }

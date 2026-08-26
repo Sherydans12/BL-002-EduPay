@@ -881,6 +881,20 @@ export interface FinancialDashboard {
   revenueByMonth: RevenueTrendItem[];
   topCourses?: DashboardTopCourse[];
   recentPayments?: DashboardRecentPayment[];
+  matriculaBreakdown?: {
+    totalStudentsWithMatricula: number;
+    paidStudentsCount: number;
+    pendingStudentsCount: number;
+    totalExpectedAmount: number;
+    totalCollectedAmount: number;
+    healthRate: number;
+  };
+  mensualidadesBreakdown?: {
+    totalExpectedAmount: number;
+    totalCollectedAmount: number;
+    totalOverdueAmount: number;
+    healthRate: number;
+  };
 }
 
 export const analyticsApi = {

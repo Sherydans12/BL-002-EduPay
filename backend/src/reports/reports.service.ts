@@ -16,6 +16,7 @@ import {
   type StudentMatrixItem,
 } from '../common/excel/reports-workbook.export';
 import { Prisma } from '@prisma/client';
+import { classifyChargeSlot } from '../common/concepts/concept-classifier.helper';
 
 @Injectable()
 export class ReportsService {
@@ -269,10 +270,6 @@ export class ReportsService {
             status = 'PENDING';
           }
 
-          const conceptNameNorm = charge.concept?.name?.toLowerCase() || '';
-          const dueDateObj = new Date(charge.dueDate);
-          const dueMonth = dueDateObj.getUTCMonth();
-
           const item: FeeQuotaItem = {
             status,
             amount: charge.amount,
@@ -280,40 +277,13 @@ export class ReportsService {
             dueDate: charge.dueDate ? charge.dueDate.toISOString() : null,
           };
 
-          if (
-            conceptNameNorm.includes('matr') ||
-            conceptNameNorm.includes('matric')
-          ) {
-            quotas.matricula = item;
-          } else if (
-            conceptNameNorm.includes('marzo') ||
-            (!conceptNameNorm.includes('abril') && dueMonth === 2)
-          ) {
-            quotas.marzo = item;
-          } else if (conceptNameNorm.includes('abril') || dueMonth === 3) {
-            quotas.abril = item;
-          } else if (conceptNameNorm.includes('mayo') || dueMonth === 4) {
-            quotas.mayo = item;
-          } else if (conceptNameNorm.includes('junio') || dueMonth === 5) {
-            quotas.junio = item;
-          } else if (conceptNameNorm.includes('julio') || dueMonth === 6) {
-            quotas.julio = item;
-          } else if (conceptNameNorm.includes('agosto') || dueMonth === 7) {
-            quotas.agosto = item;
-          } else if (
-            conceptNameNorm.includes('sept') ||
-            conceptNameNorm.includes('set') ||
-            dueMonth === 8
-          ) {
-            quotas.septiembre = item;
-          } else if (conceptNameNorm.includes('oct') || dueMonth === 9) {
-            quotas.octubre = item;
-          } else if (conceptNameNorm.includes('nov') || dueMonth === 10) {
-            quotas.noviembre = item;
-          } else if (conceptNameNorm.includes('dic') || dueMonth === 11) {
-            quotas.diciembre = item;
-          } else if (monthMap[dueMonth]) {
-            quotas[monthMap[dueMonth]] = item;
+          const slot = classifyChargeSlot(
+            charge.concept?.name,
+            charge.dueDate,
+          );
+
+          if (slot !== 'otro' && quotas[slot]) {
+            quotas[slot] = item;
           }
         }
 

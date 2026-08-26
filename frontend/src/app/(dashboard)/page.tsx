@@ -371,33 +371,72 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Salud de Alumnos y Cursos Destacados (1 Columna) */}
-        <div className="space-y-6">
-          {/* Card Salud de Matrícula */}
-          <div className="glass rounded-2xl border border-[var(--color-border)] p-6 shadow-xl">
-            <h3 className="text-sm font-bold text-white mb-3">
-              Salud de Matrícula
-            </h3>
-            <div className="space-y-3">
+        {/* Salud de Matrícula, Mensualidades y Cursos (1 Columna) */}
+        <div className="space-y-4">
+          {/* Card Salud de Matrícula (Inscripciones) */}
+          <div className="glass rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-blue-300">
+                Salud de Matrículas
+              </h3>
+              <Badge className="border-blue-500/30 bg-blue-500/15 text-[10px] text-blue-300">
+                Inscripciones
+              </Badge>
+            </div>
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-emerald-400 font-medium flex items-center gap-1.5">
-                  <CheckCircle2 className="size-3.5" /> Al día ({dashboard.alumnosAlDiaCount ?? 0})
+                <span className="text-white font-medium">
+                  {dashboard.matriculaBreakdown?.paidStudentsCount ?? 0} de {dashboard.matriculaBreakdown?.totalStudentsWithMatricula ?? dashboard.totalActiveStudents} pagadas
                 </span>
-                <span className="font-mono font-bold text-emerald-400">
-                  {alDiaPct}%
+                <span className="font-mono font-bold text-blue-400">
+                  {dashboard.matriculaBreakdown?.healthRate ?? 100}%
                 </span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-red-500/20">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-bg)]">
                 <div
-                  className="h-full bg-emerald-500 transition-all duration-500"
-                  style={{ width: `${alDiaPct}%` }}
+                  className="h-full bg-blue-500 transition-all duration-500"
+                  style={{
+                    width: `${dashboard.matriculaBreakdown?.healthRate ?? 100}%`,
+                  }}
                 />
               </div>
-              <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
-                <span>Total: {dashboard.totalActiveStudents} alumnos</span>
-                <span className="text-red-400 font-medium">
-                  {dashboard.alumnosMorososCount ?? 0} con mora
+              <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)] font-mono">
+                <span>{formatCLP(dashboard.matriculaBreakdown?.totalCollectedAmount ?? 0)}</span>
+                <span>de {formatCLP(dashboard.matriculaBreakdown?.totalExpectedAmount ?? 0)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card Salud de Mensualidades (Colegiaturas) */}
+          <div className="glass rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-300">
+                Salud de Mensualidades
+              </h3>
+              <Badge className="border-emerald-500/30 bg-emerald-500/15 text-[10px] text-emerald-300">
+                Cuotas Mes a Mes
+              </Badge>
+            </div>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white font-medium">
+                  Recaudación de Colegiaturas
                 </span>
+                <span className="font-mono font-bold text-emerald-400">
+                  {dashboard.mensualidadesBreakdown?.healthRate ?? 100}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-bg)]">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-500"
+                  style={{
+                    width: `${dashboard.mensualidadesBreakdown?.healthRate ?? 100}%`,
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)] font-mono">
+                <span className="text-emerald-400 font-semibold">{formatCLP(dashboard.mensualidadesBreakdown?.totalCollectedAmount ?? 0)}</span>
+                <span className="text-red-400 font-semibold">{formatCLP(dashboard.mensualidadesBreakdown?.totalOverdueAmount ?? 0)} en mora</span>
               </div>
             </div>
           </div>
