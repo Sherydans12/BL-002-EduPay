@@ -949,6 +949,11 @@ export interface CourseMatrixGroup {
   subtotalInvoiced: number;
   subtotalPaid: number;
   subtotalPending: number;
+  totalStudents: number;
+  alDiaCount: number;
+  morosoCount: number;
+  saldoAFavorCount: number;
+  collectionRate: number;
 }
 
 export interface SchoolFeeMatrixResponse {
@@ -958,6 +963,10 @@ export interface SchoolFeeMatrixResponse {
   totalPaid: number;
   totalPending: number;
   totalStudents: number;
+  totalAlDia: number;
+  totalMorosos: number;
+  totalSaldoAFavor: number;
+  collectionRate: number;
 }
 
 export interface FilterReportsParams {
@@ -969,10 +978,19 @@ export interface FilterReportsParams {
 }
 
 export const reportsApi = {
-  getMatrix: (params: { year?: number; courseId?: number } = {}) => {
+  getMatrix: (
+    params: {
+      year?: number;
+      courseId?: number;
+      status?: string;
+      search?: string;
+    } = {},
+  ) => {
     const q = new URLSearchParams();
     if (params.year != null) q.set("year", String(params.year));
     if (params.courseId != null) q.set("courseId", String(params.courseId));
+    if (params.status && params.status !== "ALL") q.set("status", params.status);
+    if (params.search?.trim()) q.set("search", params.search.trim());
     const query = q.size > 0 ? `?${q.toString()}` : "";
     return request<SchoolFeeMatrixResponse>(`/reports/matrix${query}`);
   },

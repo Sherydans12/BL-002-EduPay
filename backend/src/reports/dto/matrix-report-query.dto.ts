@@ -20,4 +20,18 @@ export class MatrixReportQueryDto {
   @Type(() => Number)
   @IsInt()
   courseId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Filtrar por estado de alumno (ALL, OVERDUE, AL_DIA, SALDO_A_FAVOR)',
+    example: 'OVERDUE',
+  })
+  @IsOptional()
+  status?: string;
+
+  @ApiPropertyOptional({
+    description: 'Búsqueda por nombre de alumno, RUT o apoderado',
+    example: 'González',
+  })
+  @IsOptional()
+  search?: string;
 }

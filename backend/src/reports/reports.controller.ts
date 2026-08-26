@@ -26,7 +26,12 @@ export class ReportsController {
       'Matriz de cuotas (Matrícula + Marzo a Diciembre) por cada alumno',
   })
   getSchoolFeeMatrix(@Query() query: MatrixReportQueryDto) {
-    return this.reportsService.getSchoolFeeMatrix(query.year, query.courseId);
+    return this.reportsService.getSchoolFeeMatrix(
+      query.year,
+      query.courseId,
+      query.status,
+      query.search,
+    );
   }
 
   @Get('dashboard/revenue-trend')

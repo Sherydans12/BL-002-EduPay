@@ -18,6 +18,7 @@ import type {
   SchoolFeeMatrixResponse,
   FeeQuotaItem,
   StudentMatrixItem,
+  CourseMatrixGroup,
 } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -34,6 +35,7 @@ import {
   Search,
   FileSpreadsheet,
   ChevronRight,
+  ChevronDown,
   Loader2,
   Calendar,
   Layers,
@@ -46,6 +48,12 @@ import {
   Clock,
   ArrowUpRight,
   TrendingUp,
+  Filter,
+  Maximize2,
+  Minimize2,
+  CreditCard,
+  ShieldCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { Button } from "@/components/ui/button";
@@ -113,7 +121,11 @@ export default function ReportsPage() {
   const [matrixCourseId, setMatrixCourseId] = useState<string>("");
   const [matrixYear, setMatrixYear] = useState<number>(new Date().getFullYear());
   const [matrixSearch, setMatrixSearch] = useState<string>("");
+  const [matrixStatusFilter, setMatrixStatusFilter] = useState<string>("ALL");
   const [loadingMatrix, setLoadingMatrix] = useState<boolean>(true);
+
+  // Collapsed / Expanded state of courses
+  const [expandedCourses, setExpandedCourses] = useState<Set<number>>(new Set());
 
   // Table payments state
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -138,6 +150,7 @@ export default function ReportsPage() {
     studentId: "",
   });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(20);
   const [loadingTable, setLoadingTable] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [paymentDetail, setPaymentDetail] = useState<Payment | null>(null);
@@ -147,15 +160,27 @@ export default function ReportsPage() {
     fetchAllStudents().then(setStudents).catch(() => {});
   }, []);
 
-  // Fetch Matrix
+  // Fetch Matrix from Backend
   const fetchMatrix = useCallback(async () => {
     setLoadingMatrix(true);
     try {
       const data = await reportsApi.getMatrix({
         year: matrixYear,
         courseId: matrixCourseId ? Number(matrixCourseId) : undefined,
+        status: matrixStatusFilter !== "ALL" ? matrixStatusFilter : undefined,
+        search: matrixSearch.trim() || undefined,
       });
       setMatrixData(data);
+
+      // Default expand all courses if only 1 or 2 courses exist, or if courseId is selected
+      if (matrixCourseId || data.courses.length <= 2) {
+        setExpandedCourses(new Set(data.courses.map((c) => c.courseId)));
+      } else {
+        // Expand first course by default for clean initial view
+        if (data.courses.length > 0) {
+          setExpandedCourses(new Set([data.courses[0].courseId]));
+        }
+      }
     } catch (err: unknown) {
       toast.error(
         err instanceof Error ? err.message : "Error al cargar la matriz de cuotas",
@@ -163,7 +188,7 @@ export default function ReportsPage() {
     } finally {
       setLoadingMatrix(false);
     }
-  }, [matrixYear, matrixCourseId]);
+  }, [matrixYear, matrixCourseId, matrixStatusFilter, matrixSearch]);
 
   useEffect(() => {
     if (activeTab === "matrix") {
@@ -171,13 +196,35 @@ export default function ReportsPage() {
     }
   }, [activeTab, fetchMatrix]);
 
+  // Expand / Collapse all courses helpers
+  const handleExpandAll = () => {
+    if (!matrixData) return;
+    setExpandedCourses(new Set(matrixData.courses.map((c) => c.courseId)));
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedCourses(new Set());
+  };
+
+  const toggleCourseExpand = (courseId: number) => {
+    setExpandedCourses((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseId)) {
+        next.delete(courseId);
+      } else {
+        next.add(courseId);
+      }
+      return next;
+    });
+  };
+
   // Fetch Payments Table & Summaries
   const fetchTableData = useCallback(async () => {
     setLoadingTable(true);
     try {
       const params: Record<string, string> = {
         page: page.toString(),
-        limit: "20",
+        limit: pageSize.toString(),
       };
       if (appliedFilters.dateFrom) params.dateFrom = appliedFilters.dateFrom;
       if (appliedFilters.dateTo) params.dateTo = appliedFilters.dateTo;
@@ -212,7 +259,7 @@ export default function ReportsPage() {
     } finally {
       setLoadingTable(false);
     }
-  }, [appliedFilters, page]);
+  }, [appliedFilters, page, pageSize]);
 
   useEffect(() => {
     if (activeTab === "table" || activeTab === "summary") {
@@ -272,35 +319,6 @@ export default function ReportsPage() {
       })) || []
     );
   }, [globalSummary]);
-
-  // Filter matrix students by search term
-  const filteredMatrixCourses = useMemo(() => {
-    if (!matrixData) return [];
-    if (!matrixSearch.trim()) return matrixData.courses;
-
-    const term = matrixSearch.toLowerCase().trim();
-    return matrixData.courses
-      .map((group) => {
-        const matchingStudents = group.students.filter(
-          (s) =>
-            s.studentName.toLowerCase().includes(term) ||
-            (s.studentRut && s.studentRut.toLowerCase().includes(term)) ||
-            (s.guardianName && s.guardianName.toLowerCase().includes(term)),
-        );
-        return {
-          ...group,
-          students: matchingStudents,
-        };
-      })
-      .filter((g) => g.students.length > 0);
-  }, [matrixData, matrixSearch]);
-
-  const collectionRate = useMemo(() => {
-    if (!matrixData || matrixData.totalInvoiced === 0) return 100;
-    return Math.round(
-      (matrixData.totalPaid / matrixData.totalInvoiced) * 100,
-    );
-  }, [matrixData]);
 
   // Quota cell renderer helper
   const renderQuotaCell = (q: FeeQuotaItem, monthLabel: string) => {
@@ -413,7 +431,7 @@ export default function ReportsPage() {
                   Reportes & Sábana de Cobranzas
                 </h1>
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                  Control escolar anual de pagos, morosidad por cuotas y análisis contable
+                  Control escolar anual de pagos, morosidad por cuotas y análisis contable optimizado
                 </p>
               </div>
             </div>
@@ -442,7 +460,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Pestañas de Navegación */}
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3">
           <div className="flex gap-1.5 rounded-xl bg-[var(--color-surface)] p-1">
             <button
               type="button"
@@ -485,18 +503,18 @@ export default function ReportsPage() {
           <div className="hidden text-xs text-[var(--color-text-muted)] sm:block">
             {activeTab === "matrix" && matrixData && (
               <span>
-                {matrixData.totalStudents} alumnos &bull; {matrixData.courses.length} cursos
+                {matrixData.totalStudents} alumnos &bull; {matrixData.courses.length} cursos &bull; Tasa de Cobro: {matrixData.collectionRate}%
               </span>
             )}
           </div>
         </div>
 
         {/* ═════════════════════════════════════════════════════════════════════ */}
-        {/* PESTAÑA 1: SÁBANA / MATRIZ DE CUOTAS POR CURSO                        */}
+        {/* PESTAÑA 1: SÁBANA / MATRIZ DE CUOTAS POR CURSO (ESCALABLE)            */}
         {/* ═════════════════════════════════════════════════════════════════════ */}
         {activeTab === "matrix" && (
           <div className="space-y-6 animate-fade-in">
-            {/* KPIs de la Sábana */}
+            {/* KPIs Consolidados de la Matriz */}
             {matrixData && (
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm">
@@ -507,7 +525,7 @@ export default function ReportsPage() {
                     {formatCLP(matrixData.totalInvoiced)}
                   </p>
                   <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
-                    Compromiso total del año {matrixYear}
+                    Compromiso escolar año {matrixYear}
                   </p>
                 </div>
 
@@ -515,14 +533,20 @@ export default function ReportsPage() {
                   <span className="text-xs font-medium text-emerald-300">
                     Total Recaudado en Caja
                   </span>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="font-mono text-2xl font-bold text-emerald-400">
-                      {formatCLP(matrixData.totalPaid)}
+                  <p className="mt-2 font-mono text-2xl font-bold text-emerald-400">
+                    {formatCLP(matrixData.totalPaid)}
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--color-bg)]">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-500"
+                        style={{ width: `${matrixData.collectionRate}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[11px] font-semibold text-emerald-300">
+                      {matrixData.collectionRate}%
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-emerald-300/80">
-                    Tasa de Cobranza: {collectionRate}%
-                  </p>
                 </div>
 
                 <div className="glass rounded-2xl border border-red-500/30 bg-red-500/5 p-4 shadow-sm">
@@ -533,7 +557,7 @@ export default function ReportsPage() {
                     {formatCLP(matrixData.totalPending)}
                   </p>
                   <p className="mt-1 text-[11px] text-red-300/80">
-                    Saldo total por regularizar
+                    {matrixData.totalMorosos} alumno(s) con morosidad
                   </p>
                 </div>
 
@@ -545,15 +569,15 @@ export default function ReportsPage() {
                     {matrixData.totalStudents}
                   </p>
                   <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
-                    En {matrixData.courses.length} cursos activos
+                    {matrixData.totalAlDia} al día &bull; {matrixData.totalSaldoAFavor} a favor
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Barra de Filtros para la Matriz */}
-            <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-md">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(240px,1fr)_200px_160px_auto]">
+            {/* Barra de Filtros & Búsqueda para la Sábana */}
+            <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-md space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(240px,1fr)_200px_160px_170px_auto]">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
                   <input
@@ -592,6 +616,19 @@ export default function ReportsPage() {
                   </select>
                 </NativeSelectField>
 
+                <NativeSelectField>
+                  <select
+                    value={matrixStatusFilter}
+                    onChange={(e) => setMatrixStatusFilter(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-xs text-white outline-none"
+                  >
+                    <option value="ALL">Todos los estados</option>
+                    <option value="OVERDUE">Solo Morosos (Deuda)</option>
+                    <option value="AL_DIA">Solo Al Día</option>
+                    <option value="SALDO_A_FAVOR">Solo Saldo a Favor</option>
+                  </select>
+                </NativeSelectField>
+
                 <div className="flex items-center gap-2">
                   <Button
                     onClick={fetchMatrix}
@@ -605,210 +642,299 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Leyenda de colores */}
-              <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-[var(--color-border)]/60 pt-3 text-[11px] text-[var(--color-text-muted)]">
-                <span className="font-semibold text-white">Leyenda de cuotas:</span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-full bg-emerald-500" />
-                  Pagada al día
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-full bg-red-500" />
-                  Vencida / Pendiente
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-full bg-amber-500" />
-                  Abono Parcial
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-full bg-gray-500" />
-                  Por Vencer (Futura)
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="text-[var(--color-text-muted)]/50">—</span>
-                  Sin cuota configurada
-                </span>
+              {/* Barra de Controles de Acordeón y Leyenda */}
+              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[var(--color-border)]/60 pt-3 text-[11px]">
+                {/* Controles de expansión masiva */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--color-text-muted)] font-medium">
+                    Vista por Cursos ({matrixData?.courses.length ?? 0}):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleExpandAll}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 font-semibold text-white hover:bg-[var(--color-surface-hover)]"
+                  >
+                    <Maximize2 className="size-3" />
+                    Expandir Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCollapseAll}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 font-semibold text-[var(--color-text-secondary)] hover:text-white"
+                  >
+                    <Minimize2 className="size-3" />
+                    Colapsar Todos
+                  </button>
+                </div>
+
+                {/* Leyenda de colores */}
+                <div className="flex flex-wrap items-center gap-3.5 text-[var(--color-text-muted)]">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-emerald-500" />
+                    Pagada
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-red-500" />
+                    Vencida
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-amber-500" />
+                    Abono Parcial
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="size-2 rounded-full bg-gray-500" />
+                    Por Vencer
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="text-[var(--color-text-muted)]/50">—</span>
+                    Sin cuota
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Contenedor de la Sábana / Matriz */}
-            <div className="glass overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-xl">
-              {loadingMatrix ? (
-                <div className="flex items-center justify-center py-24">
+            {/* Listado Escalable por Acordeones de Curso */}
+            {loadingMatrix ? (
+              <div className="glass flex items-center justify-center rounded-2xl border border-[var(--color-border)] py-28 shadow-xl">
+                <div className="flex flex-col items-center gap-3 text-[var(--color-text-muted)]">
                   <Loader2 className="size-8 animate-spin text-[var(--color-primary)]" />
+                  <p className="text-xs">Cargando matriz escolar...</p>
                 </div>
-              ) : filteredMatrixCourses.length === 0 ? (
-                <div className="py-20 text-center text-[var(--color-text-muted)]">
-                  <Layers className="mx-auto size-10 text-[var(--color-text-muted)]/40" />
-                  <p className="mt-3 text-sm font-semibold text-white">
-                    No se encontraron alumnos para los filtros seleccionados
-                  </p>
-                  <p className="mt-1 text-xs">
-                    Prueba cambiando el curso o el término de búsqueda
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1280px] border-collapse text-left text-xs">
-                    <thead>
-                      <tr className="bg-[var(--color-bg)] text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
-                        <th className="sticky left-0 z-20 bg-[var(--color-bg)] px-4 py-3.5 shadow-sm">
-                          Alumno / RUT
-                        </th>
-                        <th className="px-3 py-3.5">Apoderado</th>
-                        {MONTH_KEYS.map((m) => (
-                          <th
-                            key={m.key}
-                            className="px-2 py-3.5 text-center whitespace-nowrap"
-                          >
-                            {m.shortLabel}
-                          </th>
-                        ))}
-                        <th className="px-3 py-3.5 text-right">Facturado</th>
-                        <th className="px-3 py-3.5 text-right text-emerald-400">
-                          Pagado
-                        </th>
-                        <th className="px-3 py-3.5 text-right text-red-400">
-                          Pendiente
-                        </th>
-                        <th className="px-3 py-3.5 text-center">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--color-border)]">
-                      {filteredMatrixCourses.map((courseGroup) => (
-                        <Fragment key={`group-${courseGroup.courseId}`}>
-                          {/* Banner de Curso */}
-                          <tr className="bg-blue-950/40 text-xs font-semibold text-blue-200">
-                            <td
-                              colSpan={17}
-                              className="sticky left-0 px-4 py-2.5"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="flex items-center gap-2">
-                                  <Users className="size-3.5 text-blue-400" />
-                                  CURSO: {courseGroup.courseName.toUpperCase()} (
-                                  {courseGroup.students.length} alumnos)
+              </div>
+            ) : !matrixData || matrixData.courses.length === 0 ? (
+              <div className="glass rounded-2xl border border-[var(--color-border)] py-20 text-center text-[var(--color-text-muted)] shadow-xl">
+                <Layers className="mx-auto size-10 text-[var(--color-text-muted)]/40" />
+                <p className="mt-3 text-sm font-semibold text-white">
+                  No se encontraron alumnos para los filtros seleccionados
+                </p>
+                <p className="mt-1 text-xs">
+                  Prueba cambiando el curso, estado o término de búsqueda
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {matrixData.courses.map((courseGroup) => {
+                  const isExpanded = expandedCourses.has(courseGroup.courseId);
+
+                  return (
+                    <div
+                      key={`course-card-${courseGroup.courseId}`}
+                      className="glass overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-lg transition-all"
+                    >
+                      {/* Course Summary Card Header (Click to Expand/Collapse) */}
+                      <button
+                        type="button"
+                        onClick={() => toggleCourseExpand(courseGroup.courseId)}
+                        className="flex w-full items-center justify-between p-4.5 text-left transition-colors hover:bg-[var(--color-surface-hover)]/60 focus:outline-none"
+                      >
+                        <div className="flex flex-wrap items-center gap-3.5">
+                          <div className="flex size-9 items-center justify-center rounded-xl bg-blue-500/15 text-blue-400">
+                            <Users className="size-4.5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2.5">
+                              <h3 className="text-base font-bold text-white">
+                                {courseGroup.courseName}
+                              </h3>
+                              <Badge className="border-blue-500/30 bg-blue-500/15 text-[11px] text-blue-300">
+                                {courseGroup.students.length} alumno(s)
+                              </Badge>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+                              <span className="text-[var(--color-text-muted)]">
+                                Facturado:{" "}
+                                <strong className="font-mono text-white">
+                                  {formatCLP(courseGroup.subtotalInvoiced)}
+                                </strong>
+                              </span>
+                              <span className="text-emerald-400">
+                                Recaudado:{" "}
+                                <strong className="font-mono">
+                                  {formatCLP(courseGroup.subtotalPaid)}
+                                </strong>
+                              </span>
+                              {courseGroup.subtotalPending > 0 && (
+                                <span className="text-red-400">
+                                  Deuda:{" "}
+                                  <strong className="font-mono">
+                                    {formatCLP(courseGroup.subtotalPending)}
+                                  </strong>
                                 </span>
-                                <div className="flex items-center gap-4 text-[11px] font-mono">
-                                  <span>
-                                    Fact: {formatCLP(courseGroup.subtotalInvoiced)}
-                                  </span>
-                                  <span className="text-emerald-400">
-                                    Pag: {formatCLP(courseGroup.subtotalPaid)}
-                                  </span>
-                                  <span className="text-red-400">
-                                    Deuda: {formatCLP(courseGroup.subtotalPending)}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                          {/* Filas de Alumnos */}
-                          {courseGroup.students.map((student) => {
-                            const isAlDia = student.generalStatus === "AL_DIA";
-                            const isSaldoFavor =
-                              student.generalStatus === "SALDO_A_FAVOR";
-                            const isMoroso =
-                              student.generalStatus === "MOROSO";
+                        <div className="flex items-center gap-4">
+                          {/* Badges de Salud del Curso */}
+                          <div className="hidden sm:flex items-center gap-2 text-xs">
+                            <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-300">
+                              {courseGroup.alDiaCount} al día
+                            </span>
+                            {courseGroup.morosoCount > 0 && (
+                              <span className="rounded-md bg-red-500/20 px-2 py-0.5 font-semibold text-red-300">
+                                {courseGroup.morosoCount} moroso(s)
+                              </span>
+                            )}
+                            <span className="font-mono font-bold text-white">
+                              {courseGroup.collectionRate}% cobrado
+                            </span>
+                          </div>
 
-                            return (
-                              <tr
-                                key={student.studentId}
-                                className="transition-colors hover:bg-[var(--color-surface-hover)]"
-                              >
-                                {/* Alumno (Sticky col) */}
-                                <td className="sticky left-0 z-10 max-w-[200px] bg-[var(--color-surface)] px-4 py-2.5 shadow-sm">
-                                  <Link
-                                    href={`/alumnos/${student.studentId}/finanzas`}
-                                    className="group inline-flex items-center gap-1 font-medium text-white hover:text-[var(--color-primary)]"
-                                    title="Abrir ficha financiera"
-                                  >
-                                    <span className="truncate">
-                                      {student.studentName}
-                                    </span>
-                                    <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                                  </Link>
-                                  {student.studentRut && (
-                                    <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
-                                      {student.studentRut}
-                                    </p>
-                                  )}
-                                </td>
+                          <div className="flex size-7 items-center justify-center rounded-lg bg-[var(--color-surface)] text-[var(--color-text-muted)]">
+                            {isExpanded ? (
+                              <ChevronDown className="size-4 text-white" />
+                            ) : (
+                              <ChevronRight className="size-4 text-white" />
+                            )}
+                          </div>
+                        </div>
+                      </button>
 
-                                {/* Apoderado */}
-                                <td className="max-w-[160px] px-3 py-2.5">
-                                  <p className="truncate text-white">
-                                    {student.guardianName}
-                                  </p>
-                                  {student.guardianPhone && (
-                                    <p className="truncate text-[10px] text-[var(--color-text-muted)]">
-                                      {student.guardianPhone}
-                                    </p>
-                                  )}
-                                </td>
-
-                                {/* Cuotas mensuales (11 columnas) */}
-                                {MONTH_KEYS.map((m) => (
-                                  <td
-                                    key={m.key}
-                                    className="px-1.5 py-2 text-center"
-                                  >
-                                    {renderQuotaCell(
-                                      student[m.key],
-                                      m.label,
-                                    )}
-                                  </td>
-                                ))}
-
-                                {/* Totales por alumno */}
-                                <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-medium text-[var(--color-text-secondary)]">
-                                  {formatCLP(student.totalInvoiced)}
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold text-emerald-400">
-                                  {formatCLP(student.totalPaid)}
-                                </td>
-                                <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold text-red-400">
-                                  {student.totalPending > 0
-                                    ? formatCLP(student.totalPending)
-                                    : "$0"}
-                                </td>
-
-                                {/* Badge de Estado */}
-                                <td className="whitespace-nowrap px-3 py-2.5 text-center">
-                                  {isSaldoFavor ? (
-                                    <Badge className="border-emerald-500/40 bg-emerald-500/15 text-[10px] text-emerald-300">
-                                      Saldo a Favor
-                                    </Badge>
-                                  ) : isAlDia ? (
-                                    <Badge className="border-teal-500/30 bg-teal-500/15 text-[10px] text-teal-300">
-                                      Al Día
-                                    </Badge>
-                                  ) : isMoroso ? (
-                                    <Badge className="border-red-500/30 bg-red-500/15 text-[10px] text-red-300">
-                                      Moroso
-                                    </Badge>
-                                  ) : (
-                                    <Badge className="border-gray-500/30 bg-gray-500/15 text-[10px] text-gray-300">
+                      {/* Course Table (Rendered only when expanded for high performance) */}
+                      {isExpanded && (
+                        <div className="border-t border-[var(--color-border)]">
+                          {courseGroup.students.length === 0 ? (
+                            <div className="p-8 text-center text-xs text-[var(--color-text-muted)]">
+                              No hay alumnos en este curso que coincidan con el filtro activo.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                              <table className="w-full min-w-[1280px] border-collapse text-left text-xs">
+                                <thead className="sticky top-0 z-20 bg-[var(--color-bg)] shadow-md">
+                                  <tr className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
+                                    <th className="sticky left-0 z-30 bg-[var(--color-bg)] px-4 py-3 shadow-sm">
+                                      Alumno / RUT
+                                    </th>
+                                    <th className="px-3 py-3">Apoderado</th>
+                                    {MONTH_KEYS.map((m) => (
+                                      <th
+                                        key={m.key}
+                                        className="px-2 py-3 text-center whitespace-nowrap"
+                                      >
+                                        {m.shortLabel}
+                                      </th>
+                                    ))}
+                                    <th className="px-3 py-3 text-right">Facturado</th>
+                                    <th className="px-3 py-3 text-right text-emerald-400">
+                                      Pagado
+                                    </th>
+                                    <th className="px-3 py-3 text-right text-red-400">
                                       Pendiente
-                                    </Badge>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+                                    </th>
+                                    <th className="px-3 py-3 text-center">Estado</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[var(--color-border)]">
+                                  {courseGroup.students.map((student) => {
+                                    const isAlDia =
+                                      student.generalStatus === "AL_DIA";
+                                    const isSaldoFavor =
+                                      student.generalStatus === "SALDO_A_FAVOR";
+                                    const isMoroso =
+                                      student.generalStatus === "MOROSO";
+
+                                    return (
+                                      <tr
+                                        key={student.studentId}
+                                        className="transition-colors hover:bg-[var(--color-surface-hover)]"
+                                      >
+                                        {/* Alumno (Sticky col) */}
+                                        <td className="sticky left-0 z-10 max-w-[220px] bg-[var(--color-surface)] px-4 py-2.5 shadow-sm">
+                                          <Link
+                                            href={`/alumnos/${student.studentId}/finanzas`}
+                                            className="group inline-flex items-center gap-1 font-medium text-white hover:text-[var(--color-primary)]"
+                                            title="Abrir ficha financiera"
+                                          >
+                                            <span className="truncate">
+                                              {student.studentName}
+                                            </span>
+                                            <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                                          </Link>
+                                          {student.studentRut && (
+                                            <p className="font-mono text-[10px] text-[var(--color-text-muted)]">
+                                              {student.studentRut}
+                                            </p>
+                                          )}
+                                        </td>
+
+                                        {/* Apoderado */}
+                                        <td className="max-w-[160px] px-3 py-2.5">
+                                          <p className="truncate text-white font-medium">
+                                            {student.guardianName}
+                                          </p>
+                                          {student.guardianPhone && (
+                                            <p className="truncate font-mono text-[10px] text-[var(--color-text-muted)]">
+                                              {student.guardianPhone}
+                                            </p>
+                                          )}
+                                        </td>
+
+                                        {/* Cuotas mensuales (11 columnas) */}
+                                        {MONTH_KEYS.map((m) => (
+                                          <td
+                                            key={m.key}
+                                            className="px-1.5 py-2 text-center"
+                                          >
+                                            {renderQuotaCell(
+                                              student[m.key],
+                                              m.label,
+                                            )}
+                                          </td>
+                                        ))}
+
+                                        {/* Totales por alumno */}
+                                        <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-medium text-[var(--color-text-secondary)]">
+                                          {formatCLP(student.totalInvoiced)}
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold text-emerald-400">
+                                          {formatCLP(student.totalPaid)}
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold text-red-400">
+                                          {student.totalPending > 0
+                                            ? formatCLP(student.totalPending)
+                                            : "$0"}
+                                        </td>
+
+                                        {/* Badge de Estado */}
+                                        <td className="whitespace-nowrap px-3 py-2.5 text-center">
+                                          {isSaldoFavor ? (
+                                            <Badge className="border-emerald-500/40 bg-emerald-500/15 text-[10px] text-emerald-300">
+                                              Saldo a Favor
+                                            </Badge>
+                                          ) : isAlDia ? (
+                                            <Badge className="border-teal-500/30 bg-teal-500/15 text-[10px] text-teal-300">
+                                              Al Día
+                                            </Badge>
+                                          ) : isMoroso ? (
+                                            <Badge className="border-red-500/30 bg-red-500/15 text-[10px] text-red-300">
+                                              Moroso
+                                            </Badge>
+                                          ) : (
+                                            <Badge className="border-gray-500/30 bg-gray-500/15 text-[10px] text-gray-300">
+                                              Pendiente
+                                            </Badge>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {/* ═════════════════════════════════════════════════════════════════════ */}
-        {/* PESTAÑA 2: HISTORIAL DE PAGOS & TRANSACCIONES                         */}
+        {/* PESTAÑA 2: HISTORIAL DE PAGOS & TRANSACCIONES (PAGINADA)               */}
         {/* ═════════════════════════════════════════════════════════════════════ */}
         {activeTab === "table" && (
           <div className="space-y-6 animate-fade-in">
@@ -926,11 +1052,29 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Payments Table */}
+            {/* Payments Table with Sticky Header & Page Size Selector */}
             <div className="glass overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-xl">
-              <p className="px-6 pt-4 text-xs text-[var(--color-text-muted)]">
-                Haz clic sobre cualquier fila para abrir el detalle completo del pago.
-              </p>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]/60 text-xs">
+                <p className="text-[var(--color-text-muted)]">
+                  Haz clic sobre cualquier fila para abrir el detalle completo del pago.
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--color-text-muted)]">Mostrar:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs text-white outline-none"
+                  >
+                    <option value={10}>10 por página</option>
+                    <option value={20}>20 por página</option>
+                    <option value={50}>50 por página</option>
+                    <option value={100}>100 por página</option>
+                  </select>
+                </div>
+              </div>
 
               {loadingTable ? (
                 <div className="flex items-center justify-center py-20">
@@ -946,22 +1090,22 @@ export default function ReportsPage() {
                 </div>
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                     <table className="w-full min-w-[900px]">
-                      <thead>
-                        <tr className="bg-[var(--color-bg)]/50 text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)]">
-                          <th className="px-6 py-4">Fecha</th>
-                          <th className="px-6 py-4">Alumno</th>
-                          <th className="px-6 py-4 whitespace-nowrap">Curso</th>
-                          <th className="px-6 py-4">Monto</th>
-                          <th className="px-6 py-4">Método</th>
-                          <th className="px-6 py-4">Pagador</th>
-                          <th className="w-12 px-2 py-4" aria-hidden />
-                          <th className="px-6 py-4">Boleta</th>
+                      <thead className="sticky top-0 z-10 bg-[var(--color-bg)] shadow-sm">
+                        <tr className="text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)]">
+                          <th className="px-6 py-3.5">Fecha</th>
+                          <th className="px-6 py-3.5">Alumno</th>
+                          <th className="px-6 py-3.5 whitespace-nowrap">Curso</th>
+                          <th className="px-6 py-3.5">Monto</th>
+                          <th className="px-6 py-3.5">Método</th>
+                          <th className="px-6 py-3.5">Pagador</th>
+                          <th className="w-12 px-2 py-3.5" aria-hidden />
+                          <th className="px-6 py-3.5">Boleta</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--color-border)] text-sm">
-                        {payments.map((p, i) => (
+                        {payments.map((p) => (
                           <tr
                             key={p.id}
                             role="button"
@@ -1053,7 +1197,7 @@ export default function ReportsPage() {
                   {totalMeta.totalPages > 1 && (
                     <div className="flex items-center justify-between border-t border-[var(--color-border)] px-6 py-4 text-xs">
                       <span className="text-[var(--color-text-muted)]">
-                        Página {totalMeta.page} de {totalMeta.totalPages}
+                        Mostrando página {totalMeta.page} de {totalMeta.totalPages} ({totalMeta.total} pagos en total)
                       </span>
                       <div className="flex gap-2">
                         <Button

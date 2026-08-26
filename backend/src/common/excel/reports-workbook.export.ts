@@ -77,6 +77,11 @@ export type CourseMatrixGroup = {
   subtotalInvoiced: number;
   subtotalPaid: number;
   subtotalPending: number;
+  totalStudents: number;
+  alDiaCount: number;
+  morosoCount: number;
+  saldoAFavorCount: number;
+  collectionRate: number;
 };
 
 export type SchoolFeeMatrixExportData = {
@@ -86,6 +91,10 @@ export type SchoolFeeMatrixExportData = {
   totalPaid: number;
   totalPending: number;
   totalStudents: number;
+  totalAlDia: number;
+  totalMorosos: number;
+  totalSaldoAFavor: number;
+  collectionRate: number;
 };
 
 function thinBorder(): Partial<ExcelJS.Borders> {

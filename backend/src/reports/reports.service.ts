@@ -115,6 +115,8 @@ export class ReportsService {
   async getSchoolFeeMatrix(
     year = new Date().getFullYear(),
     courseId?: number,
+    statusFilter?: string,
+    search?: string,
   ): Promise<SchoolFeeMatrixExportData> {
     const now = new Date();
     const courses = await this.prisma.course.findMany({
@@ -122,16 +124,52 @@ export class ReportsService {
         deletedAt: null,
         ...(courseId ? { id: courseId } : {}),
       },
-      include: {
+      select: {
+        id: true,
+        name: true,
         students: {
-          where: { deletedAt: null },
-          include: {
-            guardian: true,
-            charges: {
-              where: {
-                deletedAt: null,
+          where: {
+            deletedAt: null,
+            ...(search?.trim()
+              ? {
+                  OR: [
+                    { name: { contains: search.trim(), mode: 'insensitive' } },
+                    { rut: { contains: search.trim(), mode: 'insensitive' } },
+                    {
+                      guardian: {
+                        name: {
+                          contains: search.trim(),
+                          mode: 'insensitive',
+                        },
+                      },
+                    },
+                  ],
+                }
+              : {}),
+          },
+          select: {
+            id: true,
+            name: true,
+            rut: true,
+            guardian: {
+              select: {
+                name: true,
+                phone: true,
+                email: true,
               },
-              include: { concept: true },
+            },
+            charges: {
+              where: { deletedAt: null },
+              select: {
+                id: true,
+                amount: true,
+                paidAmount: true,
+                dueDate: true,
+                status: true,
+                concept: {
+                  select: { id: true, name: true },
+                },
+              },
               orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
             },
           },
@@ -174,12 +212,18 @@ export class ReportsService {
     let totalPaid = 0;
     let totalPending = 0;
     let totalStudents = 0;
+    let totalAlDia = 0;
+    let totalMorosos = 0;
+    let totalSaldoAFavor = 0;
 
     for (const course of courses) {
       const studentItems: StudentMatrixItem[] = [];
       let courseInvoiced = 0;
       let coursePaid = 0;
       let coursePending = 0;
+      let courseAlDia = 0;
+      let courseMorosos = 0;
+      let courseSaldoAFavor = 0;
 
       for (const student of course.students) {
         totalStudents++;
@@ -277,10 +321,27 @@ export class ReportsService {
         let generalStatus: StudentMatrixItem['generalStatus'] = 'PENDIENTE';
         if (studentPaid > studentInvoiced) {
           generalStatus = 'SALDO_A_FAVOR';
+          courseSaldoAFavor++;
+          totalSaldoAFavor++;
         } else if (studentPending === 0 && studentInvoiced > 0) {
           generalStatus = 'AL_DIA';
+          courseAlDia++;
+          totalAlDia++;
         } else if (studentOverdue > 0) {
           generalStatus = 'MOROSO';
+          courseMorosos++;
+          totalMorosos++;
+        }
+
+        // Apply statusFilter if requested
+        if (statusFilter && statusFilter !== 'ALL') {
+          if (statusFilter === 'OVERDUE' && generalStatus !== 'MOROSO') continue;
+          if (statusFilter === 'AL_DIA' && generalStatus !== 'AL_DIA') continue;
+          if (
+            statusFilter === 'SALDO_A_FAVOR' &&
+            generalStatus !== 'SALDO_A_FAVOR'
+          )
+            continue;
         }
 
         courseInvoiced += studentInvoiced;
@@ -316,6 +377,11 @@ export class ReportsService {
       totalPaid += coursePaid;
       totalPending += coursePending;
 
+      const courseCollectionRate =
+        courseInvoiced > 0
+          ? Math.round((coursePaid / courseInvoiced) * 100)
+          : 100;
+
       courseGroups.push({
         courseId: course.id,
         courseName: course.name,
@@ -323,8 +389,16 @@ export class ReportsService {
         subtotalInvoiced: courseInvoiced,
         subtotalPaid: coursePaid,
         subtotalPending: coursePending,
+        totalStudents: course.students.length,
+        alDiaCount: courseAlDia,
+        morosoCount: courseMorosos,
+        saldoAFavorCount: courseSaldoAFavor,
+        collectionRate: courseCollectionRate,
       });
     }
+
+    const overallCollectionRate =
+      totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 100) : 100;
 
     return {
       year,
@@ -333,6 +407,10 @@ export class ReportsService {
       totalPaid,
       totalPending,
       totalStudents,
+      totalAlDia,
+      totalMorosos,
+      totalSaldoAFavor,
+      collectionRate: overallCollectionRate,
     };
   }
 
