@@ -45,7 +45,7 @@ export interface ReceiptData {
 interface PaymentReceiptModalProps {
   open: boolean;
   onClose: () => void;
-  onNewPayment: () => void;
+  onNewPayment?: () => void;
   receiptData: ReceiptData | null;
 }
 
@@ -251,15 +251,26 @@ export function PaymentReceiptModal({
         {/* Footer con Acciones */}
         <DialogFooter className="p-4 bg-[var(--color-bg)]/90 border-t border-[var(--color-border)] flex flex-col sm:flex-row gap-2 sm:justify-between items-center">
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => router.push("/pagos")}
-              className="gap-2 text-xs flex-1 sm:flex-initial"
-            >
-              <History className="w-4 h-4" />
-              Ver en Historial
-            </Button>
+            {onNewPayment ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => router.push("/pagos")}
+                className="gap-2 text-xs flex-1 sm:flex-initial"
+              >
+                <History className="w-4 h-4" />
+                Ver en Historial
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onClose}
+                className="gap-2 text-xs text-[var(--color-text-secondary)] hover:text-white"
+              >
+                Cerrar
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -273,14 +284,24 @@ export function PaymentReceiptModal({
               Imprimir Comprobante
             </Button>
 
-            <Button
-              type="button"
-              onClick={onNewPayment}
-              className="gap-2 text-xs bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white flex-1 sm:flex-initial"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Registrar Otro Pago
-            </Button>
+            {onNewPayment ? (
+              <Button
+                type="button"
+                onClick={onNewPayment}
+                className="gap-2 text-xs bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white flex-1 sm:flex-initial"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Registrar Otro Pago
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={onClose}
+                className="gap-2 text-xs bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white flex-1 sm:flex-initial"
+              >
+                Listo
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>
