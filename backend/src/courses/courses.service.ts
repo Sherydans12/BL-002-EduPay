@@ -40,34 +40,32 @@ export class CoursesService {
     ]);
 
     const data = courses.map(({ students, ...course }) => {
-      const expectedRevenue = students.reduce(
-        (courseTotal, student) =>
-          courseTotal +
-          student.charges.reduce(
-            (studentTotal, charge) => studentTotal + charge.amount,
-            0,
-          ),
-        0,
-      );
+      let expectedRevenue = 0;
+      let collectedRevenue = 0;
+      let overdueDebt = 0;
 
-      const overdueDebt = students.reduce(
-        (courseTotal, student) =>
-          courseTotal +
-          student.charges
-            .filter((charge) => charge.status === 'OVERDUE')
-            .reduce(
-              (studentTotal, charge) =>
-                studentTotal + Math.max(0, charge.amount - charge.paidAmount),
-              0,
-            ),
-        0,
-      );
+      for (const student of students) {
+        for (const charge of student.charges) {
+          expectedRevenue += charge.amount;
+          collectedRevenue += charge.paidAmount;
+          if (charge.status === 'OVERDUE' || (charge.dueDate && new Date(charge.dueDate) < new Date() && charge.paidAmount < charge.amount)) {
+            overdueDebt += Math.max(0, charge.amount - charge.paidAmount);
+          }
+        }
+      }
+
+      const collectionRate =
+        expectedRevenue > 0
+          ? Math.round((collectedRevenue / expectedRevenue) * 100)
+          : 100;
 
       return {
         ...course,
         activeStudents: students.length,
         expectedRevenue,
+        collectedRevenue,
         overdueDebt,
+        collectionRate,
       };
     });
 
@@ -89,7 +87,26 @@ export class CoursesService {
         students: {
           where: { deletedAt: null },
           orderBy: { name: 'asc' },
-          include: { guardian: true },
+          include: {
+            guardian: {
+              include: {
+                students: {
+                  where: { deletedAt: null },
+                  select: { id: true, name: true, courseId: true },
+                },
+              },
+            },
+            charges: {
+              where: { deletedAt: null },
+              select: {
+                id: true,
+                amount: true,
+                paidAmount: true,
+                dueDate: true,
+                status: true,
+              },
+            },
+          },
         },
       },
     });

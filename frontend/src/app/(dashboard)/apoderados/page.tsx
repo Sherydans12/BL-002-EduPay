@@ -1,13 +1,26 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { guardiansApi, downloadBlob } from "@/lib/api";
 import type { Guardian, Student } from "@/lib/api";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { FileSpreadsheet, X } from "lucide-react";
+import {
+  UserCheck,
+  Users,
+  Search,
+  Plus,
+  Pencil,
+  Trash2,
+  FileSpreadsheet,
+  Mail,
+  Phone,
+  ArrowUpRight,
+  Loader2,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +38,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Popover,
   PopoverContent,
@@ -41,6 +53,7 @@ import {
 } from "@/components/ui/command";
 import { DropdownChevron } from "@/components/ui/dropdown-chevron";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatRut, sanitizeRutInput } from "@/lib/rut";
 import {
   guardianSchema,
@@ -48,8 +61,7 @@ import {
 } from "@/lib/schemas/guardian.schema";
 import { fetchAllStudents } from "@/lib/fetch-all-pages";
 import { cmdkPersonFilter } from "@/lib/flexible-search";
-
-const LIMIT = 20;
+import { formatCLP } from "@/lib/currency-utils";
 
 export default function GuardiansPage() {
   const [guardians, setGuardians] = useState<Guardian[]>([]);
@@ -57,11 +69,12 @@ export default function GuardiansPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const prevDebouncedSearch = useRef<string | null>(null);
   const [meta, setMeta] = useState({
     total: 0,
     page: 1,
-    limit: LIMIT,
+    limit: 20,
     lastPage: 1,
   });
 
@@ -91,57 +104,12 @@ export default function GuardiansPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  useEffect(() => {
-    const searchChanged =
-      prevDebouncedSearch.current !== null &&
-      prevDebouncedSearch.current !== debouncedSearch;
-
-    if (searchChanged && page !== 1) {
-      setPage(1);
-      return;
-    }
-
-    prevDebouncedSearch.current = debouncedSearch;
-
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await guardiansApi.getAll(
-          page,
-          LIMIT,
-          debouncedSearch || undefined,
-        );
-        if (cancelled) return;
-        setGuardians(res.data);
-        setMeta({
-          total: res.meta.total,
-          page: res.meta.page,
-          limit: res.meta.limit,
-          lastPage: res.meta.lastPage ?? res.meta.totalPages ?? 1,
-        });
-      } catch (err: unknown) {
-        if (!cancelled) {
-          toast.error(
-            err instanceof Error ? err.message : "Error al cargar apoderados",
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [page, debouncedSearch]);
-
-  const reloadCurrent = async () => {
+  const loadGuardians = async () => {
     setLoading(true);
     try {
       const res = await guardiansApi.getAll(
         page,
-        LIMIT,
+        pageSize,
         debouncedSearch || undefined,
       );
       setGuardians(res.data);
@@ -161,103 +129,85 @@ export default function GuardiansPage() {
   };
 
   useEffect(() => {
-    if (!isDialogOpen) return;
-    let cancelled = false;
-    (async () => {
-      setStudentsLoading(true);
-      try {
-        const students = await fetchAllStudents();
-        if (!cancelled) setAllStudents(students);
-        if (editingGuardian) {
-          const full = await guardiansApi.getOne(editingGuardian.id);
-          if (!cancelled) {
-            setValue("studentIds", full.students?.map((s) => s.id) ?? []);
-          }
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          toast.error(
-            err instanceof Error ? err.message : "Error al cargar alumnos",
-          );
-        }
-      } finally {
-        if (!cancelled) setStudentsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isDialogOpen, editingGuardian, setValue]);
+    const searchChanged =
+      prevDebouncedSearch.current !== null &&
+      prevDebouncedSearch.current !== debouncedSearch;
 
-  const openCreateDialog = () => {
+    if (searchChanged && page !== 1) {
+      setPage(1);
+      return;
+    }
+
+    prevDebouncedSearch.current = debouncedSearch;
+    void loadGuardians();
+  }, [page, pageSize, debouncedSearch]);
+
+  const loadStudentsForPicker = async () => {
+    if (allStudents.length > 0) return;
+    setStudentsLoading(true);
+    try {
+      const data = await fetchAllStudents();
+      setAllStudents(data);
+    } catch {
+      toast.error("Error al cargar lista de alumnos");
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
+
+  const openCreateDialog = async () => {
     setEditingGuardian(null);
     reset({ rut: "", name: "", email: "", phone: "", studentIds: [] });
     setIsDialogOpen(true);
+    void loadStudentsForPicker();
   };
 
-  const openEditDialog = (g: Guardian) => {
+  const openEditDialog = async (g: Guardian) => {
     setEditingGuardian(g);
-    reset({
-      rut: g.rut ? formatRut(g.rut) : "",
-      name: g.name,
-      email: g.email || "",
-      phone: g.phone || "",
-      studentIds: [],
-    });
+    try {
+      const detail = await guardiansApi.getOne(g.id);
+      const studentIds = (detail.students ?? []).map((s) => s.id);
+      reset({
+        rut: g.rut ? formatRut(g.rut) : "",
+        name: g.name,
+        email: g.email ?? "",
+        phone: g.phone ?? "",
+        studentIds,
+      });
+    } catch {
+      reset({
+        rut: g.rut ? formatRut(g.rut) : "",
+        name: g.name,
+        email: g.email ?? "",
+        phone: g.phone ?? "",
+        studentIds: g.students.map((s) => Number(s.id)),
+      });
+    }
     setIsDialogOpen(true);
+    void loadStudentsForPicker();
   };
 
   const onSubmit = async (data: GuardianFormData) => {
     setIsSubmitting(true);
-    const studentIds = data.studentIds ?? [];
-
-    if (editingGuardian && editingGuardian.students.length > 0) {
-      const currentStudentIds = new Set(
-        editingGuardian.students.map((student) => Number(student.id)),
-      );
-      const removedCurrentStudent = [...currentStudentIds].some(
-        (studentId) => !studentIds.includes(studentId),
-      );
-
-      if (removedCurrentStudent) {
-        toast.error(
-          "Para cambiar el apoderado de un alumno, edítelo desde el módulo de Alumnos.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
-    }
-
     const payload = {
+      ...data,
       rut: data.rut ? formatRut(data.rut) : undefined,
-      name: data.name,
-      email: data.email || undefined,
-      phone: data.phone || undefined,
-      ...(editingGuardian || studentIds.length > 0 ? { studentIds } : {}),
+      email: data.email?.trim() || undefined,
+      phone: data.phone?.trim() || undefined,
     };
     try {
       if (editingGuardian) {
         await guardiansApi.update(editingGuardian.id, payload);
-        toast.success("Apoderado actualizado exitosamente");
-        await reloadCurrent();
+        toast.success("Apoderado actualizado con éxito");
       } else {
         await guardiansApi.create(payload);
-        toast.success("Apoderado creado exitosamente");
-        setPage(1);
-        if (page === 1) await reloadCurrent();
+        toast.success("Apoderado creado con éxito");
       }
       setIsDialogOpen(false);
+      await loadGuardians();
     } catch (err: unknown) {
-      const error = err as {
-        response?: { data?: { message?: string | string[] } };
-        message?: string;
-      };
-      const raw = error.response?.data?.message;
-      const backendMsg = Array.isArray(raw) ? raw.join(". ") : raw;
       toast.error(
-        backendMsg ||
-          (err instanceof Error ? err.message : undefined) ||
-          "Error al guardar",
+        err instanceof Error ? err.message : "Error al guardar apoderado",
       );
     } finally {
       setIsSubmitting(false);
@@ -268,13 +218,11 @@ export default function GuardiansPage() {
     if (!deleteId) return;
     try {
       await guardiansApi.delete(deleteId);
-      toast.success("Apoderado eliminado exitosamente");
-      await reloadCurrent();
+      toast.success("Apoderado eliminado con éxito");
+      await loadGuardians();
     } catch (err: unknown) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Error al eliminar. Puede tener alumnos asociados.",
+        err instanceof Error ? err.message : "Error al eliminar apoderado",
       );
     } finally {
       setDeleteId(null);
@@ -283,277 +231,429 @@ export default function GuardiansPage() {
 
   const handleExportExcel = async () => {
     setIsExporting(true);
-    const toastId = toast.loading("Generando Excel...");
+    const toastId = toast.loading("Generando Excel con lista de apoderados...");
     try {
       const blob = await guardiansApi.export();
       downloadBlob(
         blob,
         `apoderados_${new Date().toISOString().split("T")[0]}.xlsx`,
       );
-      toast.success("Descarga completada", { id: toastId });
+      toast.success("Descarga completada con éxito", { id: toastId });
     } catch {
-      toast.error("Error al exportar", { id: toastId });
+      toast.error("Error al exportar apoderados", { id: toastId });
     } finally {
       setIsExporting(false);
     }
   };
 
+  // KPIs
+  const multiChildFamilies = useMemo(
+    () => guardians.filter((g) => g.students.length > 1).length,
+    [guardians],
+  );
+  const totalFamilyDebt = useMemo(
+    () => guardians.reduce((sum, g) => sum + (g.familyOverdueDebt ?? 0), 0),
+    [guardians],
+  );
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-7xl space-y-6 pb-12 animate-fade-in">
+      {/* Cabecera Superior */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Apoderados</h1>
-          <p className="text-[var(--color-text-secondary)] mt-1">
-            Gestión de apoderados / tutores
-          </p>
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
+              <UserCheck className="size-5" />
+            </span>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-white">
+                Directorio de Apoderados
+              </h1>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Gestión de tutores, grupos familiares y control de deuda consolidada
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
             onClick={handleExportExcel}
             disabled={isExporting}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-all disabled:opacity-50"
+            className="gap-2 text-xs border-[var(--color-border)] text-white hover:bg-[var(--color-surface-hover)]"
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            {isExporting ? "Exportando..." : "Exportar Excel"}
-          </button>
-          <button
+            {isExporting ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="size-3.5 text-emerald-400" />
+            )}
+            Exportar Excel
+          </Button>
+
+          <Button
             onClick={openCreateDialog}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
+            className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-lg shadow-blue-600/20"
           >
-            + Nuevo Apoderado
-          </button>
+            <Plus className="size-3.5" />
+            Nuevo Apoderado
+          </Button>
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <input
-          type="text"
-          placeholder="Buscar apoderado por nombre o RUT..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-1/2 px-4 py-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all text-sm"
-        />
-        <span className="text-sm text-[var(--color-text-muted)]">
-          {meta.total} apoderados en total
-        </span>
+      {/* KPIs Cards */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm">
+          <span className="text-xs font-medium text-[var(--color-text-muted)]">
+            Total Apoderados Registrados
+          </span>
+          <p className="mt-2 text-2xl font-bold text-white">{meta.total}</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+            Tutores en el sistema
+          </p>
+        </div>
+
+        <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm">
+          <span className="text-xs font-medium text-blue-300">
+            Familias con Hermanos
+          </span>
+          <p className="mt-2 text-2xl font-bold text-blue-400">
+            {multiChildFamilies}
+          </p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+            Con 2 o más alumnos a cargo
+          </p>
+        </div>
+
+        <div className="glass rounded-2xl border border-red-500/30 bg-red-500/5 p-4 shadow-sm">
+          <span className="text-xs font-medium text-red-300">
+            Deuda Familiar Visible
+          </span>
+          <p className="mt-2 font-mono text-2xl font-bold text-red-400">
+            {formatCLP(totalFamilyDebt)}
+          </p>
+          <p className="mt-1 text-[11px] text-red-300/80">
+            Morosidad acumulada en pantalla
+          </p>
+        </div>
+
+        <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm">
+          <span className="text-xs font-medium text-emerald-300">
+            Canales de Cobranza
+          </span>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="inline-flex items-center gap-1 text-xs text-white">
+              <Mail className="size-3.5 text-blue-400" /> Email
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs text-white">
+              <Phone className="size-3.5 text-emerald-400" /> Teléfono
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+            Notificaciones activas
+          </p>
+        </div>
       </div>
 
-      <div className="glass rounded-2xl overflow-hidden">
+      {/* Buscador y Paginación */}
+      <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+          <input
+            type="text"
+            placeholder="Buscar apoderado por nombre o RUT..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] pl-9 pr-3 text-xs text-white placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 text-xs text-[var(--color-text-muted)]">
+          <span>Mostrar:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+            className="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-white outline-none"
+          >
+            <option value={10}>10 por página</option>
+            <option value={20}>20 por página</option>
+            <option value={50}>50 por página</option>
+            <option value={100}>100 por página</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Tabla de Apoderados */}
+      <div className="glass overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-xl">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+          <div className="flex flex-col items-center justify-center py-24 text-[var(--color-text-muted)]">
+            <Loader2 className="size-8 animate-spin text-[var(--color-primary)]" />
+            <p className="mt-2 text-xs">Cargando directorio de apoderados...</p>
           </div>
         ) : guardians.length === 0 ? (
-          <div className="text-center py-16 text-[var(--color-text-muted)]">
-            No hay apoderados que coincidan con la búsqueda
+          <div className="py-20 text-center text-[var(--color-text-muted)]">
+            <UserCheck className="mx-auto size-10 text-[var(--color-text-muted)]/40" />
+            <p className="mt-3 text-sm font-semibold text-white">
+              No se encontraron apoderados
+            </p>
+            <p className="mt-1 text-xs">
+              Prueba modificando los términos de búsqueda.
+            </p>
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-xs text-[var(--color-text-muted)] uppercase tracking-wider bg-[var(--color-bg)]/50">
-                    <th className="px-6 py-4 whitespace-nowrap">RUT</th>
-                    <th className="px-6 py-4">Nombre</th>
-                    <th className="px-6 py-4">Email</th>
-                    <th className="px-6 py-4">Teléfono</th>
-                    <th className="px-6 py-4">Grupo Familiar</th>
-                    <th className="px-6 py-4">Deuda Familiar</th>
-                    <th className="px-6 py-4 text-right">Acciones</th>
+            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+              <table className="w-full min-w-[950px] text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-[var(--color-bg)] shadow-sm">
+                  <tr className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
+                    <th className="px-6 py-3.5">Apoderado Titular</th>
+                    <th className="px-6 py-3.5 whitespace-nowrap">RUT</th>
+                    <th className="px-6 py-3.5">Contacto</th>
+                    <th className="px-6 py-3.5">Alumnos a Cargo (Grupo Familiar)</th>
+                    <th className="px-6 py-3.5 text-right">Deuda Familiar</th>
+                    <th className="px-6 py-3.5 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {guardians.map((g) => (
                     <tr
                       key={g.id}
-                      className="hover:bg-[var(--color-surface-hover)] transition-colors"
+                      className="transition-colors hover:bg-[var(--color-surface-hover)] group"
                     >
-                      <td className="px-6 py-4 text-sm font-mono tabular-nums text-[var(--color-text-secondary)] whitespace-nowrap">
-                        {g.rut || "—"}
+                      {/* Nombre */}
+                      <td className="px-6 py-4">
+                        <span className="font-bold text-white text-sm">
+                          {g.name}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 font-medium text-white">
-                        {g.name}
+
+                      {/* RUT */}
+                      <td className="px-6 py-4 font-mono text-[var(--color-text-secondary)] whitespace-nowrap">
+                        {g.rut ? formatRut(g.rut) : "—"}
                       </td>
-                      <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">
-                        {g.email || "—"}
+
+                      {/* Contacto */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          {g.email ? (
+                            <div className="flex items-center gap-1.5 text-white">
+                              <Mail className="size-3 text-blue-400 shrink-0" />
+                              <span className="truncate max-w-[180px]">{g.email}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-[var(--color-text-muted)] italic">
+                              Sin email
+                            </span>
+                          )}
+                          {g.phone && (
+                            <div className="flex items-center gap-1.5 text-[var(--color-text-secondary)]">
+                              <Phone className="size-3 text-emerald-400 shrink-0" />
+                              <span>{g.phone}</span>
+                            </div>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-[var(--color-text-secondary)]">
-                        {g.phone || "—"}
-                      </td>
-                      <td className="px-6 py-4 min-w-[280px]">
+
+                      {/* Grupo Familiar / Alumnos a cargo */}
+                      <td className="px-6 py-4">
                         {g.students.length > 0 ? (
-                          <div className="flex flex-col gap-2">
+                          <div className="flex flex-wrap gap-1.5 max-w-[320px]">
                             {g.students.map((student) => (
                               <Link
                                 key={student.id}
                                 href={`/alumnos/${student.id}/finanzas`}
-                                className="block"
+                                className="group/student inline-flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-xs font-semibold text-white hover:border-blue-400 hover:bg-blue-500/15 transition-all"
                               >
-                                <Badge
-                                  variant="outline"
-                                  className="flex justify-between w-full gap-3 hover:bg-[var(--color-surface-hover)]"
-                                >
-                                  <span className="truncate">
-                                    {student.name} - {student.course.name}
+                                <span>{student.name}</span>
+                                {student.course && (
+                                  <span className="text-[10px] text-blue-300 font-normal">
+                                    ({student.course.name})
                                   </span>
-                                  {student.overdueDebt > 0 && (
-                                    <span className="shrink-0 font-semibold text-red-500">
-                                      $
-                                      {student.overdueDebt.toLocaleString(
-                                        "es-CL",
-                                      )}
-                                    </span>
-                                  )}
-                                </Badge>
+                                )}
+                                {student.overdueDebt > 0 && (
+                                  <span className="font-mono text-[10px] text-red-400 font-bold ml-1">
+                                    {formatCLP(student.overdueDebt)}
+                                  </span>
+                                )}
+                                <ArrowUpRight className="size-2.5 text-blue-400 opacity-0 group-hover/student:opacity-100 transition-opacity" />
                               </Link>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-sm text-[var(--color-text-muted)]">
-                            Sin alumnos asociados
+                          <span className="text-[11px] text-[var(--color-text-muted)] italic">
+                            Sin alumnos asignados
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+
+                      {/* Deuda Familiar */}
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
                         {g.familyOverdueDebt > 0 ? (
-                          <span className="text-lg text-red-600 font-bold">
-                            ${g.familyOverdueDebt.toLocaleString("es-CL")}
+                          <span className="font-mono font-bold text-red-400 text-sm">
+                            {formatCLP(g.familyOverdueDebt)}
                           </span>
                         ) : (
-                          <span className="text-sm text-[var(--color-text-muted)]">
-                            Familia al día
+                          <span className="font-medium text-emerald-400 text-xs">
+                            Al día
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right space-x-2">
-                        <button
-                          onClick={() => openEditDialog(g)}
-                          className="text-sm text-[var(--color-primary)] hover:underline"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(g.id)}
-                          className="text-sm text-red-400 hover:underline"
-                        >
-                          Eliminar
-                        </button>
+
+                      {/* Acciones */}
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditDialog(g)}
+                            className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-white transition-colors"
+                            title="Editar apoderado"
+                          >
+                            <Pencil className="size-3.5 text-blue-400" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeleteId(g.id)}
+                            className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-red-500/15 hover:text-red-300 transition-colors"
+                            title="Eliminar apoderado"
+                          >
+                            <Trash2 className="size-3.5 text-red-400" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <TablePagination
-              page={meta.page}
-              totalPages={meta.lastPage}
-              total={meta.total}
-              limit={meta.limit}
-              onPrev={() => setPage((p) => p - 1)}
-              onNext={() => setPage((p) => p + 1)}
-            />
+
+            {meta.lastPage > 1 && (
+              <div className="flex items-center justify-between border-t border-[var(--color-border)] px-6 py-4 text-xs">
+                <span className="text-[var(--color-text-muted)]">
+                  Mostrando página {meta.page} de {meta.lastPage} ({meta.total} apoderados en total)
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 border-[var(--color-border)] text-white"
+                  >
+                    ← Anterior
+                  </Button>
+                  <Button
+                    disabled={page >= meta.lastPage}
+                    onClick={() => setPage((p) => p + 1)}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 border-[var(--color-border)] text-white"
+                  >
+                    Siguiente →
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
 
+      {/* Modal Crear / Editar Apoderado */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">
-              {editingGuardian ? "Editar Apoderado" : "Nuevo Apoderado"}
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-[var(--color-surface)] border-[var(--color-border)] text-white shadow-2xl">
+          <DialogHeader className="border-b border-[var(--color-border)]/80 pb-3">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-white">
+              <UserCheck className="size-5 text-emerald-400" />
+              <span>{editingGuardian ? "Editar Apoderado" : "Nuevo Apoderado"}</span>
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  RUT
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                  Nombre Completo *
+                </label>
+                <input
+                  {...register("name")}
+                  placeholder="Ej: Carolina Fuentes Morales"
+                  className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
+                />
+                {errors.name && (
+                  <p className="mt-1 text-[11px] text-red-400">{errors.name.message}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                  RUT del Apoderado
                 </label>
                 <input
                   {...register("rut")}
                   placeholder="12.345.678-9"
-                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+                  className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs font-mono text-white focus:border-[var(--color-primary)] outline-none"
                   onChange={(e) => {
-                    const sanitized = sanitizeRutInput(e.target.value);
-                    setValue("rut", sanitized, { shouldValidate: false });
+                    const val = sanitizeRutInput(e.target.value);
+                    setValue("rut", val);
                   }}
                   onBlur={(e) => {
-                    const val = e.target.value.trim();
-                    setValue("rut", val ? formatRut(val) : "", {
-                      shouldValidate: true,
-                    });
+                    const val = formatRut(e.target.value);
+                    setValue("rut", val, { shouldValidate: true });
                   }}
                 />
                 {errors.rut && (
-                  <p className="text-red-400 text-xs mt-1">
-                    {errors.rut.message}
-                  </p>
+                  <p className="mt-1 text-[11px] text-red-400">{errors.rut.message}</p>
                 )}
               </div>
-              <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Nombre *
-                </label>
-                <input
-                  {...register("name")}
-                  placeholder="Nombre completo"
-                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
-                />
-                {errors.name && (
-                  <p className="text-red-400 text-xs mt-1">
-                    {errors.name.message}
-                  </p>
-                )}
-              </div>
-              <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Email
-                </label>
-                <input
-                  {...register("email")}
-                  type="email"
-                  placeholder="correo@ejemplo.cl"
-                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
-                />
-                {errors.email && (
-                  <p className="text-red-400 text-xs mt-1">
-                    {errors.email.message}
-                  </p>
-                )}
-              </div>
-              <div className="col-span-full md:col-span-1">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Teléfono
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                  Teléfono de Contacto
                 </label>
                 <input
                   {...register("phone")}
                   placeholder="+56 9 1234 5678"
-                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none"
+                  className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
                 />
-                {errors.phone && (
-                  <p className="text-red-400 text-xs mt-1">
-                    {errors.phone.message}
-                  </p>
-                )}
               </div>
-              <div className="col-span-full">
-                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  Alumnos Asociados
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                  Correo Electrónico (Para notificaciones de cobranza y boletas)
                 </label>
-                <p className="text-xs text-[var(--color-text-muted)] mb-2">
-                  {editingGuardian
-                    ? "Los alumnos actuales deben conservar un apoderado. Para cambiarlo, edítelo desde el módulo de Alumnos."
-                    : "Opcional. Puede crear el apoderado ahora y asociar alumnos después."}
-                </p>
+                <input
+                  {...register("email")}
+                  type="email"
+                  placeholder="ejemplo@apoderado.cl"
+                  className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
+                />
+              </div>
+
+              {/* Selector de Alumnos a Cargo */}
+              <div className="sm:col-span-2 space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                  Alumnos a Cargo (Grupo Familiar)
+                </label>
+
                 <Controller
                   name="studentIds"
                   control={control}
                   render={({ field }) => {
                     const selectedIds = field.value ?? [];
-                    const selectedSet = new Set(selectedIds);
-                    const studentById = new Map(
-                      allStudents.map((s) => [s.id, s]),
+                    const selectedStudents = allStudents.filter((s) =>
+                      selectedIds.includes(s.id),
                     );
+
+                    const toggleStudent = (id: number) => {
+                      const exists = selectedIds.includes(id);
+                      const next = exists
+                        ? selectedIds.filter((x) => x !== id)
+                        : [...selectedIds, id];
+                      field.onChange(next);
+                    };
 
                     return (
                       <div className="space-y-2">
@@ -564,141 +664,133 @@ export default function GuardiansPage() {
                           <PopoverTrigger asChild>
                             <button
                               type="button"
-                              disabled={studentsLoading}
-                              className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2 disabled:opacity-50"
+                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-left text-xs text-white focus:border-[var(--color-primary)] outline-none flex items-center justify-between"
                             >
-                              <span className="min-w-0 flex-1 truncate text-[var(--color-text-muted)]">
+                              <span className="text-[var(--color-text-muted)]">
                                 {studentsLoading
                                   ? "Cargando alumnos..."
-                                  : "Buscar alumno por nombre o RUT..."}
+                                  : "Buscar e incorporar alumnos a este apoderado..."}
                               </span>
                               <DropdownChevron />
                             </button>
                           </PopoverTrigger>
-                          <PopoverContent
-                            className="w-[min(450px,calc(100vw-2rem))] p-0 z-[60]"
-                            align="start"
-                          >
+                          <PopoverContent className="w-[400px] p-0 z-[60] bg-[var(--color-surface)] border-[var(--color-border)] text-white">
                             <Command
                               filter={cmdkPersonFilter}
                               className="bg-transparent"
                             >
-                              <CommandInput placeholder="Nombre o RUT del alumno..." />
-                              <CommandList>
-                                <CommandEmpty>
-                                  No se encontró el alumno.
-                                </CommandEmpty>
+                              <CommandInput
+                                placeholder="Buscar alumno por nombre o RUT..."
+                                className="border-none focus:ring-0 text-xs"
+                              />
+                              <CommandList className="max-h-56">
+                                <CommandEmpty>No se encontró el alumno.</CommandEmpty>
                                 <CommandGroup>
-                                  {allStudents.map((s) => (
-                                    <CommandItem
-                                      key={s.id}
-                                      value={`${s.name}\t${s.rut}`}
-                                      disabled={selectedSet.has(s.id)}
-                                      className="cursor-pointer"
-                                      onSelect={() => {
-                                        if (!selectedSet.has(s.id)) {
-                                          field.onChange([
-                                            ...selectedIds,
-                                            s.id,
-                                          ]);
-                                        }
-                                        setStudentPickerOpen(false);
-                                      }}
-                                    >
-                                      <div className="flex flex-col">
-                                        <span>{s.name}</span>
-                                        <span className="text-xs text-[var(--color-text-muted)]">
-                                          {s.rut} — {s.course.name}
-                                          {selectedSet.has(s.id)
-                                            ? " (ya asociado)"
-                                            : ""}
-                                        </span>
-                                      </div>
-                                    </CommandItem>
-                                  ))}
+                                  {allStudents.map((s) => {
+                                    const isSelected = selectedIds.includes(s.id);
+                                    return (
+                                      <CommandItem
+                                        key={s.id}
+                                        value={`${s.name}\t${s.rut ?? ""}`}
+                                        onSelect={() => toggleStudent(s.id)}
+                                        className="cursor-pointer text-xs"
+                                      >
+                                        <div className="flex items-center justify-between w-full">
+                                          <div>
+                                            <span className="font-semibold text-white">{s.name}</span>
+                                            <span className="text-[10px] text-blue-300 ml-1.5">
+                                              ({s.course?.name})
+                                            </span>
+                                          </div>
+                                          {isSelected && (
+                                            <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
+                                              Asignado
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </CommandItem>
+                                    );
+                                  })}
                                 </CommandGroup>
                               </CommandList>
                             </Command>
                           </PopoverContent>
                         </Popover>
-                        {selectedIds.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {selectedIds.map((id) => {
-                              const student = studentById.get(id);
-                              return (
-                                <span
-                                  key={id}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
-                                >
-                                  <span className="max-w-[200px] truncate">
-                                    {student
-                                      ? `${student.name} (${student.rut})`
-                                      : `Alumno #${id}`}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      field.onChange(
-                                        selectedIds.filter((sid) => sid !== id),
-                                      )
-                                    }
-                                    className="p-0.5 rounded hover:bg-emerald-500/20 text-emerald-300 transition-colors"
-                                    title="Quitar alumno"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </span>
-                              );
-                            })}
-                          </div>
-                        )}
+
+                        {/* Chips de Alumnos Seleccionados */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {selectedStudents.map((s) => (
+                            <span
+                              key={s.id}
+                              className="inline-flex items-center gap-1 rounded-lg border border-blue-500/40 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-white"
+                            >
+                              {s.name} ({s.course?.name})
+                              <button
+                                type="button"
+                                onClick={() => toggleStudent(s.id)}
+                                className="ml-1 text-blue-300 hover:text-white"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     );
                   }}
                 />
               </div>
             </div>
-            <DialogFooter className="mt-6">
-              <button
+
+            <DialogFooter className="border-t border-[var(--color-border)]/80 pt-4 mt-6">
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => setIsDialogOpen(false)}
-                className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                className="text-xs border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white"
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all disabled:opacity-50"
+                className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-md"
               >
-                {isSubmitting ? "Guardando..." : "Guardar"}
-              </button>
+                {isSubmitting ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <UserCheck className="size-3.5" />
+                )}
+                {editingGuardian ? "Guardar Cambios" : "Crear Apoderado"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
+      {/* Alerta de Eliminación */}
       <AlertDialog
-        open={!!deleteId}
+        open={deleteId !== null}
         onOpenChange={(open) => !open && setDeleteId(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-[var(--color-surface)] border-[var(--color-border)] text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Está absolutamente seguro?</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">
+              ¿Eliminar apoderado?
+            </AlertDialogTitle>
             <AlertDialogDescription className="text-[var(--color-text-secondary)]">
-              Esta acción no se puede deshacer. Se eliminará permanentemente
-              este apoderado.
+              Esta acción eliminará al apoderado del sistema. Si tiene alumnos a cargo, deberán ser reasignados a otro tutor.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">
+            <AlertDialogCancel className="border-[var(--color-border)] bg-[var(--color-surface)] text-white hover:bg-[var(--color-surface-hover)]">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700 text-white border-0"
+              className="bg-red-600 text-white hover:bg-red-500"
             >
-              Sí, eliminar
+              Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

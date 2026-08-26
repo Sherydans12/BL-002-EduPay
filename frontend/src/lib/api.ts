@@ -170,7 +170,9 @@ export interface Course {
 export interface CourseWithStats extends Course {
   activeStudents: number;
   expectedRevenue: number;
+  collectedRevenue?: number;
   overdueDebt: number;
+  collectionRate?: number;
 }
 
 export interface Guardian {

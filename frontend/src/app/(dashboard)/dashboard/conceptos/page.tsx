@@ -1,12 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { conceptsApi } from "@/lib/api";
 import type { PaymentConcept } from "@/lib/api";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
+import {
+  Tag,
+  Search,
+  Plus,
+  Pencil,
+  Trash2,
+  CheckCircle2,
+  TrendingUp,
+  Receipt,
+  Loader2,
+  DollarSign,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +36,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { formatCLP, formatNumberCLP } from "@/lib/currency-utils";
 
 const conceptSchema = z.object({
   name: z
@@ -39,20 +54,10 @@ const conceptSchema = z.object({
 
 type ConceptFormData = z.infer<typeof conceptSchema>;
 
-const inputCls =
-  "w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-white focus:border-[var(--color-primary)] outline-none transition-all";
-
-function fmt(amount: number) {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 export default function ConceptosPage() {
   const [concepts, setConcepts] = useState<PaymentConcept[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingConcept, setEditingConcept] = useState<PaymentConcept | null>(null);
@@ -62,6 +67,8 @@ export default function ConceptosPage() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<ConceptFormData>({
     resolver: zodResolver(conceptSchema),
@@ -69,23 +76,28 @@ export default function ConceptosPage() {
   });
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const data = await conceptsApi.getAll();
       setConcepts(data);
     } catch {
-      toast.error("Error al cargar conceptos");
+      toast.error("Error al cargar los conceptos de pago");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   const openCreateDialog = () => {
     setEditingConcept(null);
-    reset({ name: "", defaultAmount: undefined as unknown as number, isActive: true });
+    reset({
+      name: "",
+      defaultAmount: undefined as unknown as number,
+      isActive: true,
+    });
     setIsDialogOpen(true);
   };
 
@@ -107,12 +119,14 @@ export default function ConceptosPage() {
         toast.success("Concepto actualizado correctamente");
       } else {
         await conceptsApi.create(data);
-        toast.success("Concepto creado correctamente");
+        toast.success("Concepto creado exitosamente");
       }
       setIsDialogOpen(false);
-      loadData();
+      await loadData();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar concepto");
+      toast.error(
+        err instanceof Error ? err.message : "Error al guardar el concepto",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -123,233 +137,369 @@ export default function ConceptosPage() {
     try {
       await conceptsApi.delete(deletingConcept.id);
       toast.success(`Concepto "${deletingConcept.name}" desactivado`);
-      loadData();
+      await loadData();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al eliminar concepto");
+      toast.error(
+        err instanceof Error ? err.message : "Error al desactivar el concepto",
+      );
     } finally {
       setDeletingConcept(null);
     }
   };
 
+  // Filtered concepts
+  const filtered = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return concepts;
+    return concepts.filter((c) => c.name.toLowerCase().includes(term));
+  }, [concepts, searchTerm]);
+
+  // Aggregates
+  const stats = useMemo(() => {
+    const totalConcepts = concepts.length;
+    const activeCount = concepts.filter((c) => c.isActive).length;
+    const totalBilled = concepts.reduce((s, c) => s + (c.totalBilled || 0), 0);
+    const totalCollected = concepts.reduce((s, c) => s + (c.totalCollected || 0), 0);
+    const overallRate = totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 100) : 100;
+    return { totalConcepts, activeCount, totalBilled, totalCollected, overallRate };
+  }, [concepts]);
+
   return (
-    <div className="max-w-6xl mx-auto p-8 animate-fade-in">
+    <div className="mx-auto max-w-7xl space-y-6 pb-12 animate-fade-in">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Conceptos de Pago</h1>
-          <p className="text-[var(--color-text-secondary)] mt-1">
-            Administra los aranceles y conceptos disponibles para registrar pagos
-          </p>
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-purple-500/15 text-purple-400">
+              <Tag className="size-5" />
+            </span>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-white">
+                Conceptos de Pago
+              </h1>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Catálogo de aranceles, mensualidades, matrículas y cargos aplicables
+              </p>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={openCreateDialog}
-          className="px-5 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-medium shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] text-sm"
-        >
-          + Nuevo Concepto
-        </button>
+
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={openCreateDialog}
+            className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-lg shadow-blue-600/20"
+          >
+            <Plus className="size-3.5" />
+            Nuevo Concepto
+          </Button>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="glass rounded-xl overflow-hidden shadow-xl">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+      {/* KPIs Cards */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm">
+          <span className="text-xs font-medium text-[var(--color-text-muted)]">
+            Total Conceptos
+          </span>
+          <p className="mt-2 text-2xl font-bold text-white">{stats.totalConcepts}</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+            {stats.activeCount} activos para cobro
+          </p>
+        </div>
+
+        <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm">
+          <span className="text-xs font-medium text-[var(--color-text-muted)]">
+            Total Facturado por Conceptos
+          </span>
+          <p className="mt-2 font-mono text-2xl font-bold text-white">
+            {formatCLP(stats.totalBilled)}
+          </p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+            Compromiso histórico
+          </p>
+        </div>
+
+        <div className="glass rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 shadow-sm">
+          <span className="text-xs font-medium text-emerald-300">
+            Total Recaudado
+          </span>
+          <p className="mt-2 font-mono text-2xl font-bold text-emerald-400">
+            {formatCLP(stats.totalCollected)}
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--color-bg)]">
+              <div
+                className="h-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${stats.overallRate}%` }}
+              />
+            </div>
+            <span className="font-mono text-[11px] font-semibold text-emerald-300">
+              {stats.overallRate}%
+            </span>
           </div>
-        ) : concepts.length === 0 ? (
-          <div className="text-center py-16 text-[var(--color-text-muted)]">
-            No hay conceptos registrados
+        </div>
+
+        <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm">
+          <span className="text-xs font-medium text-[var(--color-text-muted)]">
+            Configuración Rápida
+          </span>
+          <div className="mt-2 text-xs text-blue-300 font-semibold">
+            Matrículas & Mensualidades
+          </div>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+            Disponibles en módulo de cobro
+          </p>
+        </div>
+      </div>
+
+      {/* Barra de Búsqueda */}
+      <div className="glass rounded-2xl border border-[var(--color-border)] p-4 shadow-sm flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+          <input
+            type="text"
+            placeholder="Buscar concepto por nombre..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] pl-9 pr-3 text-xs text-white placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] outline-none"
+          />
+        </div>
+
+        <span className="text-xs text-[var(--color-text-muted)]">
+          {filtered.length} concepto(s) disponible(s)
+        </span>
+      </div>
+
+      {/* Tabla de Conceptos */}
+      <div className="glass overflow-hidden rounded-2xl border border-[var(--color-border)] shadow-xl">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24 text-[var(--color-text-muted)]">
+            <Loader2 className="size-8 animate-spin text-[var(--color-primary)]" />
+            <p className="mt-2 text-xs">Cargando catálogo de conceptos...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 text-center text-[var(--color-text-muted)]">
+            <Tag className="mx-auto size-10 text-[var(--color-text-muted)]/40" />
+            <p className="mt-3 text-sm font-semibold text-white">
+              No se encontraron conceptos de pago
+            </p>
+            <p className="mt-1 text-xs">
+              Prueba creando un nuevo concepto como "Matrícula" o "Mensualidad".
+            </p>
           </div>
         ) : (
-          <table className="w-full text-left">
-            <thead className="bg-[var(--color-bg)]/50 text-xs uppercase tracking-wider text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
-              <tr>
-                <th className="px-6 py-4 font-medium">Nombre</th>
-                <th className="px-6 py-4 font-medium">Rendimiento Histórico</th>
-                <th className="px-6 py-4 font-medium">Estado</th>
-                <th className="px-6 py-4 font-medium text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {concepts.map((concept) => (
-                <tr
-                  key={concept.id}
-                  className="hover:bg-[var(--color-surface-hover)] transition-colors"
-                >
-                  <td className="px-6 py-4 font-medium text-white">{concept.name}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1.5 tabular-nums">
-                      <span className="text-xs text-[var(--color-text-muted)]">
-                        {fmt(concept.defaultAmount)} base
-                      </span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-sm font-semibold text-emerald-600">
-                          {fmt(concept.totalCollected)}
-                        </span>
-                        <span className="text-xs text-[var(--color-text-muted)]">
-                          de {fmt(concept.totalBilled)}
-                        </span>
-                      </div>
-                      {concept.totalBilled > 0 && (
-                        <div
-                          role="progressbar"
-                          aria-label={`Porcentaje recaudado de ${concept.name}`}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-valuenow={Math.min(
-                            100,
-                            Math.round(
-                              (concept.totalCollected / concept.totalBilled) * 100,
-                            ),
-                          )}
-                          className="h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-[var(--color-border)]"
-                        >
-                          <div
-                            className="h-full rounded-full bg-emerald-500 transition-all"
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                (concept.totalCollected / concept.totalBilled) * 100,
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                        concept.isActive
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : "bg-red-500/15 text-red-400"
-                      }`}
-                    >
-                      {concept.isActive ? "Activo" : "Inactivo"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button
-                      onClick={() => openEditDialog(concept)}
-                      className="text-sm px-3 py-1.5 rounded-lg border border-blue-500/50 text-blue-400 hover:bg-blue-500/10 transition-colors"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => setDeletingConcept(concept)}
-                      className="text-sm px-3 py-1.5 rounded-lg border border-red-500/50 text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      Eliminar
-                    </button>
-                  </td>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="w-full min-w-[850px] text-left text-xs">
+              <thead className="sticky top-0 z-10 bg-[var(--color-bg)] shadow-sm">
+                <tr className="text-[11px] uppercase tracking-wider text-[var(--color-text-muted)]">
+                  <th className="px-6 py-3.5">Nombre del Concepto</th>
+                  <th className="px-6 py-3.5">Monto Base Sugerido</th>
+                  <th className="px-6 py-3.5">Rendimiento Histórico</th>
+                  <th className="px-6 py-3.5 text-center">Estado</th>
+                  <th className="px-6 py-3.5 text-right">Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {filtered.map((concept) => {
+                  const rate =
+                    concept.totalBilled > 0
+                      ? Math.min(
+                          100,
+                          Math.round(
+                            (concept.totalCollected / concept.totalBilled) * 100,
+                          ),
+                        )
+                      : 0;
+
+                  return (
+                    <tr
+                      key={concept.id}
+                      className="transition-colors hover:bg-[var(--color-surface-hover)] group"
+                    >
+                      {/* Nombre */}
+                      <td className="px-6 py-4">
+                        <span className="font-bold text-white text-sm">
+                          {concept.name}
+                        </span>
+                      </td>
+
+                      {/* Monto Base */}
+                      <td className="px-6 py-4 font-mono text-sm font-semibold text-white">
+                        {formatCLP(concept.defaultAmount)}
+                      </td>
+
+                      {/* Rendimiento */}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1 max-w-[200px]">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-mono text-emerald-400 font-bold">
+                              {formatCLP(concept.totalCollected)}
+                            </span>
+                            <span className="font-mono text-[var(--color-text-muted)]">
+                              de {formatCLP(concept.totalBilled)}
+                            </span>
+                          </div>
+                          {concept.totalBilled > 0 && (
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-bg)]">
+                              <div
+                                className="h-full bg-emerald-500 transition-all duration-300"
+                                style={{ width: `${rate}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Estado */}
+                      <td className="px-6 py-4 text-center">
+                        <Badge
+                          variant={concept.isActive ? "success" : "destructive"}
+                          className="text-[10px]"
+                        >
+                          {concept.isActive ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditDialog(concept)}
+                            className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-white transition-colors"
+                            title="Editar concepto"
+                          >
+                            <Pencil className="size-3.5 text-blue-400" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeletingConcept(concept)}
+                            className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-red-500/15 hover:text-red-300 transition-colors"
+                            title="Desactivar concepto"
+                          >
+                            <Trash2 className="size-3.5 text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Create / Edit Dialog */}
+      {/* Modal Crear / Editar Concepto */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold">
-              {editingConcept ? "Editar Concepto" : "Nuevo Concepto de Pago"}
+        <DialogContent className="sm:max-w-md bg-[var(--color-surface)] border-[var(--color-border)] text-white shadow-2xl">
+          <DialogHeader className="border-b border-[var(--color-border)]/80 pb-3">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-white">
+              <Tag className="size-5 text-purple-400" />
+              <span>
+                {editingConcept ? "Editar Concepto de Pago" : "Nuevo Concepto de Pago"}
+              </span>
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Nombre *
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                Nombre del Concepto *
               </label>
               <input
                 {...register("name")}
-                placeholder="Ej: Mensualidad General"
-                className={inputCls}
+                placeholder="Ej: Mensualidad Marzo 2026"
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
               />
               {errors.name && (
-                <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>
+                <p className="mt-1 text-[11px] text-red-400">{errors.name.message}</p>
               )}
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                Monto por Defecto ($) *
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                Monto Base Sugerido ($ CLP) *
               </label>
               <input
                 type="number"
-                min="1"
-                placeholder="75000"
+                step="1"
+                placeholder="45000"
                 {...register("defaultAmount", { valueAsNumber: true })}
-                className={inputCls}
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs font-mono text-white focus:border-[var(--color-primary)] outline-none"
               />
               {errors.defaultAmount && (
-                <p className="text-red-400 text-xs mt-1">{errors.defaultAmount.message}</p>
+                <p className="mt-1 text-[11px] text-red-400">
+                  {errors.defaultAmount.message}
+                </p>
               )}
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                Se autocompletará al seleccionar este concepto en un pago (editable).
-              </p>
             </div>
-            <div className="flex items-center gap-3">
+
+            <div className="flex items-center gap-2 pt-1">
               <input
                 type="checkbox"
                 id="isActive"
                 {...register("isActive")}
-                className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-primary)] bg-[var(--color-bg)] focus:ring-[var(--color-primary)]"
+                className="size-4 rounded border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-primary)] focus:ring-0"
               />
               <label
                 htmlFor="isActive"
-                className="text-sm font-medium text-[var(--color-text-secondary)] cursor-pointer"
+                className="text-xs font-medium text-white cursor-pointer"
               >
-                Concepto activo
+                Concepto activo para emisión de cobros y pagos
               </label>
             </div>
-            <DialogFooter className="mt-6 pt-4">
-              <button
+
+            <DialogFooter className="border-t border-[var(--color-border)]/80 pt-4 mt-6">
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => setIsDialogOpen(false)}
-                className="px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:text-white transition-colors"
+                className="text-xs border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-white"
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-semibold shadow-lg transition-all disabled:opacity-50"
+                className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-md"
               >
-                {isSubmitting
-                  ? "Guardando..."
-                  : editingConcept
-                  ? "Guardar Cambios"
-                  : "Crear Concepto"}
-              </button>
+                {isSubmitting ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-3.5" />
+                )}
+                {editingConcept ? "Guardar Cambios" : "Crear Concepto"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Soft-delete Confirm Dialog */}
+      {/* Alerta de Desactivación */}
       <AlertDialog
-        open={!!deletingConcept}
+        open={deletingConcept !== null}
         onOpenChange={(open) => !open && setDeletingConcept(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-[var(--color-surface)] border-[var(--color-border)] text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar Concepto</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">
+              ¿Desactivar concepto de pago?
+            </AlertDialogTitle>
             <AlertDialogDescription className="text-[var(--color-text-secondary)]">
-              ¿Estás seguro de que deseas desactivar el concepto{" "}
-              <strong>&ldquo;{deletingConcept?.name}&rdquo;</strong>? Ya no aparecerá
-              disponible al registrar nuevos pagos. Los pagos existentes no se verán
-              afectados.
+              El concepto "{deletingConcept?.name}" ya no estará disponible para nuevos cobros. El historial de pagos anteriores no se verá afectado.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-transparent border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] text-white">
+            <AlertDialogCancel className="border-[var(--color-border)] bg-[var(--color-surface)] text-white hover:bg-[var(--color-surface-hover)]">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-red-600 text-white hover:bg-red-500"
             >
-              Sí, eliminar
+              Desactivar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
