@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { reportsApi, Course, ReportSummary } from '@/lib/api';
 import { fetchAllCourses } from '@/lib/fetch-all-pages';
 import { NativeSelectField } from '@/components/ui/dropdown-chevron';
@@ -23,11 +23,7 @@ export default function DashboardReportesPage() {
       .catch(console.error);
   }, []);
 
-  useEffect(() => {
-    void fetchSummary();
-  }, [startDate, endDate, courseId]);
-
-  const fetchSummary = async () => {
+  const fetchSummary = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -38,7 +34,11 @@ export default function DashboardReportesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [startDate, endDate, courseId]);
+
+  useEffect(() => {
+    void fetchSummary();
+  }, [fetchSummary]);
 
   return (
     <div className="p-8">

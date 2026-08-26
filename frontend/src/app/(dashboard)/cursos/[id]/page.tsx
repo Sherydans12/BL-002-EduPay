@@ -10,23 +10,17 @@ import {
   Search,
   Plus,
   ArrowUpRight,
-  ShieldCheck,
-  AlertTriangle,
-  Mail,
-  Phone,
   Pencil,
   Loader2,
-  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
-import { coursesApi, downloadBlob } from "@/lib/api";
+import { coursesApi } from "@/lib/api";
 import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
 import type { Course, CourseWithStudents, Guardian, Student } from "@/lib/api";
 import { StudentFormDialog } from "@/components/student-form-dialog";
 import { matchesStudentRow } from "@/lib/flexible-search";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatCLP } from "@/lib/currency-utils";
 import { formatRut } from "@/lib/rut";
 
 function rowToStudent(

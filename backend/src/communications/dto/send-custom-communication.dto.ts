@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class SendCustomCommunicationDto {
   @ApiProperty({
@@ -31,7 +38,8 @@ export class SendCustomCommunicationDto {
 
   @ApiProperty({
     description: 'Cuerpo o mensaje del correo',
-    example: 'Estimado apoderado, le recordamos que los plazos de regularización...',
+    example:
+      'Estimado apoderado, le recordamos que los plazos de regularización...',
   })
   @IsString()
   @IsNotEmpty()

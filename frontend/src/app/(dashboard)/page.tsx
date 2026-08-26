@@ -13,21 +13,14 @@ import {
 } from "recharts";
 import {
   TrendingUp,
-  TrendingDown,
-  Users,
-  GraduationCap,
   FileSpreadsheet,
   Plus,
   ArrowUpRight,
   ShieldCheck,
   AlertTriangle,
   Receipt,
-  CreditCard,
-  Building2,
-  Calendar,
   Sparkles,
   Loader2,
-  CheckCircle2,
   Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -125,10 +118,6 @@ export default function DashboardPage() {
         )
       : 100
   );
-
-  const alDiaPct = dashboard.totalActiveStudents > 0
-    ? Math.round(((dashboard.alumnosAlDiaCount ?? 0) / dashboard.totalActiveStudents) * 100)
-    : 100;
 
   if (loading) {
     return (

@@ -37,7 +37,12 @@ export type ReportAggregateRow = {
   total: number;
 };
 
-export type FeeQuotaStatus = 'PAID' | 'PARTIAL' | 'OVERDUE' | 'PENDING' | 'NONE';
+export type FeeQuotaStatus =
+  | 'PAID'
+  | 'PARTIAL'
+  | 'OVERDUE'
+  | 'PENDING'
+  | 'NONE';
 
 export type FeeQuotaItem = {
   status: FeeQuotaStatus;
@@ -269,9 +274,8 @@ export function fillSchoolFeeMatrixSheet(
     'Estado General',
   ];
   const widths = [
-    6, 14, 28, 16, 26, 14, 25,
-    14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
-    16, 16, 16, 15,
+    6, 14, 28, 16, 26, 14, 25, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 16,
+    16, 16, 15,
   ];
 
   headers.forEach((h, i) => {

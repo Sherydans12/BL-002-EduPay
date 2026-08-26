@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { coursesApi, downloadBlob } from "@/lib/api";
 import type { CourseWithStats } from "@/lib/api";
@@ -10,16 +10,12 @@ import * as z from "zod";
 import { toast } from "sonner";
 import {
   GraduationCap,
-  Users,
   Search,
   Plus,
   Pencil,
   Trash2,
-  ExternalLink,
   FileSpreadsheet,
   Loader2,
-  TrendingUp,
-  AlertCircle,
   CheckCircle2,
   ArrowUpRight,
 } from "lucide-react";
@@ -88,7 +84,7 @@ export default function CoursesPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  const loadCourses = async () => {
+  const loadCourses = useCallback(async () => {
     setLoading(true);
     try {
       const res = await coursesApi.getAll(
@@ -110,7 +106,7 @@ export default function CoursesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, debouncedSearch]);
 
   useEffect(() => {
     const searchChanged =
@@ -124,7 +120,7 @@ export default function CoursesPage() {
 
     prevDebouncedSearch.current = debouncedSearch;
     void loadCourses();
-  }, [page, pageSize, debouncedSearch]);
+  }, [page, pageSize, debouncedSearch, loadCourses]);
 
   const openCreateDialog = () => {
     setEditingCourse(null);

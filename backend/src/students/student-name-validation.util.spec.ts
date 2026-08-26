@@ -68,8 +68,14 @@ describe('validateNameTokenPreservation', () => {
   });
 
   it('rejects empty inputs', () => {
-    expect(validateNameTokenPreservation('', 'Juan', 'Perez').valid).toBe(false);
-    expect(validateNameTokenPreservation('JUAN PEREZ', '', 'Perez').valid).toBe(false);
-    expect(validateNameTokenPreservation('JUAN PEREZ', 'Juan', '').valid).toBe(false);
+    expect(validateNameTokenPreservation('', 'Juan', 'Perez').valid).toBe(
+      false,
+    );
+    expect(validateNameTokenPreservation('JUAN PEREZ', '', 'Perez').valid).toBe(
+      false,
+    );
+    expect(validateNameTokenPreservation('JUAN PEREZ', 'Juan', '').valid).toBe(
+      false,
+    );
   });
 });

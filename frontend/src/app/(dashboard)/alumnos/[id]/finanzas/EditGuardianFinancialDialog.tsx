@@ -18,12 +18,9 @@ import {
   UserCheck,
   Mail,
   Phone,
-  CreditCard,
   Users,
-  AlertCircle,
   CheckCircle2,
   Loader2,
-  Info,
 } from "lucide-react";
 
 interface EditGuardianFinancialDialogProps {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,17 +11,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { formatRut, sanitizeRutInput, isValidRut } from "@/lib/rut";
 import { studentsApi } from "@/lib/api";
 import type { Student, Course, Guardian, StudentStatus } from "@/lib/api";
 import {
   User,
-  GraduationCap,
-  ShieldCheck,
   Users,
-  AlertCircle,
   CheckCircle2,
   Loader2,
 } from "lucide-react";
@@ -56,7 +52,6 @@ export function EditStudentFinancialDialog({
 
   const {
     register,
-    control,
     handleSubmit,
     reset,
     setValue,

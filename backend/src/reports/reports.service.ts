@@ -180,34 +180,6 @@ export class ReportsService {
       orderBy: { name: 'asc' },
     });
 
-    const monthMap: Record<
-      number,
-      keyof Pick<
-        StudentMatrixItem,
-        | 'marzo'
-        | 'abril'
-        | 'mayo'
-        | 'junio'
-        | 'julio'
-        | 'agosto'
-        | 'septiembre'
-        | 'octubre'
-        | 'noviembre'
-        | 'diciembre'
-      >
-    > = {
-      2: 'marzo',
-      3: 'abril',
-      4: 'mayo',
-      5: 'junio',
-      6: 'julio',
-      7: 'agosto',
-      8: 'septiembre',
-      9: 'octubre',
-      10: 'noviembre',
-      11: 'diciembre',
-    };
-
     const courseGroups: CourseMatrixGroup[] = [];
     let totalInvoiced = 0;
     let totalPaid = 0;
@@ -277,10 +249,7 @@ export class ReportsService {
             dueDate: charge.dueDate ? charge.dueDate.toISOString() : null,
           };
 
-          const slot = classifyChargeSlot(
-            charge.concept?.name,
-            charge.dueDate,
-          );
+          const slot = classifyChargeSlot(charge.concept?.name, charge.dueDate);
 
           if (slot !== 'otro' && quotas[slot]) {
             quotas[slot] = item;
@@ -305,7 +274,8 @@ export class ReportsService {
 
         // Apply statusFilter if requested
         if (statusFilter && statusFilter !== 'ALL') {
-          if (statusFilter === 'OVERDUE' && generalStatus !== 'MOROSO') continue;
+          if (statusFilter === 'OVERDUE' && generalStatus !== 'MOROSO')
+            continue;
           if (statusFilter === 'AL_DIA' && generalStatus !== 'AL_DIA') continue;
           if (
             statusFilter === 'SALDO_A_FAVOR' &&

@@ -48,11 +48,13 @@ export class StudentsController {
   @Get('name-review/queue')
   @RequirePermissions('view:students')
   @ApiOperation({
-    summary: 'Listar cola de alumnos pendientes de estructuración de nombres para Académico',
+    summary:
+      'Listar cola de alumnos pendientes de estructuración de nombres para Académico',
   })
   @ApiResponse({
     status: 200,
-    description: 'Cola de alumnos pendientes con motivo STUDENT_STRUCTURED_NAME_MISSING',
+    description:
+      'Cola de alumnos pendientes con motivo STUDENT_STRUCTURED_NAME_MISSING',
   })
   getNameReviewQueue(@Req() req: { user?: { tenantId?: string } }) {
     return this.studentsService.getNameReviewQueue(req.user?.tenantId);
@@ -61,11 +63,18 @@ export class StudentsController {
   @Post(':id/name-review')
   @RequirePermissions('manage:students')
   @ApiOperation({
-    summary: 'Guardar partición de nombres estructurados validando preservación exacta de palabras',
+    summary:
+      'Guardar partición de nombres estructurados validando preservación exacta de palabras',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID del alumno' })
-  @ApiResponse({ status: 200, description: 'Estructuración guardada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Validación de palabras fallida o datos inválidos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Estructuración guardada exitosamente',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validación de palabras fallida o datos inválidos',
+  })
   @ApiResponse({ status: 404, description: 'Alumno no encontrado' })
   reviewStudentName(
     @Param('id', ParseIntPipe) id: number,

@@ -8,7 +8,9 @@ export class ReviewStudentNameDto {
   })
   @IsString()
   @IsNotEmpty({ message: 'El campo Nombres no puede estar vacío' })
-  @MaxLength(100, { message: 'El campo Nombres no debe superar los 100 caracteres' })
+  @MaxLength(100, {
+    message: 'El campo Nombres no debe superar los 100 caracteres',
+  })
   firstName!: string;
 
   @ApiProperty({
@@ -17,6 +19,8 @@ export class ReviewStudentNameDto {
   })
   @IsString()
   @IsNotEmpty({ message: 'El campo Apellidos no puede estar vacío' })
-  @MaxLength(100, { message: 'El campo Apellidos no debe superar los 100 caracteres' })
+  @MaxLength(100, {
+    message: 'El campo Apellidos no debe superar los 100 caracteres',
+  })
   lastName!: string;
 }

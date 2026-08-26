@@ -22,7 +22,8 @@ export class MatrixReportQueryDto {
   courseId?: number;
 
   @ApiPropertyOptional({
-    description: 'Filtrar por estado de alumno (ALL, OVERDUE, AL_DIA, SALDO_A_FAVOR)',
+    description:
+      'Filtrar por estado de alumno (ALL, OVERDUE, AL_DIA, SALDO_A_FAVOR)',
     example: 'OVERDUE',
   })
   @IsOptional()

@@ -48,7 +48,12 @@ export class CoursesService {
         for (const charge of student.charges) {
           expectedRevenue += charge.amount;
           collectedRevenue += charge.paidAmount;
-          if (charge.status === 'OVERDUE' || (charge.dueDate && new Date(charge.dueDate) < new Date() && charge.paidAmount < charge.amount)) {
+          if (
+            charge.status === 'OVERDUE' ||
+            (charge.dueDate &&
+              new Date(charge.dueDate) < new Date() &&
+              charge.paidAmount < charge.amount)
+          ) {
             overdueDebt += Math.max(0, charge.amount - charge.paidAmount);
           }
         }

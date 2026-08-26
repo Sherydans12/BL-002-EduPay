@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { conceptsApi } from "@/lib/api";
 import type { PaymentConcept } from "@/lib/api";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { toast } from "sonner";
@@ -14,10 +14,7 @@ import {
   Pencil,
   Trash2,
   CheckCircle2,
-  TrendingUp,
-  Receipt,
   Loader2,
-  DollarSign,
 } from "lucide-react";
 import {
   Dialog,
@@ -38,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatCLP, formatNumberCLP } from "@/lib/currency-utils";
+import { formatCLP } from "@/lib/currency-utils";
 
 const conceptSchema = z.object({
   name: z
@@ -67,8 +64,6 @@ export default function ConceptosPage() {
     register,
     handleSubmit,
     reset,
-    setValue,
-    watch,
     formState: { errors },
   } = useForm<ConceptFormData>({
     resolver: zodResolver(conceptSchema),
@@ -284,7 +279,7 @@ export default function ConceptosPage() {
               No se encontraron conceptos de pago
             </p>
             <p className="mt-1 text-xs">
-              Prueba creando un nuevo concepto como "Matrícula" o "Mensualidad".
+              Prueba creando un nuevo concepto como &quot;Matrícula&quot; o &quot;Mensualidad&quot;.
             </p>
           </div>
         ) : (
@@ -488,7 +483,7 @@ export default function ConceptosPage() {
               ¿Desactivar concepto de pago?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-[var(--color-text-secondary)]">
-              El concepto "{deletingConcept?.name}" ya no estará disponible para nuevos cobros. El historial de pagos anteriores no se verá afectado.
+              El concepto &quot;{deletingConcept?.name}&quot; ya no estará disponible para nuevos cobros. El historial de pagos anteriores no se verá afectado.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

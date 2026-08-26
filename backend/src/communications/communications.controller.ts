@@ -33,13 +33,17 @@ export class CommunicationsController {
   ) {}
 
   @Get('stats')
-  @ApiOperation({ summary: 'Obtener métricas y KPIs de comunicaciones y entregabilidad' })
+  @ApiOperation({
+    summary: 'Obtener métricas y KPIs de comunicaciones y entregabilidad',
+  })
   getCommunicationStats() {
     return this.communicationsService.getCommunicationStats();
   }
 
   @Post('custom')
-  @ApiOperation({ summary: 'Enviar una comunicación personalizada a un apoderado o alumno' })
+  @ApiOperation({
+    summary: 'Enviar una comunicación personalizada a un apoderado o alumno',
+  })
   @ApiResponse({
     status: 201,
     description: 'Comunicación personalizada enviada y registrada',

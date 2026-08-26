@@ -6,7 +6,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ChargeStatus, CommunicationType, DeliveryStatus, Prisma } from '@prisma/client';
+import {
+  ChargeStatus,
+  CommunicationType,
+  DeliveryStatus,
+  Prisma,
+} from '@prisma/client';
 import { tenantContext } from '../core/tenant/tenant.context';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';

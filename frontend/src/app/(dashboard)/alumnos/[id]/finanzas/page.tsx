@@ -23,7 +23,6 @@ import {
   ShieldCheck,
   Pencil,
   Users,
-  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
