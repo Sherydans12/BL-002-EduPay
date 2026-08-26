@@ -1,14 +1,32 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { CheckCircle2, Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
+import {
+  User,
+  ShieldCheck,
+  LockKeyhole,
+  KeyRound,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  Building2,
+  Mail,
+  ShieldAlert,
+  LogOut,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { usersApi } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type SessionUser = {
   email?: string;
   name?: string;
   role?: string;
+  tenantSlug?: string;
+  tenantName?: string;
 };
 
 type PasswordState = {
@@ -21,6 +39,24 @@ const initialForm: PasswordState = {
   currentPassword: "",
   newPassword: "",
   confirmPassword: "",
+};
+
+const ROLE_DESCRIPTIONS: Record<string, { label: string; desc: string; color: string }> = {
+  ADMIN: {
+    label: "Administrador General",
+    desc: "Acceso total a tesorería, configuración institucional, cobranzas y gestión de usuarios.",
+    color: "border-purple-500/30 bg-purple-500/15 text-purple-300",
+  },
+  FINANCE: {
+    label: "Tesorero / Finanzas",
+    desc: "Gestión de pagos, emisión de recibos, configuración de planes y sábanas de cuotas.",
+    color: "border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+  },
+  VIEWER: {
+    label: "Consultor / Auditor",
+    desc: "Lectura y supervisión de reportes, alumnos y estados de cuenta.",
+    color: "border-blue-500/30 bg-blue-500/15 text-blue-300",
+  },
 };
 
 export default function MiCuentaPage() {
@@ -36,15 +72,15 @@ export default function MiCuentaPage() {
         valid: form.newPassword.length >= 8,
       },
       {
-        label: "Una mayúscula",
+        label: "Una mayúscula (A-Z)",
         valid: /[A-Z]/.test(form.newPassword),
       },
       {
-        label: "Una minúscula",
+        label: "Una minúscula (a-z)",
         valid: /[a-z]/.test(form.newPassword),
       },
       {
-        label: "Un número",
+        label: "Un número (0-9)",
         valid: /[0-9]/.test(form.newPassword),
       },
       {
@@ -77,7 +113,7 @@ export default function MiCuentaPage() {
     try {
       const response = await usersApi.changePassword(form);
       setForm(initialForm);
-      toast.success(response.message || "Contraseña actualizada correctamente");
+      toast.success(response.message || "Contraseña actualizada exitosamente");
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -89,195 +125,256 @@ export default function MiCuentaPage() {
     }
   };
 
+  const handleLogout = () => {
+    document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    window.location.href = "/login";
+  };
+
+  const userInitials = useMemo(() => {
+    if (!sessionUser?.name) return "U";
+    return sessionUser.name
+      .split(" ")
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase();
+  }, [sessionUser]);
+
+  const roleInfo =
+    ROLE_DESCRIPTIONS[sessionUser?.role ?? "ADMIN"] ?? {
+      label: sessionUser?.role ?? "Usuario",
+      desc: "Acceso estándar a la plataforma escolar.",
+      color: "border-blue-500/30 bg-blue-500/15 text-blue-300",
+    };
+
   return (
-    <div className="mx-auto max-w-5xl animate-fade-in">
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div className="mx-auto max-w-6xl space-y-8 pb-14 animate-fade-in">
+      {/* Header Superior */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="mb-2 text-sm font-medium text-blue-300">Mi Cuenta</p>
-          <h1 className="text-3xl font-bold text-white">Seguridad de acceso</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--color-text-secondary)]">
-            Mantén tus credenciales actualizadas para proteger la información
-            financiera y administrativa de la plataforma.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-blue-500/15 text-blue-400">
+              <User className="size-5" />
+            </span>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-white">
+                Mi Cuenta & Seguridad
+              </h1>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Información de perfil, credenciales de acceso y permisos del sistema
+              </p>
+            </div>
+          </div>
         </div>
+
+        <Button
+          variant="outline"
+          onClick={handleLogout}
+          className="gap-2 text-xs border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+        >
+          <LogOut className="size-3.5" />
+          Cerrar Sesión
+        </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.4fr]">
-        <section className="glass rounded-xl p-6 shadow-xl">
-          <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/15 text-blue-300">
-            <ShieldCheck className="h-6 w-6" />
+      {/* Grid Principal de 2 Columnas */}
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* Columna Izquierda: Perfil y Rol (5 Columnas) */}
+        <div className="space-y-6 lg:col-span-5">
+          {/* Card de Perfil */}
+          <div className="glass rounded-3xl border border-[var(--color-border)] p-6 shadow-xl space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 font-bold text-white text-xl shadow-lg shadow-blue-600/30">
+                {userInitials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-bold text-white truncate">
+                  {sessionUser?.name || "Usuario del Sistema"}
+                </h2>
+                <p className="text-xs text-[var(--color-text-secondary)] truncate">
+                  {sessionUser?.email || "usuario@colegio.cl"}
+                </p>
+                <div className="mt-2">
+                  <Badge className={roleInfo.color}>
+                    {roleInfo.label}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-[var(--color-border)] pt-4 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Estado de la cuenta:</span>
+                <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="size-3.5" /> Activa
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Entorno escolar:</span>
+                <span className="font-semibold text-white">
+                  {sessionUser?.tenantName || sessionUser?.tenantSlug || "Colegio Activo"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-muted)]">Autenticación:</span>
+                <span className="font-semibold text-blue-300">
+                  JWT Seguro + Cookies HttpOnly
+                </span>
+              </div>
+            </div>
           </div>
-          <h2 className="text-lg font-semibold text-white">Datos de sesión</h2>
-          <div className="mt-5 space-y-4">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                Nombre
-              </p>
-              <p className="mt-1 truncate text-sm font-semibold text-white">
-                {sessionUser?.name || "Usuario"}
-              </p>
+
+          {/* Card de Permisos y Rol */}
+          <div className="glass rounded-3xl border border-[var(--color-border)] p-6 shadow-xl space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-5 text-purple-400" />
+              <h3 className="text-sm font-bold text-white">
+                Permisos Asignados
+              </h3>
             </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                Correo
-              </p>
-              <p className="mt-1 truncate text-sm text-[var(--color-text-secondary)]">
-                {sessionUser?.email || "No disponible"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                Rol
-              </p>
-              <span className="mt-2 inline-flex rounded-lg bg-blue-500/15 px-2.5 py-1 text-xs font-semibold text-blue-300">
-                {sessionUser?.role || "Sin rol"}
+            <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+              {roleInfo.desc}
+            </p>
+            <div className="pt-2">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/20 bg-purple-500/10 px-2.5 py-1.5 text-[11px] font-medium text-purple-300">
+                <Sparkles className="size-3" />
+                Acceso autorizado por la administración escolar
               </span>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section className="glass rounded-xl p-6 shadow-xl">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                Cambiar contraseña
-              </h2>
-              <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
-                Se solicitará tu contraseña actual antes de guardar el cambio.
-              </p>
-            </div>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
-              <LockKeyhole className="h-5 w-5" />
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <PasswordInput
-              id="currentPassword"
-              label="Contraseña actual"
-              value={form.currentPassword}
-              autoComplete="current-password"
-              show={showPasswords}
-              onChange={(value) =>
-                setForm((current) => ({ ...current, currentPassword: value }))
-              }
-            />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <PasswordInput
-                id="newPassword"
-                label="Nueva contraseña"
-                value={form.newPassword}
-                autoComplete="new-password"
-                show={showPasswords}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, newPassword: value }))
-                }
-              />
-              <PasswordInput
-                id="confirmPassword"
-                label="Confirmar contraseña"
-                value={form.confirmPassword}
-                autoComplete="new-password"
-                show={showPasswords}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, confirmPassword: value }))
-                }
-              />
-            </div>
-
-            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm font-medium text-white">
-                  Requisitos de seguridad
+        {/* Columna Derecha: Seguridad y Cambio de Contraseña (7 Columnas) */}
+        <div className="lg:col-span-7">
+          <div className="glass rounded-3xl border border-[var(--color-border)] p-6 md:p-8 shadow-xl space-y-6">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <KeyRound className="size-5 text-emerald-400" />
+                  <span>Actualizar Contraseña</span>
+                </h2>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                  Establece una nueva clave segura para tu cuenta
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setShowPasswords((current) => !current)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-white"
-                  aria-label={
-                    showPasswords
-                      ? "Ocultar contraseñas"
-                      : "Mostrar contraseñas"
-                  }
-                  title={
-                    showPasswords
-                      ? "Ocultar contraseñas"
-                      : "Mostrar contraseñas"
-                  }
-                >
-                  {showPasswords ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {checks.map((check) => (
-                  <div
-                    key={check.label}
-                    className={`flex items-center gap-2 text-sm ${
-                      check.valid
-                        ? "text-emerald-300"
-                        : "text-[var(--color-text-muted)]"
-                    }`}
-                  >
-                    <CheckCircle2 className="h-4 w-4 shrink-0" />
-                    <span>{check.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="flex justify-end pt-2">
               <button
-                type="submit"
-                disabled={!canSubmit}
-                className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/25 transition-all hover:bg-emerald-500 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                type="button"
+                onClick={() => setShowPasswords((curr) => !curr)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-white transition-colors"
               >
-                {submitting ? "Guardando..." : "Actualizar contraseña"}
+                {showPasswords ? (
+                  <>
+                    <EyeOff className="size-3.5" />
+                    <span>Ocultar</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="size-3.5" />
+                    <span>Ver</span>
+                  </>
+                )}
               </button>
             </div>
-          </form>
-        </section>
-      </div>
-    </div>
-  );
-}
 
-function PasswordInput({
-  id,
-  label,
-  value,
-  autoComplete,
-  show,
-  onChange,
-}: {
-  id: keyof PasswordState;
-  label: string;
-  value: string;
-  autoComplete: string;
-  show: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div>
-      <label
-        htmlFor={id}
-        className="mb-2 block text-sm font-medium text-[var(--color-text-secondary)]"
-      >
-        {label}
-      </label>
-      <input
-        id={id}
-        type={show ? "text" : "password"}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        autoComplete={autoComplete}
-        required
-        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-white outline-none transition-all focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)]"
-      />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                  Contraseña Actual *
+                </label>
+                <input
+                  type={showPasswords ? "text" : "password"}
+                  value={form.currentPassword}
+                  onChange={(e) =>
+                    setForm((curr) => ({ ...curr, currentPassword: e.target.value }))
+                  }
+                  autoComplete="current-password"
+                  placeholder="••••••••••••"
+                  required
+                  className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                    Nueva Contraseña *
+                  </label>
+                  <input
+                    type={showPasswords ? "text" : "password"}
+                    value={form.newPassword}
+                    onChange={(e) =>
+                      setForm((curr) => ({ ...curr, newPassword: e.target.value }))
+                    }
+                    autoComplete="new-password"
+                    placeholder="••••••••••••"
+                    required
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1">
+                    Confirmar Contraseña *
+                  </label>
+                  <input
+                    type={showPasswords ? "text" : "password"}
+                    value={form.confirmPassword}
+                    onChange={(e) =>
+                      setForm((curr) => ({ ...curr, confirmPassword: e.target.value }))
+                    }
+                    autoComplete="new-password"
+                    placeholder="••••••••••••"
+                    required
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Checklist Interactivo de Seguridad */}
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 p-4 space-y-2">
+                <p className="text-xs font-bold text-white">
+                  Requisitos de Seguridad:
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 text-xs">
+                  {checks.map((check) => (
+                    <div
+                      key={check.label}
+                      className={`flex items-center gap-1.5 transition-colors ${
+                        check.valid
+                          ? "text-emerald-400 font-medium"
+                          : "text-[var(--color-text-muted)]"
+                      }`}
+                    >
+                      <CheckCircle2
+                        className={`size-3.5 shrink-0 ${
+                          check.valid ? "text-emerald-400" : "text-gray-600"
+                        }`}
+                      />
+                      <span>{check.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button
+                  type="submit"
+                  disabled={!canSubmit}
+                  className="gap-2 text-xs bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-700/25 font-semibold"
+                >
+                  {submitting ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="size-3.5" />
+                  )}
+                  {submitting ? "Actualizando..." : "Guardar Nueva Contraseña"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

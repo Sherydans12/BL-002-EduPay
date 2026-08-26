@@ -845,14 +845,42 @@ export const communicationsApi = {
     }),
 };
 
-// ─── Analytics ───────────────────────────────────────────────
+export interface DashboardTopCourse {
+  courseId: number;
+  courseName: string;
+  totalStudents: number;
+  expectedRevenue: number;
+  collectedRevenue: number;
+  overdueDebt: number;
+  collectionRate: number;
+}
+
+export interface DashboardRecentPayment {
+  id: number;
+  amount: number;
+  paymentDate: string;
+  method: string;
+  studentName: string;
+  courseName: string;
+  payerName: string;
+}
+
 export interface FinancialDashboard {
   totalActiveStudents: number;
   totalCourses: number;
   currentMonthRevenue: number;
+  prevMonthRevenue?: number;
+  monthOverMonthGrowth?: number;
+  currentMonthTransactions?: number;
+  yearToDateRevenue?: number;
   totalOverdueDebt: number;
   totalExpectedRevenue: number;
+  collectionRate?: number;
+  alumnosAlDiaCount?: number;
+  alumnosMorososCount?: number;
   revenueByMonth: RevenueTrendItem[];
+  topCourses?: DashboardTopCourse[];
+  recentPayments?: DashboardRecentPayment[];
 }
 
 export const analyticsApi = {
