@@ -9,6 +9,11 @@ import {
   aggregateGroupsByMethod,
   buildPeriodLabel,
   buildReportsWorkbookBuffer,
+  type CourseMatrixGroup,
+  type FeeQuotaItem,
+  type FeeQuotaStatus,
+  type SchoolFeeMatrixExportData,
+  type StudentMatrixItem,
 } from '../common/excel/reports-workbook.export';
 import { Prisma } from '@prisma/client';
 
@@ -107,9 +112,236 @@ export class ReportsService {
     return result;
   }
 
+  async getSchoolFeeMatrix(
+    year = new Date().getFullYear(),
+    courseId?: number,
+  ): Promise<SchoolFeeMatrixExportData> {
+    const now = new Date();
+    const courses = await this.prisma.course.findMany({
+      where: {
+        deletedAt: null,
+        ...(courseId ? { id: courseId } : {}),
+      },
+      include: {
+        students: {
+          where: { deletedAt: null },
+          include: {
+            guardian: true,
+            charges: {
+              where: {
+                deletedAt: null,
+              },
+              include: { concept: true },
+              orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
+            },
+          },
+          orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const monthMap: Record<
+      number,
+      keyof Pick<
+        StudentMatrixItem,
+        | 'marzo'
+        | 'abril'
+        | 'mayo'
+        | 'junio'
+        | 'julio'
+        | 'agosto'
+        | 'septiembre'
+        | 'octubre'
+        | 'noviembre'
+        | 'diciembre'
+      >
+    > = {
+      2: 'marzo',
+      3: 'abril',
+      4: 'mayo',
+      5: 'junio',
+      6: 'julio',
+      7: 'agosto',
+      8: 'septiembre',
+      9: 'octubre',
+      10: 'noviembre',
+      11: 'diciembre',
+    };
+
+    const courseGroups: CourseMatrixGroup[] = [];
+    let totalInvoiced = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    let totalStudents = 0;
+
+    for (const course of courses) {
+      const studentItems: StudentMatrixItem[] = [];
+      let courseInvoiced = 0;
+      let coursePaid = 0;
+      let coursePending = 0;
+
+      for (const student of course.students) {
+        totalStudents++;
+        const emptyQuota = (): FeeQuotaItem => ({
+          status: 'NONE',
+          amount: 0,
+          paidAmount: 0,
+          dueDate: null,
+        });
+
+        const quotas: Record<string, FeeQuotaItem> = {
+          matricula: emptyQuota(),
+          marzo: emptyQuota(),
+          abril: emptyQuota(),
+          mayo: emptyQuota(),
+          junio: emptyQuota(),
+          julio: emptyQuota(),
+          agosto: emptyQuota(),
+          septiembre: emptyQuota(),
+          octubre: emptyQuota(),
+          noviembre: emptyQuota(),
+          diciembre: emptyQuota(),
+        };
+
+        let studentInvoiced = 0;
+        let studentPaid = 0;
+        let studentOverdue = 0;
+
+        for (const charge of student.charges) {
+          studentInvoiced += charge.amount;
+          studentPaid += charge.paidAmount;
+          const pending = Math.max(charge.amount - charge.paidAmount, 0);
+
+          let status: FeeQuotaStatus = 'NONE';
+          if (charge.paidAmount >= charge.amount || charge.status === 'PAID') {
+            status = 'PAID';
+          } else if (charge.paidAmount > 0) {
+            status = 'PARTIAL';
+          } else if (charge.dueDate <= now || charge.status === 'OVERDUE') {
+            status = 'OVERDUE';
+            studentOverdue += pending;
+          } else {
+            status = 'PENDING';
+          }
+
+          const conceptNameNorm = charge.concept?.name?.toLowerCase() || '';
+          const dueDateObj = new Date(charge.dueDate);
+          const dueMonth = dueDateObj.getUTCMonth();
+
+          const item: FeeQuotaItem = {
+            status,
+            amount: charge.amount,
+            paidAmount: charge.paidAmount,
+            dueDate: charge.dueDate ? charge.dueDate.toISOString() : null,
+          };
+
+          if (
+            conceptNameNorm.includes('matr') ||
+            conceptNameNorm.includes('matric')
+          ) {
+            quotas.matricula = item;
+          } else if (
+            conceptNameNorm.includes('marzo') ||
+            (!conceptNameNorm.includes('abril') && dueMonth === 2)
+          ) {
+            quotas.marzo = item;
+          } else if (conceptNameNorm.includes('abril') || dueMonth === 3) {
+            quotas.abril = item;
+          } else if (conceptNameNorm.includes('mayo') || dueMonth === 4) {
+            quotas.mayo = item;
+          } else if (conceptNameNorm.includes('junio') || dueMonth === 5) {
+            quotas.junio = item;
+          } else if (conceptNameNorm.includes('julio') || dueMonth === 6) {
+            quotas.julio = item;
+          } else if (conceptNameNorm.includes('agosto') || dueMonth === 7) {
+            quotas.agosto = item;
+          } else if (
+            conceptNameNorm.includes('sept') ||
+            conceptNameNorm.includes('set') ||
+            dueMonth === 8
+          ) {
+            quotas.septiembre = item;
+          } else if (conceptNameNorm.includes('oct') || dueMonth === 9) {
+            quotas.octubre = item;
+          } else if (conceptNameNorm.includes('nov') || dueMonth === 10) {
+            quotas.noviembre = item;
+          } else if (conceptNameNorm.includes('dic') || dueMonth === 11) {
+            quotas.diciembre = item;
+          } else if (monthMap[dueMonth]) {
+            quotas[monthMap[dueMonth]] = item;
+          }
+        }
+
+        const studentPending = Math.max(studentInvoiced - studentPaid, 0);
+        let generalStatus: StudentMatrixItem['generalStatus'] = 'PENDIENTE';
+        if (studentPaid > studentInvoiced) {
+          generalStatus = 'SALDO_A_FAVOR';
+        } else if (studentPending === 0 && studentInvoiced > 0) {
+          generalStatus = 'AL_DIA';
+        } else if (studentOverdue > 0) {
+          generalStatus = 'MOROSO';
+        }
+
+        courseInvoiced += studentInvoiced;
+        coursePaid += studentPaid;
+        coursePending += studentPending;
+
+        studentItems.push({
+          studentId: student.id,
+          studentRut: student.rut,
+          studentName: student.name,
+          guardianName: student.guardian?.name ?? '—',
+          guardianPhone: student.guardian?.phone ?? null,
+          guardianEmail: student.guardian?.email ?? null,
+          matricula: quotas.matricula,
+          marzo: quotas.marzo,
+          abril: quotas.abril,
+          mayo: quotas.mayo,
+          junio: quotas.junio,
+          julio: quotas.julio,
+          agosto: quotas.agosto,
+          septiembre: quotas.septiembre,
+          octubre: quotas.octubre,
+          noviembre: quotas.noviembre,
+          diciembre: quotas.diciembre,
+          totalInvoiced: studentInvoiced,
+          totalPaid: studentPaid,
+          totalPending: studentPending,
+          generalStatus,
+        });
+      }
+
+      totalInvoiced += courseInvoiced;
+      totalPaid += coursePaid;
+      totalPending += coursePending;
+
+      courseGroups.push({
+        courseId: course.id,
+        courseName: course.name,
+        students: studentItems,
+        subtotalInvoiced: courseInvoiced,
+        subtotalPaid: coursePaid,
+        subtotalPending: coursePending,
+      });
+    }
+
+    return {
+      year,
+      courses: courseGroups,
+      totalInvoiced,
+      totalPaid,
+      totalPending,
+      totalStudents,
+    };
+  }
+
   async exportToXlsx(filters: FilterPaymentsDto): Promise<Buffer> {
-    const { dateFrom, dateTo, courseId, studentId } = filters;
-    const groups = await this.paymentsService.findAllGroupsForExport(filters);
+    const { dateFrom, dateTo, courseId, studentId, year } = filters;
+    const [groups, matrixData] = await Promise.all([
+      this.paymentsService.findAllGroupsForExport(filters),
+      this.getSchoolFeeMatrix(year ?? new Date().getFullYear(), courseId),
+    ]);
 
     const totalCollected = groups.reduce((s, g) => s + g.totalAmount, 0);
     const transactionCount = groups.length;
@@ -149,6 +381,7 @@ export class ReportsService {
       aggregateGroupsByCourse(groups),
       aggregateGroupsByConcept(groups),
       groups,
+      matrixData,
     );
   }
 

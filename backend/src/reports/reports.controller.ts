@@ -6,6 +6,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { FilterPaymentsDto } from '../payments/dto/filter-payments.dto';
+import { MatrixReportQueryDto } from './dto/matrix-report-query.dto';
 import { MonthlyReportQueryDto } from './dto/monthly-report-query.dto';
 
 @ApiTags('reports')
@@ -13,6 +14,20 @@ import { MonthlyReportQueryDto } from './dto/monthly-report-query.dto';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
+
+  @Get('matrix')
+  @RequirePermissions('view:reports')
+  @ApiOperation({
+    summary: 'Obtener sábana/matriz de cuotas escolares por alumno y curso',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Matriz de cuotas (Matrícula + Marzo a Diciembre) por cada alumno',
+  })
+  getSchoolFeeMatrix(@Query() query: MatrixReportQueryDto) {
+    return this.reportsService.getSchoolFeeMatrix(query.year, query.courseId);
+  }
 
   @Get('dashboard/revenue-trend')
   @RequirePermissions('view:reports')

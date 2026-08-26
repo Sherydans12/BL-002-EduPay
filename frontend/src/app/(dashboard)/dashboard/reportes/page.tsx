@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { reportsApi, Course, ReportSummary } from '@/lib/api';
 import { fetchAllCourses } from '@/lib/fetch-all-pages';
 import { NativeSelectField } from '@/components/ui/dropdown-chevron';
+import { formatCLP } from '@/lib/currency-utils';
 
-export default function ReportesPage() {
+export default function DashboardReportesPage() {
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   
@@ -23,7 +24,7 @@ export default function ReportesPage() {
   }, []);
 
   useEffect(() => {
-    fetchSummary();
+    void fetchSummary();
   }, [startDate, endDate, courseId]);
 
   const fetchSummary = async () => {
@@ -32,15 +33,11 @@ export default function ReportesPage() {
     try {
       const data = await reportsApi.getSummary(startDate, endDate, courseId);
       setSummary(data);
-    } catch (err: any) {
-      setError(err.message || 'Error al cargar el reporte');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error al cargar el reporte');
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
   };
 
   return (
@@ -101,7 +98,7 @@ export default function ReportesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gradient-to-br from-blue-600/40 to-purple-600/40 backdrop-blur-md p-6 rounded-xl border border-white/20">
               <h3 className="text-blue-200 text-sm font-medium uppercase tracking-wider mb-2">Ingresos Totales</h3>
-              <p className="text-4xl font-bold text-white">{formatCurrency(summary.totalCollected)}</p>
+              <p className="text-4xl font-bold text-white">{formatCLP(summary.totalCollected)}</p>
             </div>
             <div className="bg-gradient-to-br from-green-600/40 to-teal-600/40 backdrop-blur-md p-6 rounded-xl border border-white/20">
               <h3 className="text-green-200 text-sm font-medium uppercase tracking-wider mb-2">Transacciones Registradas</h3>
@@ -111,13 +108,13 @@ export default function ReportesPage() {
 
           {/* Breakdown by Method */}
           <div>
-            <h2 className="text-xl font-semibold text-white mb-4">Desglose por M\u00e9todo de Pago</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">Desglose por Método de Pago</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {summary.byMethod.map((item, idx) => (
                 <div key={idx} className="bg-white/5 backdrop-blur-md p-5 rounded-xl border border-white/10 flex flex-col justify-between">
                   <div>
                     <h4 className="text-gray-400 text-xs font-semibold uppercase mb-1">{item.method}</h4>
-                    <p className="text-2xl font-bold text-gray-100">{formatCurrency(item.total)}</p>
+                    <p className="text-2xl font-bold text-gray-100">{formatCLP(item.total)}</p>
                   </div>
                   <div className="mt-4 pt-3 border-t border-white/10">
                     <span className="text-sm text-gray-400">{item.count} pagos</span>

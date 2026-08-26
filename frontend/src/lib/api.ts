@@ -909,12 +909,73 @@ export interface ReportSummary {
   }[];
 }
 
-export interface RevenueTrendItem {
-  month: string;
-  total: number;
+export type FeeQuotaStatus = "PAID" | "PARTIAL" | "OVERDUE" | "PENDING" | "NONE";
+
+export interface FeeQuotaItem {
+  status: FeeQuotaStatus;
+  amount: number;
+  paidAmount: number;
+  dueDate?: string | null;
+}
+
+export interface StudentMatrixItem {
+  studentId: number;
+  studentRut: string | null;
+  studentName: string;
+  guardianName: string;
+  guardianPhone: string | null;
+  guardianEmail: string | null;
+  matricula: FeeQuotaItem;
+  marzo: FeeQuotaItem;
+  abril: FeeQuotaItem;
+  mayo: FeeQuotaItem;
+  junio: FeeQuotaItem;
+  julio: FeeQuotaItem;
+  agosto: FeeQuotaItem;
+  septiembre: FeeQuotaItem;
+  octubre: FeeQuotaItem;
+  noviembre: FeeQuotaItem;
+  diciembre: FeeQuotaItem;
+  totalInvoiced: number;
+  totalPaid: number;
+  totalPending: number;
+  generalStatus: "AL_DIA" | "MOROSO" | "SALDO_A_FAVOR" | "PENDIENTE";
+}
+
+export interface CourseMatrixGroup {
+  courseId: number;
+  courseName: string;
+  students: StudentMatrixItem[];
+  subtotalInvoiced: number;
+  subtotalPaid: number;
+  subtotalPending: number;
+}
+
+export interface SchoolFeeMatrixResponse {
+  year: number;
+  courses: CourseMatrixGroup[];
+  totalInvoiced: number;
+  totalPaid: number;
+  totalPending: number;
+  totalStudents: number;
+}
+
+export interface FilterReportsParams {
+  dateFrom?: string;
+  dateTo?: string;
+  courseId?: string;
+  studentId?: string;
+  year?: number;
 }
 
 export const reportsApi = {
+  getMatrix: (params: { year?: number; courseId?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.year != null) q.set("year", String(params.year));
+    if (params.courseId != null) q.set("courseId", String(params.courseId));
+    const query = q.size > 0 ? `?${q.toString()}` : "";
+    return request<SchoolFeeMatrixResponse>(`/reports/matrix${query}`);
+  },
   getSummary: (startDate?: string, endDate?: string, courseId?: string) => {
     const params = new URLSearchParams();
     if (startDate) params.set("startDate", startDate);
@@ -923,12 +984,15 @@ export const reportsApi = {
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<ReportSummary>(`/reports/summary${query}`);
   },
-  export: (params?: { dateFrom?: string; dateTo?: string }) => {
+  export: (params: FilterReportsParams = {}) => {
     const search = new URLSearchParams();
-    if (params?.dateFrom) search.set("startDate", params.dateFrom);
-    if (params?.dateTo) search.set("endDate", params.dateTo);
-    const query = search.toString() ? `?${search.toString()}` : "";
-    return requestBlob(`/reports/monthly${query}`);
+    if (params.dateFrom) search.set("dateFrom", params.dateFrom);
+    if (params.dateTo) search.set("dateTo", params.dateTo);
+    if (params.courseId) search.set("courseId", params.courseId);
+    if (params.studentId) search.set("studentId", params.studentId);
+    if (params.year != null) search.set("year", String(params.year));
+    const query = search.size > 0 ? `?${search.toString()}` : "";
+    return requestBlob(`/reports/export${query}`);
   },
   getRevenueTrend: (months = 12) =>
     request<RevenueTrendItem[]>(

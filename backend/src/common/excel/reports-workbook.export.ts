@@ -37,6 +37,57 @@ export type ReportAggregateRow = {
   total: number;
 };
 
+export type FeeQuotaStatus = 'PAID' | 'PARTIAL' | 'OVERDUE' | 'PENDING' | 'NONE';
+
+export type FeeQuotaItem = {
+  status: FeeQuotaStatus;
+  amount: number;
+  paidAmount: number;
+  dueDate?: string | null;
+};
+
+export type StudentMatrixItem = {
+  studentId: number;
+  studentRut: string | null;
+  studentName: string;
+  guardianName: string;
+  guardianPhone: string | null;
+  guardianEmail: string | null;
+  matricula: FeeQuotaItem;
+  marzo: FeeQuotaItem;
+  abril: FeeQuotaItem;
+  mayo: FeeQuotaItem;
+  junio: FeeQuotaItem;
+  julio: FeeQuotaItem;
+  agosto: FeeQuotaItem;
+  septiembre: FeeQuotaItem;
+  octubre: FeeQuotaItem;
+  noviembre: FeeQuotaItem;
+  diciembre: FeeQuotaItem;
+  totalInvoiced: number;
+  totalPaid: number;
+  totalPending: number;
+  generalStatus: 'AL_DIA' | 'MOROSO' | 'SALDO_A_FAVOR' | 'PENDIENTE';
+};
+
+export type CourseMatrixGroup = {
+  courseId: number;
+  courseName: string;
+  students: StudentMatrixItem[];
+  subtotalInvoiced: number;
+  subtotalPaid: number;
+  subtotalPending: number;
+};
+
+export type SchoolFeeMatrixExportData = {
+  year: number;
+  courses: CourseMatrixGroup[];
+  totalInvoiced: number;
+  totalPaid: number;
+  totalPending: number;
+  totalStudents: number;
+};
+
 function thinBorder(): Partial<ExcelJS.Borders> {
   return {
     top: { style: 'thin', color: { argb: ROW_BORDER } },
@@ -180,16 +231,317 @@ function fillResumenGeneralSheet(
   }
 }
 
+export function fillSchoolFeeMatrixSheet(
+  sheet: ExcelJS.Worksheet,
+  matrix: SchoolFeeMatrixExportData,
+): void {
+  const headers = [
+    'N°',
+    'RUT Alumno',
+    'Alumno',
+    'Curso',
+    'Apoderado',
+    'Teléfono',
+    'Correo',
+    'Matrícula',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
+    'Total Facturado',
+    'Total Pagado',
+    'Deuda Pendiente',
+    'Estado General',
+  ];
+  const widths = [
+    6, 14, 28, 16, 26, 14, 25,
+    14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+    16, 16, 16, 15,
+  ];
+
+  headers.forEach((h, i) => {
+    sheet.getColumn(i + 1).width = widths[i];
+    sheet.getRow(1).getCell(i + 1).value = h;
+  });
+  styleTableHeader(sheet, headers.length);
+
+  let currentRowIdx = 2;
+  let globalStudentCounter = 1;
+
+  for (const courseGroup of matrix.courses) {
+    const courseHeaderRow = sheet.getRow(currentRowIdx);
+    courseHeaderRow.height = 24;
+    sheet.mergeCells(currentRowIdx, 1, currentRowIdx, headers.length);
+    const bannerCell = courseHeaderRow.getCell(1);
+    bannerCell.value = `CURSO: ${courseGroup.courseName.toUpperCase()}  (${courseGroup.students.length} alumnos)  |  Facturado: $${courseGroup.subtotalInvoiced.toLocaleString('es-CL')}  |  Recaudado: $${courseGroup.subtotalPaid.toLocaleString('es-CL')}  |  Pendiente: $${courseGroup.subtotalPending.toLocaleString('es-CL')}`;
+    bannerCell.font = { bold: true, color: { argb: 'FF1E3A8A' }, size: 11 };
+    bannerCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFDBEAFE' },
+    };
+    bannerCell.alignment = { vertical: 'middle', horizontal: 'left' };
+    bannerCell.border = thinBorder();
+    currentRowIdx++;
+
+    for (const student of courseGroup.students) {
+      const row = sheet.getRow(currentRowIdx);
+      row.height = 20;
+      const fillArgb = currentRowIdx % 2 === 0 ? 'FFFFFFFF' : ALT_BG;
+
+      const basicCols = [
+        globalStudentCounter++,
+        student.studentRut ?? '—',
+        student.studentName,
+        courseGroup.courseName,
+        student.guardianName ?? '—',
+        student.guardianPhone ?? '—',
+        student.guardianEmail ?? '—',
+      ];
+
+      basicCols.forEach((val, ci) => {
+        const cell = row.getCell(ci + 1);
+        cell.value = val;
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: fillArgb },
+        };
+        cell.border = thinBorder();
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: ci === 0 || ci === 1 || ci === 5 ? 'center' : 'left',
+        };
+      });
+
+      const quotaKeys: (keyof Pick<
+        StudentMatrixItem,
+        | 'matricula'
+        | 'marzo'
+        | 'abril'
+        | 'mayo'
+        | 'junio'
+        | 'julio'
+        | 'agosto'
+        | 'septiembre'
+        | 'octubre'
+        | 'noviembre'
+        | 'diciembre'
+      >)[] = [
+        'matricula',
+        'marzo',
+        'abril',
+        'mayo',
+        'junio',
+        'julio',
+        'agosto',
+        'septiembre',
+        'octubre',
+        'noviembre',
+        'diciembre',
+      ];
+
+      quotaKeys.forEach((key, qIdx) => {
+        const q = student[key];
+        const cell = row.getCell(8 + qIdx);
+        cell.border = thinBorder();
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        if (q.status === 'PAID') {
+          cell.value = q.paidAmount;
+          cell.numFmt = CURRENCY_FMT;
+          cell.font = { bold: true, color: { argb: 'FF065F46' }, size: 10 };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD1FAE5' },
+          };
+        } else if (q.status === 'OVERDUE') {
+          const debt = q.amount - q.paidAmount;
+          cell.value = debt;
+          cell.numFmt = CURRENCY_FMT;
+          cell.font = { bold: true, color: { argb: 'FF991B1B' }, size: 10 };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFEE2E2' },
+          };
+        } else if (q.status === 'PARTIAL') {
+          cell.value = `${q.paidAmount}/${q.amount}`;
+          cell.font = { bold: true, color: { argb: 'FF92400E' }, size: 9 };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFEF3C7' },
+          };
+        } else if (q.status === 'PENDING') {
+          cell.value = q.amount;
+          cell.numFmt = CURRENCY_FMT;
+          cell.font = { color: { argb: 'FF4B5563' }, size: 10 };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF3F4F6' },
+          };
+        } else {
+          cell.value = '—';
+          cell.font = { color: { argb: 'FF9CA3AF' } };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: fillArgb },
+          };
+        }
+      });
+
+      const summaryCols = [
+        student.totalInvoiced,
+        student.totalPaid,
+        student.totalPending,
+        student.generalStatus === 'AL_DIA'
+          ? 'AL DÍA'
+          : student.generalStatus === 'SALDO_A_FAVOR'
+            ? 'SALDO A FAVOR'
+            : student.generalStatus === 'MOROSO'
+              ? 'MOROSO'
+              : 'PENDIENTE',
+      ];
+
+      summaryCols.forEach((val, sIdx) => {
+        const cell = row.getCell(19 + sIdx);
+        cell.value = val;
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: fillArgb },
+        };
+        cell.border = thinBorder();
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: sIdx === 3 ? 'center' : 'right',
+        };
+        if (sIdx < 3) {
+          cell.numFmt = CURRENCY_FMT;
+          cell.font = { bold: true };
+        } else {
+          cell.font = {
+            bold: true,
+            size: 10,
+            color: {
+              argb:
+                val === 'AL DÍA' || val === 'SALDO A FAVOR'
+                  ? 'FF065F46'
+                  : val === 'MOROSO'
+                    ? 'FF991B1B'
+                    : 'FF92400E',
+            },
+          };
+        }
+      });
+
+      currentRowIdx++;
+    }
+
+    const subtotalRow = sheet.getRow(currentRowIdx);
+    subtotalRow.height = 22;
+    sheet.mergeCells(currentRowIdx, 1, currentRowIdx, 18);
+    const subtotalLabel = subtotalRow.getCell(1);
+    subtotalLabel.value = `SUBTOTAL ${courseGroup.courseName.toUpperCase()}`;
+    subtotalLabel.font = { bold: true, color: { argb: 'FF1E293B' }, size: 10 };
+    subtotalLabel.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE2E8F0' },
+    };
+    subtotalLabel.alignment = { vertical: 'middle', horizontal: 'right' };
+    subtotalLabel.border = thinBorder();
+
+    const subtotalValues = [
+      courseGroup.subtotalInvoiced,
+      courseGroup.subtotalPaid,
+      courseGroup.subtotalPending,
+      '',
+    ];
+    subtotalValues.forEach((val, idx) => {
+      const cell = subtotalRow.getCell(19 + idx);
+      cell.value = val;
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE2E8F0' },
+      };
+      cell.border = thinBorder();
+      cell.alignment = { vertical: 'middle', horizontal: 'right' };
+      if (idx < 3) {
+        cell.numFmt = CURRENCY_FMT;
+        cell.font = { bold: true };
+      }
+    });
+
+    currentRowIdx += 2;
+  }
+
+  const grandTotalRow = sheet.getRow(currentRowIdx);
+  grandTotalRow.height = 26;
+  sheet.mergeCells(currentRowIdx, 1, currentRowIdx, 18);
+  const grandTotalLabel = grandTotalRow.getCell(1);
+  grandTotalLabel.value = `TOTAL GENERAL COLEGIO (${matrix.totalStudents} ALUMNOS)`;
+  grandTotalLabel.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+  grandTotalLabel.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF0F172A' },
+  };
+  grandTotalLabel.alignment = { vertical: 'middle', horizontal: 'right' };
+  grandTotalLabel.border = thinBorder();
+
+  const grandTotals = [
+    matrix.totalInvoiced,
+    matrix.totalPaid,
+    matrix.totalPending,
+    '',
+  ];
+  grandTotals.forEach((val, idx) => {
+    const cell = grandTotalRow.getCell(19 + idx);
+    cell.value = val;
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F172A' },
+    };
+    cell.border = thinBorder();
+    cell.alignment = { vertical: 'middle', horizontal: 'right' };
+    if (idx < 3) {
+      cell.numFmt = CURRENCY_FMT;
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    }
+  });
+}
+
 export async function buildReportsWorkbookBuffer(
   meta: ReportExportMeta,
   byMethod: ReportAggregateRow[],
   byCourse: ReportAggregateRow[],
   byConcept: ReportAggregateRow[],
   groups: PaymentGroupExportPayload[],
+  matrixData?: SchoolFeeMatrixExportData,
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'BL-002 Sistema Escolar';
   wb.created = new Date();
+
+  if (matrixData && matrixData.courses.length > 0) {
+    fillSchoolFeeMatrixSheet(
+      wb.addWorksheet('Sábana de Cuotas por Curso'),
+      matrixData,
+    );
+  }
 
   fillResumenGeneralSheet(wb.addWorksheet('Resumen General'), meta);
 

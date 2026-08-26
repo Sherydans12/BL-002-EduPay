@@ -46,6 +46,15 @@ export class FilterPaymentsDto {
   studentId?: number;
 
   @ApiPropertyOptional({
+    description: 'Filtrar por año escolar',
+    example: 2026,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  year?: number;
+
+  @ApiPropertyOptional({
     description: 'Filtrar por método de pago',
     enum: PaymentMethod,
     example: PaymentMethod.TRANSFER,
