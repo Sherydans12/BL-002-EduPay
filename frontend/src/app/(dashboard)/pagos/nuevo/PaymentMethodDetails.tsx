@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import type { PaymentMethod } from "@/lib/api";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import {
@@ -185,14 +186,13 @@ export function PaymentMethodDetails({
                 $
               </span>
               <input
-                type="number"
-                min={0}
-                step={500}
-                placeholder="Monto recibido (ej. 100000)"
-                value={cashReceived ?? ""}
+                type="text"
+                inputMode="numeric"
+                placeholder="Monto recibido (ej. 100.000)"
+                value={cashReceived ? formatNumberCLP(cashReceived) : ""}
                 onChange={(e) => {
-                  const val = e.target.value === "" ? undefined : Number(e.target.value);
-                  setCashReceived(val);
+                  const val = parseCLP(e.target.value);
+                  setCashReceived(val > 0 ? val : undefined);
                 }}
                 className="w-full pl-8 pr-4 py-2 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-white text-sm font-mono focus:border-blue-400 outline-none"
               />

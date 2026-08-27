@@ -317,16 +317,14 @@ export function StudentChargesCard({
                   $
                 </span>
                 <input
-                  type="number"
-                  min={1}
-                  step={500}
-                  placeholder="Ej. 25000"
-                  value={customAmount ?? ""}
-                  onChange={(e) =>
-                    setCustomAmount(
-                      e.target.value === "" ? undefined : Number(e.target.value)
-                    )
-                  }
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Ej. 25.000"
+                  value={customAmount ? formatNumberCLP(customAmount) : ""}
+                  onChange={(e) => {
+                    const parsed = parseCLP(e.target.value);
+                    setCustomAmount(parsed > 0 ? parsed : undefined);
+                  }}
                   className="w-full pl-7 pr-3 py-2 text-sm font-mono rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-white focus:border-blue-400 outline-none"
                 />
               </div>
@@ -445,12 +443,12 @@ export function StudentChargesCard({
                               $
                             </span>
                             <input
-                              type="number"
-                              min={1}
-                              value={allocatedAmount === 0 ? "" : allocatedAmount}
+                              type="text"
+                              inputMode="numeric"
+                              value={allocatedAmount ? formatNumberCLP(allocatedAmount) : ""}
                               onChange={(e) => {
-                                const val = e.target.value === "" ? undefined : Number(e.target.value);
-                                onAmountChange(charge.id, val);
+                                const parsed = parseCLP(e.target.value);
+                                onAmountChange(charge.id, parsed > 0 ? parsed : undefined);
                               }}
                               className="w-32 pl-6 pr-2.5 py-1.5 text-right font-mono text-sm font-semibold rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-white focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all"
                             />

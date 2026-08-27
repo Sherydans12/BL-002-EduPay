@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatCLP } from "@/lib/currency-utils";
+import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 
 const conceptSchema = z.object({
   name: z
@@ -64,6 +64,8 @@ export default function ConceptosPage() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<ConceptFormData>({
     resolver: zodResolver(conceptSchema),
@@ -418,10 +420,14 @@ export default function ConceptosPage() {
                 Monto Base Sugerido ($ CLP) *
               </label>
               <input
-                type="number"
-                step="1"
-                placeholder="45000"
-                {...register("defaultAmount", { valueAsNumber: true })}
+                type="text"
+                inputMode="numeric"
+                placeholder="45.000"
+                value={watch("defaultAmount") ? formatNumberCLP(watch("defaultAmount")) : ""}
+                onChange={(e) => {
+                  const val = parseCLP(e.target.value);
+                  setValue("defaultAmount", val, { shouldValidate: true });
+                }}
                 className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs font-mono text-white focus:border-[var(--color-primary)] outline-none"
               />
               {errors.defaultAmount && (

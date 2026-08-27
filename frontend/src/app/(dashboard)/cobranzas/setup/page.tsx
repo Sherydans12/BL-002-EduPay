@@ -1194,11 +1194,11 @@ export default function FinancialSetupRadarPage() {
                         Monto Matrícula ($)
                       </label>
                       <input
-                        type="number"
-                        min={0}
-                        step={1000}
-                        value={genEnrollmentAmount}
-                        onChange={(e) => setGenEnrollmentAmount(Number(e.target.value))}
+                        type="text"
+                        inputMode="numeric"
+                        value={genEnrollmentAmount ? formatNumberCLP(genEnrollmentAmount) : ""}
+                        onChange={(e) => setGenEnrollmentAmount(parseCLP(e.target.value))}
+                        placeholder="0"
                         className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-white font-mono text-xs outline-none focus:border-[var(--color-primary)]"
                       />
                       <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--color-text-muted)] cursor-pointer">
@@ -1217,11 +1217,11 @@ export default function FinancialSetupRadarPage() {
                         Monto Mensualidad ($)
                       </label>
                       <input
-                        type="number"
-                        min={0}
-                        step={1000}
-                        value={genMonthlyAmount}
-                        onChange={(e) => setGenMonthlyAmount(Number(e.target.value))}
+                        type="text"
+                        inputMode="numeric"
+                        value={genMonthlyAmount ? formatNumberCLP(genMonthlyAmount) : ""}
+                        onChange={(e) => setGenMonthlyAmount(parseCLP(e.target.value))}
+                        placeholder="0"
                         className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-white font-mono text-xs outline-none focus:border-[var(--color-primary)]"
                       />
                     </div>
@@ -1363,13 +1363,21 @@ export default function FinancialSetupRadarPage() {
                                 Monto ($)
                               </label>
                               <input
-                                type="number"
-                                min={paidAmount || 1}
-                                step={100}
-                                {...register(`charges.${index}.amount`, {
-                                  valueAsNumber: true,
-                                })}
+                                type="text"
+                                inputMode="numeric"
+                                value={
+                                  watchedCharge?.amount !== undefined && watchedCharge?.amount !== null
+                                    ? formatNumberCLP(watchedCharge.amount)
+                                    : field.amount
+                                      ? formatNumberCLP(field.amount)
+                                      : ""
+                                }
+                                onChange={(e) => {
+                                  const val = parseCLP(e.target.value);
+                                  setValue(`charges.${index}.amount`, val, { shouldValidate: true });
+                                }}
                                 disabled={isPaid}
+                                placeholder="0"
                                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs font-semibold font-mono tabular-nums text-white text-right outline-none focus:border-[var(--color-primary)] disabled:opacity-70"
                               />
                             </div>
