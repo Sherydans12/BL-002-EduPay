@@ -37,6 +37,33 @@ describe('AcademicFinancialProjectionService', () => {
   const projectionUpsert = jest.fn();
   const consumedCreate = jest.fn();
   const quarantineCreate = jest.fn();
+  const financialWrite = jest.fn();
+  const financialModels = {
+    charge: {
+      create: financialWrite,
+      update: financialWrite,
+      upsert: financialWrite,
+      delete: financialWrite,
+    },
+    payment: {
+      create: financialWrite,
+      update: financialWrite,
+      upsert: financialWrite,
+      delete: financialWrite,
+    },
+    student: {
+      create: financialWrite,
+      update: financialWrite,
+      upsert: financialWrite,
+      delete: financialWrite,
+    },
+    course: {
+      create: financialWrite,
+      update: financialWrite,
+      upsert: financialWrite,
+      delete: financialWrite,
+    },
+  };
   const tx = {
     academicFinancialProjectionConsumedEvent: {
       findUnique: consumedFind,
@@ -49,6 +76,7 @@ describe('AcademicFinancialProjectionService', () => {
       update: jest.fn(),
     },
     academicFinancialProjectionQuarantine: { create: quarantineCreate },
+    ...financialModels,
   };
   const prisma = {
     $transaction: jest.fn((operation: (client: typeof tx) => unknown) =>
@@ -65,6 +93,7 @@ describe('AcademicFinancialProjectionService', () => {
       update: jest.fn(),
       count: jest.fn(),
     },
+    ...financialModels,
   };
   const config = {
     enabled: jest.fn(() => true),
@@ -129,6 +158,26 @@ describe('AcademicFinancialProjectionService', () => {
     expect(projectionUpsert).not.toHaveBeenCalled();
   });
 
+  it('keeps version 8 when version 7 arrives afterwards', async () => {
+    await expect(
+      service.consume(
+        event(8, { eventId: '12121212-1212-4121-8121-121212121212' }),
+        canonical,
+      ),
+    ).resolves.toEqual({ outcome: 'APPLIED' });
+    projectionFind.mockResolvedValueOnce({ id: 'projection-id', version: 8n });
+    await expect(
+      service.consume(
+        event(7, { eventId: '13131313-1313-4131-8131-131313131313' }),
+        canonical,
+      ),
+    ).resolves.toEqual({
+      outcome: 'STALE',
+      reasonCode: 'ENTITY_VERSION_NOT_NEWER',
+    });
+    expect(projectionUpsert).toHaveBeenCalledTimes(1);
+  });
+
   it('quarantines an event when the explicit canonical mapping is absent', async () => {
     mappingFind.mockResolvedValueOnce(null);
     await expect(service.consume(event(), canonical)).resolves.toEqual({
@@ -179,12 +228,30 @@ describe('AcademicFinancialProjectionService', () => {
     expect(projectionUpsert).not.toHaveBeenCalled();
   });
 
-  it('fails closed when shadow mode is disabled', async () => {
+  it('has zero legacy or financial writes when shadow mode is disabled', async () => {
     config.enabled.mockReturnValueOnce(false);
     await expect(service.consume(event(), canonical)).rejects.toMatchObject({
       status: 503,
     });
     expect(projectionUpsert).not.toHaveBeenCalled();
+    expect(financialWrite).not.toHaveBeenCalled();
+  });
+
+  it('updates only the projection when enabled, never Charge, Payment, Student, or Course', async () => {
+    await expect(service.consume(event(), canonical)).resolves.toEqual({
+      outcome: 'APPLIED',
+    });
+    expect(projectionUpsert).toHaveBeenCalledTimes(1);
+    expect(financialWrite).not.toHaveBeenCalled();
+  });
+
+  it('rejects a validly shaped event from another canonical tenant before any write', async () => {
+    await expect(
+      service.consume(event(), '22222222-2222-4222-8222-222222222222'),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(projectionUpsert).not.toHaveBeenCalled();
+    expect(financialWrite).not.toHaveBeenCalled();
   });
 
   it('does not reconcile a partial snapshot and reconciles a complete one only after counts match', async () => {

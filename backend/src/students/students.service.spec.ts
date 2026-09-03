@@ -8,6 +8,7 @@ describe('StudentsService structured names', () => {
     student: {
       create: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn(),
     },
   };

@@ -1,7 +1,8 @@
 # Academic Financial Projection v1 — shadow de BL
 
-Estado: **implementado, desactivado por defecto y no conectado a decisiones
-financieras**.
+Estado: **Fases 1A, 1B y 1C implementadas en worktrees aislados; shadow BL
+desactivado por defecto y no conectado a decisiones financieras**. No hay
+activación de producción, migración aplicada ni backfill real.
 
 BL puede mantener una proyección académica shadow procedente de Académico,
 pero dicha proyección aún no participa de obligaciones, cuotas, pagos,
