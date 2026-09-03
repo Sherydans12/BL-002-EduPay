@@ -54,6 +54,8 @@ async function bootstrap() {
       'X-Tenant-ID',
       'X-Source-Tenant-ID',
       'X-Correlation-ID',
+      'X-EduPay-Service',
+      'X-EduPay-Service-Key-Id',
     ],
   });
 

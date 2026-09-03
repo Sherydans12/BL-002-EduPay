@@ -15,6 +15,9 @@ const TENANT_MODELS = new Set([
   'NotificationLog',
   'SentCommunication',
   'TenantEmailConfig',
+  'AcademicFinancialProjection',
+  'AcademicFinancialProjectionConsumedEvent',
+  'AcademicFinancialProjectionSnapshot',
 ]);
 
 const SYSTEM_MODELS = new Set([

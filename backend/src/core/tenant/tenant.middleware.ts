@@ -28,7 +28,11 @@ export class TenantMiddleware implements NestMiddleware {
     _response: Response,
     next: NextFunction,
   ): Promise<void> {
-    if (/\/v1\/integrations\/academico(?:\/|$)/.test(request.path)) {
+    if (
+      /\/integrations\/(?:academico|academic-financial-projection)(?:\/|$)/.test(
+        request.path,
+      )
+    ) {
       tenantContext.run({ tenantId: null, isSuperAdmin: true }, () => next());
       return;
     }
