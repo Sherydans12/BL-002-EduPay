@@ -23,6 +23,7 @@ const SYSTEM_MODELS = new Set([
   'Role',
   'Permission',
   'IntegrationIdentity',
+  'TenantCanonicalMapping',
 ]);
 
 export function isTenantScopedModel(model: string | undefined): boolean {

@@ -74,10 +74,10 @@ enum DeliveryStatus {
 // ─── Models ──────────────────────────────────────────────────
 
 model Tenant {
-  id                 String              @id
+  id                 String                  @id
   name               String
-  slug               String              @unique
-  isActive           Boolean             @default(true)
+  slug               String                  @unique
+  isActive           Boolean                 @default(true)
   courses            Course[]
   guardians          Guardian[]
   students           Student[]
@@ -88,9 +88,10 @@ model Tenant {
   notificationLogs   NotificationLog[]
   sentCommunications SentCommunication[]
   emailConfig        TenantEmailConfig?
+  canonicalMapping   TenantCanonicalMapping?
   users              User[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@map("tenants")
 }
@@ -352,20 +353,40 @@ model TenantEmailConfig {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  tenantId  String?
-  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
-  email     String   @unique
-  password  String
-  name      String
-  isActive  Boolean  @default(true)
-  roleId    String
-  role      Role     @relation(fields: [roleId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                        String                   @id @default(uuid())
+  tenantId                  String?
+  tenant                    Tenant?                  @relation(fields: [tenantId], references: [id])
+  email                     String                   @unique
+  password                  String
+  name                      String
+  isActive                  Boolean                  @default(true)
+  roleId                    String
+  role                      Role                     @relation(fields: [roleId], references: [id])
+  assignedCanonicalMappings TenantCanonicalMapping[] @relation("TenantCanonicalMappingAssignedBy")
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 
   @@index([tenantId])
   @@map("users")
+}
+
+/// Mapea una sola vez el tenant financiero local a su tenant canónico de
+/// EduPay Identity. Es una frontera entre bases de datos: no hay FK hacia
+/// Identity y nunca se infiere desde slug, nombre ni desde un JWT de cliente.
+model TenantCanonicalMapping {
+  tenantId          String   @id
+  canonicalTenantId String   @unique @db.Uuid
+  assignedByUserId  String
+  correlationId     String
+  reason            String
+  createdAt         DateTime @default(now())
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignedByUser User   @relation("TenantCanonicalMappingAssignedBy", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([assignedByUserId])
+  @@index([correlationId])
+  @@map("tenant_canonical_mappings")
 }
 
 model Role {
