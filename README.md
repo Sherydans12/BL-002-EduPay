@@ -1,11 +1,26 @@
 # BaseLogic-EduPay (BL-002)
 
+## Estado operativo vigente
+
+Fase de remediación y limpieza cerrada el **2026-09-11**. FRONT y BACK son
+recursos separados en Coolify, ambos publicados en **502e646**.
+
+- [Topología, repositorios, conexiones y recursos Coolify](docs/operations/PRODUCTION.md).
+- [Runbook de despliegue, rollback y entornos aislados](docs/operations/RUNBOOK.md).
+- [Cierre de fase y límites verificados](docs/operations/PHASE-CLOSEOUT.md).
+- [Inventario estructurado sin secretos](docs/operations/coolify-inventory.json).
+- [Reglas para agentes y próximas mejoras](AGENTS.md).
+
+Para continuar, crear un worktree desde `codex/production-stable-baseline`.
+Los directorios con WIP y las instrucciones locales no son la configuración
+productiva. El backup Académico/Identity no certifica recuperación de BL-002.
+
 > Sistema de registro manual de pagos para colegios.
 
 [![Version](https://img.shields.io/badge/version-1.0--RC-blue)]()
 [![NestJS](https://img.shields.io/badge/Backend-NestJS%2011-red)]()
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-black)]()
-[![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL%2015-blue)]()
+[![PostgreSQL](https://img.shields.io/badge/DB%20produccion-PostgreSQL%2018-blue)]()
 
 ---
 
@@ -38,16 +53,16 @@ EduPay permite al personal administrativo de un colegio:
 |------|-----------|
 | Backend | NestJS 11, TypeScript, Prisma 7, Passport JWT |
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS, Zod 4, React Hook Form |
-| Base de Datos | PostgreSQL 15 |
+| Base de Datos | PostgreSQL 18 en producción; PostgreSQL 15 en el ejemplo local histórico |
 | Documentación API | Swagger (OpenAPI 3.0) en `/api/docs` |
-| Despliegue | cPanel / Passenger (Node.js App) |
+| Despliegue | Coolify: aplicaciones FRONT y BACK separadas; cPanel es histórico |
 | Contenedor local | Docker Compose (PostgreSQL) |
 
 ---
 
 ## Requisitos Previos
 
-- **Node.js** >= 18.x
+- **Node.js 22** para reproducir el entorno de CI; no cambiar por ello la imagen productiva
 - **npm** >= 9.x
 - **Docker** y **Docker Compose** (para la base de datos local)
 - **Git**
@@ -131,19 +146,11 @@ npm run dev
 
 ---
 
-## Credenciales del Super Admin
+## Credenciales y acceso
 
-El seeder (`prisma/seed.ts`) crea automáticamente:
-
-| Campo | Valor |
-|-------|-------|
-| **Email** | `admin@baselogic.cl` |
-| **Contraseña** | `admin123` |
-| **Rol** | `SUPER_ADMIN` (todos los permisos) |
-
-> ⚠️ **Cambiar la contraseña** inmediatamente tras el primer login en producción.
-
----
+No publicar credenciales de administrador en documentación. Usar cuentas sintéticas
+para desarrollo y mecanismos protegidos para accesos productivos. Los seeders y
+usuarios de ejemplo son exclusivamente locales; no ejecutarlos en producción.
 
 ## Estructura del Proyecto
 
@@ -236,11 +243,11 @@ Detalle de cada prueba, cobertura del flujo de pagos y CI: **[docs/TESTING.md](d
 
 ---
 
-## Despliegue en Producción (cPanel)
+## Despliegue productivo
 
-Consultar la guía detallada en [`README-deploy.md`](./README-deploy.md) (Coolify + Docker; migraciones automáticas al arranque del backend).
-
----
+La operación vigente usa Coolify con FRONT y BACK separados. Seguir
+[el runbook actual](docs/operations/RUNBOOK.md). README-deploy.md conserva
+referencias de cPanel como documentación histórica; no aplicarlas a la VPS actual.
 
 ## Licencia
 

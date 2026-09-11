@@ -1,3 +1,5 @@
+> Histórico: cPanel/Passenger. Desde el cierre del 2026-09-11, la operación vigente se documenta en [PRODUCTION.md](docs/operations/PRODUCTION.md) y [RUNBOOK.md](docs/operations/RUNBOOK.md). No ejecutar estas instrucciones sobre los recursos actuales de Coolify.
+
 # EduPay – Guía de Despliegue (Coolify + Docker)
 
 ## Requisitos
