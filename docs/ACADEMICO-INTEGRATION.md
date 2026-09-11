@@ -1,3 +1,5 @@
+> Estado de despliegue y conexiones: [inventario productivo 2026-09-11](operations/PRODUCTION.md). Este contrato v1 corresponde al código BL-002 502e646; las propuestas v2 locales no fueron promovidas en este cierre.
+
 # EduPay → Académico source integration contract
 
 This document defines the EduPay source-side contract accepted by Académico ADR-0015 and ADR-0016. It does not define or implement the Académico consumer. The stable contract version is `schemaVersion = "1"`.
