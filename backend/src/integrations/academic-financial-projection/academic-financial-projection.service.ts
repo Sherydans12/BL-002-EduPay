@@ -43,7 +43,10 @@ export type AcademicFinancialProjectionEvent = {
 };
 
 export type ProjectionOutcome =
-  'APPLIED' | 'DUPLICATE' | 'STALE' | 'QUARANTINED';
+  | 'APPLIED'
+  | 'DUPLICATE'
+  | 'STALE'
+  | 'QUARANTINED';
 
 @Injectable()
 export class AcademicFinancialProjectionService {
