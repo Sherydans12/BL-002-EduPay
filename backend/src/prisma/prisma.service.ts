@@ -15,6 +15,9 @@ const TENANT_MODELS = new Set([
   'NotificationLog',
   'SentCommunication',
   'TenantEmailConfig',
+  'AcademicFinancialProjection',
+  'AcademicFinancialProjectionConsumedEvent',
+  'AcademicFinancialProjectionSnapshot',
 ]);
 
 const SYSTEM_MODELS = new Set([
@@ -23,6 +26,7 @@ const SYSTEM_MODELS = new Set([
   'Role',
   'Permission',
   'IntegrationIdentity',
+  'TenantCanonicalMapping',
 ]);
 
 export function isTenantScopedModel(model: string | undefined): boolean {

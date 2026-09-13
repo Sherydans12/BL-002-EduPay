@@ -71,13 +71,34 @@ enum DeliveryStatus {
   FAILED
 }
 
+enum AcademicFinancialProjectionOperation {
+  UPSERT
+  TOMBSTONE
+}
+
+enum AcademicFinancialProjectionEventOutcome {
+  APPLIED
+  DUPLICATE
+  STALE
+  REJECTED
+  QUARANTINED
+}
+
+enum AcademicFinancialProjectionSnapshotStatus {
+  STARTED
+  INCOMPLETE
+  COMPLETE
+  RECONCILED
+  FAILED
+}
+
 // ─── Models ──────────────────────────────────────────────────
 
 model Tenant {
-  id                 String              @id
+  id                 String                  @id
   name               String
-  slug               String              @unique
-  isActive           Boolean             @default(true)
+  slug               String                  @unique
+  isActive           Boolean                 @default(true)
   courses            Course[]
   guardians          Guardian[]
   students           Student[]
@@ -88,9 +109,13 @@ model Tenant {
   notificationLogs   NotificationLog[]
   sentCommunications SentCommunication[]
   emailConfig        TenantEmailConfig?
+  canonicalMapping   TenantCanonicalMapping?
+  academicFinancialProjections AcademicFinancialProjection[]
+  academicFinancialProjectionEvents AcademicFinancialProjectionConsumedEvent[]
+  academicFinancialProjectionSnapshots AcademicFinancialProjectionSnapshot[]
   users              User[]
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@map("tenants")
 }
@@ -352,20 +377,136 @@ model TenantEmailConfig {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  tenantId  String?
-  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
-  email     String   @unique
-  password  String
-  name      String
-  isActive  Boolean  @default(true)
-  roleId    String
-  role      Role     @relation(fields: [roleId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                        String                   @id @default(uuid())
+  tenantId                  String?
+  tenant                    Tenant?                  @relation(fields: [tenantId], references: [id])
+  email                     String                   @unique
+  password                  String
+  name                      String
+  isActive                  Boolean                  @default(true)
+  roleId                    String
+  role                      Role                     @relation(fields: [roleId], references: [id])
+  assignedCanonicalMappings TenantCanonicalMapping[] @relation("TenantCanonicalMappingAssignedBy")
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 
   @@index([tenantId])
   @@map("users")
+}
+
+/// Mapea una sola vez el tenant financiero local a su tenant canónico de
+/// EduPay Identity. Es una frontera entre bases de datos: no hay FK hacia
+/// Identity y nunca se infiere desde slug, nombre ni desde un JWT de cliente.
+model TenantCanonicalMapping {
+  tenantId          String   @id
+  canonicalTenantId String   @unique @db.Uuid
+  assignedByUserId  String
+  correlationId     String
+  reason            String
+  createdAt         DateTime @default(now())
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignedByUser User   @relation("TenantCanonicalMappingAssignedBy", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([assignedByUserId])
+  @@index([correlationId])
+  @@map("tenant_canonical_mappings")
+}
+
+/// Read-only shadow of the audited Academic Financial Projection v1 contract.
+/// It is deliberately unrelated to BL Course/Student/Charge/Payment models.
+model AcademicFinancialProjection {
+  id                    String                             @id @default(uuid()) @db.Uuid
+  tenantId              String
+  canonicalTenantId     String                             @db.Uuid
+  academicYearId        String                             @db.Uuid
+  academicStudentId     String                             @db.Uuid
+  academicCourseId      String                             @db.Uuid
+  academicEnrollmentId  String                             @db.Uuid
+  enrollmentStatus      String                             @db.VarChar(16)
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  version               BigInt
+  sourceUpdatedAt       DateTime
+  operation             AcademicFinancialProjectionOperation
+  lastEventId           String?                            @db.Uuid
+  lastSnapshotId        String?                            @db.Uuid
+  createdAt             DateTime                           @default(now())
+  updatedAt             DateTime                           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, academicEnrollmentId])
+  @@index([canonicalTenantId, academicEnrollmentId])
+  @@index([tenantId, academicYearId, enrollmentStatus])
+  @@index([tenantId, operation, sourceUpdatedAt])
+  @@map("academic_financial_projections")
+}
+
+/// Append-only processing ledger. Its composite identity makes duplicate event
+/// replay observable without allowing an older entity version to overwrite a newer one.
+model AcademicFinancialProjectionConsumedEvent {
+  producer              String                                    @default("ACADEMIC") @db.VarChar(32)
+  canonicalTenantId     String                                    @map("canonical_tenant_id") @db.Uuid
+  eventId               String                                    @map("event_id") @db.Uuid
+  tenantId              String?
+  aggregateId           String?                                   @map("aggregate_id") @db.Uuid
+  entityVersion         BigInt?                                   @map("entity_version")
+  outcome               AcademicFinancialProjectionEventOutcome
+  reasonCode            String?                                   @map("reason_code") @db.VarChar(80)
+  correlationId         String?                                   @map("correlation_id") @db.VarChar(128)
+  receivedAt            DateTime                                  @default(now()) @map("received_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([producer, canonicalTenantId, eventId])
+  @@index([tenantId, receivedAt])
+  @@index([canonicalTenantId, aggregateId, entityVersion])
+  @@map("academic_financial_projection_consumed_events")
+}
+
+/// Invalid or unrouteable source messages are retained without inferring a
+/// tenant. Operators can inspect and explicitly resolve the cause later.
+model AcademicFinancialProjectionQuarantine {
+  id                    String   @id @default(uuid()) @db.Uuid
+  producer              String   @default("ACADEMIC") @db.VarChar(32)
+  canonicalTenantId     String   @map("canonical_tenant_id") @db.Uuid
+  eventId               String?  @map("event_id") @db.Uuid
+  reasonCode            String   @map("reason_code") @db.VarChar(80)
+  correlationId         String?  @map("correlation_id") @db.VarChar(128)
+  payload               Json
+  resolvedAt            DateTime? @map("resolved_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@unique([producer, canonicalTenantId, eventId])
+  @@index([canonicalTenantId, resolvedAt, createdAt])
+  @@map("academic_financial_projection_quarantine")
+}
+
+/// Local progress for a remote snapshot. Absence is never used as a tombstone
+/// until a complete source boundary has been recorded and reconciled.
+model AcademicFinancialProjectionSnapshot {
+  id                    String                                    @id @default(uuid()) @db.Uuid
+  tenantId              String
+  canonicalTenantId     String                                    @db.Uuid
+  sourceSnapshotId      String                                    @db.Uuid
+  sourceSnapshotToken   String                                    @db.Text
+  nextCursor            String?                                   @map("next_cursor") @db.Text
+  status                AcademicFinancialProjectionSnapshotStatus @default(STARTED)
+  watermark             String?                                   @db.Text
+  expectedItemCount     Int?                                      @map("expected_item_count")
+  receivedItemCount     Int                                       @default(0) @map("received_item_count")
+  startedAt             DateTime                                  @default(now()) @map("started_at")
+  completedAt           DateTime?                                 @map("completed_at")
+  reconciledAt          DateTime?                                 @map("reconciled_at")
+  errorCode             String?                                   @map("error_code") @db.VarChar(80)
+  updatedAt             DateTime                                  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, sourceSnapshotId])
+  @@index([tenantId, status, startedAt])
+  @@map("academic_financial_projection_snapshots")
 }
 
 model Role {
