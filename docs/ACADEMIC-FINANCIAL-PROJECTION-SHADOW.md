@@ -92,3 +92,21 @@ explícita, pero no crea matching automático por nombre/RUT/label.
 validada contra schema Prisma; NO EJECUTADA en una base real**. No contiene
 backfill, activación, sincronización ni cambios a finance. Su prueba sólo está
 permitida en una base PostgreSQL aislada.
+
+## Gate HTTP de integración
+
+El escenario de snapshot se ejecuta por el endpoint administrativo real
+`POST /api/integrations/academic-financial-projection/shadow/tenants/{tenantId}/snapshots`.
+El arnés crea un `SUPER_ADMIN` sintético en la base de prueba, interrumpe la
+segunda página a través de un proxy de loopback y verifica que BL conserve el
+cursor y el estado `INCOMPLETE`. `POST .../{snapshotId}/resume` continúa desde
+esa página; sólo después de recibir el watermark terminal se permite
+`RECONCILED`. La ausencia durante un snapshot parcial nunca elimina filas ni
+crea tombstones.
+
+El gate también prueba las flags de producer, publisher y consumer de forma
+independiente. Con producer apagado siguen disponibles las operaciones normales
+de matrícula, pero no se crea outbox. Con publisher apagado el evento queda
+`PENDING`. Con consumer apagado BL responde servicio no disponible y no escribe
+shadow, ledger ni tablas financieras; al reactivar, el mismo evento se acepta.
+Todas las pruebas usan datos, tokens, puertos y PostgreSQL aislados.

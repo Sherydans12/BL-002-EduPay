@@ -141,6 +141,7 @@ export class AcademicFinancialProjectionSnapshotService {
             expectedItemCount: received,
             completedAt: new Date(),
             nextCursor: null,
+            errorCode: null,
           },
         });
         return this.projection.reconcileSnapshot(tenantId, snapshot.id);
@@ -149,7 +150,10 @@ export class AcademicFinancialProjectionSnapshotService {
       await this.prisma.academicFinancialProjectionSnapshot.update({
         where: { id: snapshot.id },
         data: {
-          status: 'FAILED',
+          // A failure after a page has been committed is resumable. Keep the
+          // durable cursor and advertise that no reconciliation is allowed
+          // until the remaining pages are drained.
+          status: cursor ? 'INCOMPLETE' : 'FAILED',
           errorCode: this.safeErrorCode(error),
           nextCursor: cursor ?? null,
         },
