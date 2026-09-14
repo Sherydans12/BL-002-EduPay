@@ -36,9 +36,10 @@ un nuevo contrato ni cambios fuera del alcance aprobado.
   reconstruir y sobrescribir tags, por lo que no basta el historial.
 - Identificar hooks y entrypoints. BL BACK debe conservar RUN_MIGRATIONS
   desactivado. No lanzar migration runners como efecto lateral de un redeploy.
-- Revisar automatismos antes de publicar en main: al cierre, auto deploy está
-  activo en BL FRONT y BACK, y desactivado en Academic FRONT. Los SHAs están
-  fijados, pero no asumir que publicar documentación no genera un webhook.
+- Revisar automatismos antes de publicar en main: desde el release 2026-09-14,
+  auto deploy está desactivado en BL FRONT y BACK (`Manual deployments only`) y
+  Academic FRONT también permanece desactivado. Los SHAs están fijados, pero
+  no asumir que publicar documentación no genera un webhook.
   Las ramas documentales y baselines no sustituyen la configuración de release.
 
 ## Gates por recurso
