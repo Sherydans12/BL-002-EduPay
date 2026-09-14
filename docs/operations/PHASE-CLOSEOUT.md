@@ -131,9 +131,9 @@ documentación no cambian el SHA/digest que está ejecutando Coolify.
 5. main quedó reconciliado con el código aprobado y la documentación. El BACK
    productivo corresponde al commit `16e208…` y la documentación final queda
    en el commit posterior de main; los SHAs/digests de Coolify siguen
-   identificando los artefactos en ejecución, no los commits documentales. BL
-   FRONT/BACK conservan auto deploy bloqueado; cualquier cambio de pin requiere
-   una operación manual explícita.
+identificando los artefactos en ejecución, no los commits documentales. BL
+FRONT/BACK conservan auto deploy manual; cualquier cambio de pin requiere una
+operación manual explícita.
 
 Estos límites no invalidan las pruebas funcionales confirmadas; delimitan qué
 se cerró y qué debe resolverse en el siguiente cambio afectado.
