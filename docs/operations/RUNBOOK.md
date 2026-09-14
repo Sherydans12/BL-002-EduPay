@@ -142,6 +142,23 @@ Checksums SHA-256 canónicos registrados por Prisma después de la aplicación:
 - `scripts/academic-financial-projection-preflight.sql` →
   `d8fb59768ad9d89339d968576ac0f0c7f0e1ef5d18c10652b23b8e1040bdf85bd`
 
+La diferencia frente a los hashes propuestos inicialmente quedó explicada por
+finales de línea, no por contenido SQL: el checkout autorizado de Windows
+tenía CRLF, mientras que el blob del commit `16e208…`, el staging del runner y
+los archivos inspeccionados en el contenedor desplegado tenían LF. Evidencia
+reproducible (bytes / finales de línea / SHA-256):
+
+| Archivo | Checkout autorizado | Blob `16e208…` | Runner/contenedor |
+|---|---|---|---|
+| Mapping | 1385 / CRLF 29 / `8650645e…` | 1356 / LF 29 / `031f6e0e…` | `031f6e0e…` |
+| Shadow | 5540 / CRLF 88 / `6aee6fd2…` | 5452 / LF 88 / `fee0f6cc…` | `fee0f6cc…` |
+
+El comando de verificación del runner fue `sha256sum` sobre los dos
+`migration.sql` staged; la comprobación read-only posterior con `docker exec`
+repitió esos dos hashes. No hubo diferencia semántica ni se normalizaron o
+alteraron los checksums de `_prisma_migrations`; los valores canónicos son los
+del blob LF y del runner.
+
 La operación usó `psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f
 scripts/academic-financial-projection-preflight.sql`, luego `prisma migrate
 status` desde el árbol exacto del commit aprobado y finalmente
