@@ -13,10 +13,67 @@ SELECT migration_name,
 FROM "_prisma_migrations"
 ORDER BY started_at, migration_name;
 
-SELECT count(*) AS failed_or_incomplete_migrations
+SELECT count(*) FILTER (WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)
+         AS applied_attempts,
+       count(*) FILTER (WHERE rolled_back_at IS NOT NULL)
+         AS reverted_attempts,
+       count(*) FILTER (WHERE finished_at IS NULL AND rolled_back_at IS NULL)
+         AS unresolved_attempts,
+       count(*) AS total_attempts
+FROM "_prisma_migrations";
+
+SELECT migration_name,
+       count(*) AS attempts,
+       count(*) FILTER (WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL)
+         AS applied_attempts,
+       count(*) FILTER (WHERE rolled_back_at IS NOT NULL)
+         AS reverted_attempts,
+       count(*) FILTER (WHERE finished_at IS NULL AND rolled_back_at IS NULL)
+         AS unresolved_attempts,
+       count(DISTINCT checksum) AS checksum_count
 FROM "_prisma_migrations"
-WHERE finished_at IS NULL
-   OR rolled_back_at IS NOT NULL;
+GROUP BY migration_name
+ORDER BY min(started_at), migration_name;
+
+SELECT count(*) AS reverted_without_later_successful_attempt
+FROM "_prisma_migrations" AS reverted
+WHERE reverted.rolled_back_at IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM "_prisma_migrations" AS later
+    WHERE later.migration_name = reverted.migration_name
+      AND later.started_at > reverted.started_at
+      AND later.finished_at IS NOT NULL
+      AND later.rolled_back_at IS NULL
+  );
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM "_prisma_migrations"
+    WHERE finished_at IS NULL
+      AND rolled_back_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Unresolved Prisma migration attempt exists';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM "_prisma_migrations" AS reverted
+    WHERE reverted.rolled_back_at IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "_prisma_migrations" AS later
+        WHERE later.migration_name = reverted.migration_name
+          AND later.started_at > reverted.started_at
+          AND later.finished_at IS NOT NULL
+          AND later.rolled_back_at IS NULL
+      )
+  ) THEN
+    RAISE EXCEPTION 'Reverted Prisma migration attempt lacks a later successful attempt';
+  END IF;
+END $$;
 
 SELECT table_name,
        CASE WHEN to_regclass(format('public.%I', table_name)) IS NULL

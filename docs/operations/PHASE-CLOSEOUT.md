@@ -1,8 +1,11 @@
 # Cierre de fase — actualización de release 2026-09-14
 
-**Cerrada la fase de remediación funcional, recuperación de versiones y limpieza
-de recursos.** Estado: PRODUCTION_TOPOLOGY_CORRECTED_PHASE1_FLAGS_OFF / COOLIFY_CLEANUP_COMPLETED.
-BL-002 no fue promovido: su preflight real bloqueó el alcance de mapping/shadow.
+**Cerrada la fase de remediación funcional, recuperación de versiones, limpieza
+de recursos y release con funcionalidades desactivadas.** Estado:
+RELEASE_DEPLOYED_FLAGS_OFF / COOLIFY_CLEANUP_COMPLETED.
+BL-002 fue promovido únicamente en BACK después de reconciliar el ledger y
+aplicar las dos migraciones autorizadas; producer, publisher, shadow y mappings
+siguen apagados.
 El cierre no declara terminadas las mejoras locales posteriores. La restauración
 del backup real protegido de PostgreSQL BL-002 está verificada; no se certifica
 por ello la consistencia completa de la base viva ni la cobertura íntegra de
@@ -17,12 +20,17 @@ uploads.
 | GET /learning | Usuario confirmó desaparición de los 500 después de reparación aditiva autorizada |
 | Gates web Académico | 113 pruebas / 21 archivos, typecheck aprobado; lint sin errores y 12 advertencias del editor |
 | Gates BL-002 | 40 pruebas seleccionadas y build Nest aprobados antes de promover FRONT y BACK |
+| Release BL mapping/shadow | Ledger 36 intentos: 28 aplicados, 8 revertidos históricos resueltos, 0 no resueltos; dos migraciones aplicadas; cinco tablas vacías; status Prisma posterior al día |
+| Release BL BACK | Coolify `Success`, healthcheck Docker `healthy`, `/api/v1/health` 200, `RUN_MIGRATIONS=false`, flags y credenciales nuevas ausentes |
 | HTTPS y assets | Siete endpoints de login/health/live/ready/JWKS con 200 y TLS válido; bundles sin APIs cruzadas |
 | Routing | Un propietario Traefik por cada dominio; HTTP→HTTPS al mismo dominio |
 | Persistencia | Bases separadas; montajes conservados; no reset, DROP, TRUNCATE ni backfill |
 | Backup Académico/Identity | Puntos pre/post reparación verificados localmente y en R2; timer activo |
 
-Deployment BL BACK: `yvjpma0rzo8ncnqzgenvtp16`.
+Deployment BL BACK histórico: `yvjpma0rzo8ncnqzgenvtp16`.
+Deployment BL BACK del release: `nhwca59ptvsocugghdh0uiwv`, commit
+`16e208af6a50e5703bc8f6edd51d7ff11b9c6381`, digest observado
+`sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f`.
 Deployment BL FRONT: `b5mpqqnqxop5e4g4swvg2jk5`.
 Deployment Academic FRONT final: `wxgimhdhkeolqstf35psgwvh`.
 
@@ -89,9 +97,11 @@ Ambos repositorios publican `codex/production-stable-baseline`, con el código
 funcional descrito en PRODUCTION.md y documentación de cierre. Los commits de
 documentación no cambian el SHA/digest que está ejecutando Coolify.
 
-- BL-002: base de aplicación 502e646.
-- Académico: base del frontend 4f5ad28; API/workers productivos siguen pinned a
-  b2f489f. La rama estable no autoriza redeployar todo el monorepo.
+- BL-002: BACK en `16e208af6a50e5703bc8f6edd51d7ff11b9c6381` con flags apagados;
+  FRONT permanece en `502e6463464de0a54b440362a64da0c31450818f`.
+- Académico: base del frontend 4f5ad28; API `e5bd78a` y workers `b2f489f`
+  permanecen pinned a sus digests ya validados. La rama estable no autoriza
+  redeployar todo el monorepo.
 - Con autorización explícita del usuario, main integra la base productiva y
   esta documentación mediante una fusión que conserva el historial. El árbol
   de aplicación BL-002 coincide con 502e646; el de Académico con 4f5ad28,
@@ -101,8 +111,10 @@ documentación no cambian el SHA/digest que está ejecutando Coolify.
   pendiente. No fueron limpiados con reset, descartados ni publicados en bloque.
   La limpieza garantizada corresponde a los nuevos worktrees y sus ramas.
 - Trabajo no promovido: rollover/años académicos e integración v2 de BL-002,
-  reparación/borrado de almacenamiento de Académico y proyecciones financieras.
-  Requiere revisión propia de contratos, datos, autorización y pruebas.
+  reparación/borrado de almacenamiento de Académico y activación funcional de
+  proyecciones financieras. El esquema BL sí está preparado; cualquier
+  activación requiere revisión propia de contratos, datos, autorización y
+  pruebas.
 
 ## Límites que deben permanecer visibles
 
@@ -116,10 +128,12 @@ documentación no cambian el SHA/digest que está ejecutando Coolify.
    preprod no es su entorno de pruebas.
 4. La salud de workers no certifica que todos los tenants hayan sincronizado sin
    conflictos. No se ejecutó una reconciliación de negocio para esta documentación.
-5. main quedó reconciliado con el código aprobado y la documentación. Los
-   SHAs/digests de Coolify siguen identificando los artefactos en ejecución, no
-   los commits documentales. BL FRONT/BACK tienen auto deploy bloqueado hasta
-   resolver el gate de ledger; no cambiar pins implícitamente.
+5. main quedó reconciliado con el código aprobado y la documentación. El BACK
+   productivo corresponde al commit `16e208…` y la documentación final queda
+   en el commit posterior de main; los SHAs/digests de Coolify siguen
+   identificando los artefactos en ejecución, no los commits documentales. BL
+   FRONT/BACK conservan auto deploy bloqueado; cualquier cambio de pin requiere
+   una operación manual explícita.
 
 Estos límites no invalidan las pruebas funcionales confirmadas; delimitan qué
 se cerró y qué debe resolverse en el siguiente cambio afectado.

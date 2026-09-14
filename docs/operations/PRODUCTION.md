@@ -2,30 +2,45 @@
 
 Verificado: **2026-09-14**, después de remediación, recuperación del frontend y
 validación del release con flags apagados. Estado funcional:
-**PRODUCTION_TOPOLOGY_CORRECTED_PHASE1_FLAGS_OFF**.
+**RELEASE_DEPLOYED_FLAGS_OFF** (topología corregida y funcionalidades nuevas
+desactivadas).
 Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
 sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
 
 ## Observación de release — 2026-09-14
 
-BL-002 no fue promovido en el release de proyección: BACK continúa en
-`502e6463464de0a54b440362a64da0c31450818f` con `RUN_MIGRATIONS=false`.
-El preflight real detectó ocho filas históricas incompletas en el ledger, por
-lo que no se ejecutaron mapping/shadow ni se desplegó la imagen candidata.
-BL FRONT/BACK tienen auto deploy desactivado (`Manual deployments only`) hasta
-resolver ese gate.
+El tramo BL del release de proyección quedó desplegado con funcionalidades
+desactivadas. Coolify fijó el BACK al commit aprobado
+`16e208af6a50e5703bc8f6edd51d7ff11b9c6381`; el deployment manual
+`nhwca59ptvsocugghdh0uiwv` construyó y dejó saludable la imagen local con
+digest `sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f`.
+La imagen GHCR preconstruida `ghcr.io/sherydans12/edupay-bl002@sha256:c19015e02821bcb5ede62b837ab33eba542d947f0de9a70d93bde89f5c5e1cf4`
+se verificó localmente, pero el daemon de la VPS no pudo extraerla por falta de
+autenticación; no se la declara como imagen desplegada. El build de Coolify
+usó el commit exacto y su Dockerfile aprobado.
 
-Este archivo y `coolify-inventory.json` se mantienen iguales en BL-002 y
-Académico. Ante cualquier diferencia futura entre esta fotografía y Coolify,
-hacer inventario read-only y reconciliar antes de desplegar. Un nombre, una rama
-o un contenedor healthy por sí solos no identifican al producto correcto.
+Antes del deployment se aplicaron exclusivamente las migraciones
+`20260903090000_add_tenant_canonical_mapping` y
+`20260903113000_add_academic_financial_projection_shadow`. El ledger BL quedó
+con 36 intentos: 28 aplicados, 8 revertidos históricos y 0 no resueltos; cada
+reversión histórica tiene una aplicación posterior exitosa. Las cinco tablas
+nuevas existen y permanecen vacías. BL BACK conserva `RUN_MIGRATIONS=false`;
+`ACADEMIC_FINANCIAL_PROJECTION_ENABLED` y las credenciales inbound/snapshot
+no están configuradas. BL FRONT permanece en `502e646` y no fue redeployado.
+BL FRONT/BACK conservan auto deploy desactivado (`Manual deployments only`).
+
+Este archivo y `coolify-inventory.json` son la referencia operativa vigente
+para BL-002 y su fotografía conjunta con Académico. Ante cualquier diferencia
+futura entre esta fotografía y Coolify, hacer inventario read-only y reconciliar
+antes de desplegar. Un nombre, una rama o un contenedor healthy por sí solos no
+identifican al producto correcto.
 
 ## Repositorios y responsabilidades
 
 | Repositorio | Responsabilidad | Código productivo al cierre |
 |---|---|---|
-| [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT y BACK: `502e6463464de0a54b440362a64da0c31450818f` |
-| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API/workers: OCI `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
+| [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT: `502e6463464de0a54b440362a64da0c31450818f`; BACK: `16e208af6a50e5703bc8f6edd51d7ff11b9c6381` |
+| [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API: `e5bd78a3c0588df540878b130d7d22cd039cf7d1`; workers: `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
 | [Sherydans12/edupay-identity](https://github.com/Sherydans12/edupay-identity) | Credenciales, sesiones, membresías, roles, activación, recuperación y auditoría de autenticación | OCI `b38849be78fee492f68f2d0e99cff3b69a08415a` |
 
 BL-002 conserva su dominio de autenticación propio. No valida sesiones
@@ -69,9 +84,13 @@ host para resolver fallos de comunicación privada.
 
 ## Imágenes y build
 
-API Académico y ambos workers conservan exactamente:
+Los workers Académico conservan exactamente:
 
 `ghcr.io/sherydans12/edupay-academico@sha256:b3e45d7c0afad1729947bdea6fe16d517c3dc9060891b38b313ce14a0548084a`
+
+La API Académico conserva exactamente:
+
+`ghcr.io/sherydans12/edupay-academico@sha256:87daba03ee6ab34f00998270e4959a0e5073fdb3548c3a11d60b140bd0280cff`
 
 Identity conserva exactamente:
 
@@ -83,7 +102,7 @@ distintos. No sustituirlos entre sí ni cambiar el pinned a `latest`.
 | Recurso | Rama configurada | Base / Dockerfile Coolify | Target / health |
 |---|---|---|---|
 | BL-002 FRONT | `main`, SHA fijado arriba | `/frontend` + `/Dockerfile` | `runner`; HTTP 127.0.0.1:3000/login |
-| BL-002 BACK | `main`, SHA fijado arriba | `/backend` + `/Dockerfile` | Etapa final; health público /api/v1/health |
+| BL-002 BACK | `main`, SHA fijado arriba | `/backend` + `/Dockerfile` | Etapa final; health público /api/v1/health; imagen observada `sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f` |
 | Academic FRONT | `codex/production-latest-web-recovery`, SHA fijado arriba | `/` + `/deploy/Dockerfile.web` | `runtime`; HTTP 127.0.0.1:3000/login |
 
 Conservar los comandos del recurso validado. Academic FRONT escucha en todas

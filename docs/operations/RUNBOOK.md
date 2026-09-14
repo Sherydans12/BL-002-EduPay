@@ -46,7 +46,7 @@ un nuevo contrato ni cambios fuera del alcance aprobado.
 
 | Recurso | Gate obligatorio |
 |---|---|
-| BL BACK | SHA aprobado, /api/v1/health 200, JWT/conexión y uploads conservados, migraciones omitidas |
+| BL BACK | Commit aprobado `16e208…`, imagen observada `sha256:85b202…`, /api/v1/health 200, JWT/conexión y uploads conservados, `RUN_MIGRATIONS=false` |
 | BL FRONT | /login 200, producto BL-002, bundle usa API BL-002, login real y sesión tras recargar |
 | Academic API | Digest exacto, /api/v1/health/live y /ready 200, DB propia y CORS exacto |
 | Academic FRONT | Target runtime, puerto 3000, /login 200, base /api/v1, Identity propio, navegación real de los módulos cambiados |
@@ -62,8 +62,10 @@ evidencia: guardar códigos HTTP, requestId, SHA/digest y comprobaciones boolean
 ## Orden y rollback
 
 Desplegar únicamente recursos que lo necesitan: BL BACK, BL FRONT, Academic API
-y Academic FRONT, en ese orden cuando todos estén implicados. No redeployar
-Identity ni workers sanos por arrastre de un cambio de UI.
+y Academic FRONT, en ese orden cuando todos estén implicados. Para el release
+2026-09-14 sólo se desplegó BL BACK; BL FRONT, Identity, Académico y workers
+quedaron en sus artefactos ya validados. No redeployar recursos sanos por
+arrastre de un cambio de UI.
 
 Si falla un gate real, detener la promoción y restaurar **solo ese recurso**
 a su imagen/configuración comprobadas; repetir sus gates y comprobar que las
@@ -88,9 +90,10 @@ Comprobar el contenedor y la conectividad privada antes de cambiarlo.
 - Se verificó la restauración del backup real protegido de PostgreSQL BL-002.
   La evidencia no demuestra por sí sola consistencia completa de la base viva
   ni cobertura/restauración íntegra de todos los uploads.
-- Antes de cualquier cambio de esquema o datos se exige un recovery point
-  vigente de PostgreSQL BL-002 y del volumen de uploads, con checksum y
-  restauración aislada verificable.
+- Antes del tramo BL del release se verificó un recovery point vigente de
+  PostgreSQL BL-002 y el servicio de backup sano. Se mantiene el requisito de
+  un punto vigente de PostgreSQL y uploads, con checksum y restauración aislada
+  verificable, antes de cualquier cambio posterior de esquema o datos.
   Antes de su próximo cambio con riesgo de datos, demostrar cobertura de su
   PostgreSQL 18 y uploads con herramientas compatibles y restauración aislada.
 - Existe un backup administrativo Coolify separado; tampoco reemplaza un
@@ -115,3 +118,52 @@ Al cerrar: registrar SHA/digest y deployment, resultado de gates, rollback si lo
 hubo, backup aplicable y pendientes reales. Actualizar el mismo inventario en
 ambos repositorios cuando cambie una conexión. Dejar worktree limpio y rama
 publicada; conservar trabajo ajeno sin reset, clean, force push o poda global.
+
+## Release BL de proyección — 2026-09-14, flags apagados
+
+El preflight BL clasifica `_prisma_migrations` por intento, no por número de
+filas: 36 intentos, 28 aplicados (`finished_at` informado y sin
+`rolled_back_at`), 8 revertidos (`rolled_back_at` informado) y 0 fallidos/no
+resueltos (ambos campos vacíos). Las 8 reversiones pertenecen a historia ya
+resuelta: cada una tiene una aplicación posterior exitosa para el mismo nombre.
+No se borraron filas ni se cambiaron checksums.
+
+Se ejecutaron únicamente, en este orden y contra el PostgreSQL BL productivo:
+
+1. `20260903090000_add_tenant_canonical_mapping`
+2. `20260903113000_add_academic_financial_projection_shadow`
+
+Checksums SHA-256 canónicos registrados por Prisma después de la aplicación:
+
+- `20260903090000_add_tenant_canonical_mapping/migration.sql` →
+  `031f6e0efdb03e0cfb98e94c0a7105b462b3b760812e9dc033ca8582d79089b7`
+- `20260903113000_add_academic_financial_projection_shadow/migration.sql` →
+  `fee0f6ccdab5fde3c3cfdae1381ad7a0941bf1ebc1c6a578df3cd8f29402fcf8`
+- `scripts/academic-financial-projection-preflight.sql` →
+  `d8fb59768ad9d89339d968576ac0f0c7f0e1ef5d18c10652b23b8e1040bdf85bd`
+
+La operación usó `psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f
+scripts/academic-financial-projection-preflight.sql`, luego `prisma migrate
+status` desde el árbol exacto del commit aprobado y finalmente
+`prisma migrate deploy` sobre ese mismo árbol cerrado. El status previo mostró
+exactamente los dos nombres anteriores como pendientes; por eso el deploy no
+tuvo migraciones imprevistas disponibles para aplicar.
+
+El status Prisma posterior desde el artefacto desplegado informó “Database
+schema is up to date!”. El postflight verificó las cinco tablas nuevas,
+18 índices y 50 constraints; todas las tablas tienen cero filas. No se hizo
+backfill BL, no se crearon mappings, no se agregaron credenciales S2S nuevas y
+no se modificó el ledger fuera de las dos aplicaciones normales de Prisma.
+
+La imagen GHCR candidata `sha256:c19015…` fue validada localmente, pero no se
+usó directamente porque el daemon productivo respondió `unauthorized`. Coolify
+construyó desde el commit exacto `16e208…` y dejó desplegado
+`sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f`.
+El rollback de aplicación queda preparado con la imagen anterior observada
+`sha256:0b15f903be869ac7467b4d23f6ca25f11c9689575291310e90c42d5be0cc3dab`;
+no existe rollback destructivo del esquema.
+
+Gates finales: Coolify Success y healthcheck Docker healthy; `/api/v1/health`
+HTTP 200; `RUN_MIGRATIONS=false`; projection flag y credenciales inbound /
+snapshot ausentes; auto deploy BL FRONT/BACK manual; producer, publisher y
+shadow funcional apagados. El despliegue no activa funcionalidades.
