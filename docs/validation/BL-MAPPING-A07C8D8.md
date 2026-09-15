@@ -1,10 +1,10 @@
 # Validación de vinculación administrativa BL
 
-**Estado:** completada en entorno aislado, sin publicación ni despliegue  
+**Estado:** completada en entorno aislado, sin publicación ni despliegue
 **Árbol validado:** `abc8e4280b00cf2f241d78ce6299adc67fca4ffc` (incluye
-`a07c8d8`)  
+`a07c8d8`)
 **Base exacta:** `origin/main` =
-`b569a9e0ad8ba3c0080576a697dd104e822909e7`  
+`b569a9e0ad8ba3c0080576a697dd104e822909e7`
 **Relación:** [ADR-0023](../../backend/docs/decisions/ADR-0023-bl-administrative-canonical-mapping.md),
 enlazado a ADR-0022, que permanece `Proposed`.
 
