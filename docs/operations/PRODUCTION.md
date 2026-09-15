@@ -3,7 +3,7 @@
 Verificado: **2026-09-15**, después de promover el corte administrativo de
 mapping BL con flags apagados. Estado funcional:
 **MAPPING_BL_DEPLOYED_FLAGS_OFF** (pantalla desplegada; no se asignaron
-mappings en producción).
+mappings durante este despliegue).
 Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
 sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
 
