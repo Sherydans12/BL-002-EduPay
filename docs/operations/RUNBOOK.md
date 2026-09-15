@@ -121,6 +121,22 @@ publicada; conservar trabajo ajeno sin reset, clean, force push o poda global.
 
 ## Release BL de proyección — 2026-09-14, flags apagados
 
+## Corte administrativo de mapping BL — 2026-09-15
+
+El corte se promovió desde el merge `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c`
+con auto deploy manual. BL BACK se desplegó primero en
+`hyazttydvyryxkrvy9asscwo` y sólo después de su healthcheck `healthy` se
+desplegó BL FRONT en `nkdxjzelyq4ontdnmt3zbh3t`. Las imágenes reales y los
+artefactos de rollback están en `PRODUCTION.md` y `coolify-inventory.json`.
+
+Los gates observados fueron BACK `/api/v1/health` HTTP 200 con base `up` y
+FRONT `/login` HTTP 200. `RUN_MIGRATIONS=false` se conservó y no apareció un
+runner de migración en los logs; producer, publisher, shadow y projection
+permanecieron apagados. La prueba productiva de `/dashboard/vinculacion` sin
+sesión redirigió al login; no se usaron credenciales ni se ejecutaron escrituras.
+La pantalla desplegada no equivale a mappings asignados: este despliegue hizo
+0 confirmaciones reales.
+
 El preflight BL clasifica `_prisma_migrations` por intento, no por número de
 filas: 36 intentos, 28 aplicados (`finished_at` informado y sin
 `rolled_back_at`), 8 revertidos (`rolled_back_at` informado) y 0 fallidos/no

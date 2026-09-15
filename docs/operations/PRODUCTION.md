@@ -1,11 +1,48 @@
 # Topología productiva EduPay
 
-Verificado: **2026-09-14**, después de remediación, recuperación del frontend y
-validación del release con flags apagados. Estado funcional:
-**RELEASE_DEPLOYED_FLAGS_OFF** (topología corregida y funcionalidades nuevas
-desactivadas).
+Verificado: **2026-09-15**, después de promover el corte administrativo de
+mapping BL con flags apagados. Estado funcional:
+**MAPPING_BL_DEPLOYED_FLAGS_OFF** (pantalla desplegada; no se asignaron
+mappings en producción).
 Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
 sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
+
+## Observación del corte administrativo de mapping — 2026-09-15
+
+El merge aprobado `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c` fue promovido
+manualmente por recurso, después de verificar que `origin/main` y los checks
+seguían aprobados. Coolify conserva auto deploy desactivado (`Manual deployments
+only`), por lo que actualizar documentación no inicia otra promoción.
+
+| Recurso | Deployment | Código importado | Imagen local realmente construida | Resultado |
+|---|---|---|---|---|
+| BL BACK | `hyazttydvyryxkrvy9asscwo` | `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c` | `km0aljzabdiqtaixj9dsequu:04687aa8c5249ad1f9be94c7ad62099fb41d5d6c`, manifiesto `sha256:4b0f403a51bc45b3ce229bf01d97e108804d3326765f1e3f4e788834bac76a1a` | Coolify Success; contenedor healthy; `/api/v1/health` HTTP 200 y base `up` |
+| BL FRONT | `nkdxjzelyq4ontdnmt3zbh3t` | `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c` | `ktgdely86kx0by10p9cb91os:04687aa8c5249ad1f9be94c7ad62099fb41d5d6c`, manifiesto `sha256:9b2193b1783b764ae2ff304f7ccd14154af6cb37277359d23cb0215301e3b2d9` | Coolify Success; health interno `/login` healthy; login público HTTP 200 |
+
+La primera acción manual `rlhzsonbpmykhwkihknepv0w` fue sólo un redeploy del
+artefacto anterior `16e208af6a50e5703bc8f6edd51d7ff11b9c6381`; no se considera
+evidencia del corte y no cambió el resultado funcional. El build posterior fijó
+explícitamente el SHA aprobado y usó el Dockerfile local de Coolify, no una
+imagen GHCR candidata ni credenciales nuevas.
+
+Los guards operativos permanecen sin activación: `RUN_MIGRATIONS=false`, sin
+runner de migración en los logs del deployment (el `prisma generate` observado
+es parte del build), y producer, publisher, shadow y projection permanecen
+apagados. No se modificaron Académico, Identity ni workers.
+
+La ruta pública `/dashboard/vinculacion` redirigió a
+`/login?redirect=%2Fdashboard%2Fvinculacion` sin sesión. No había una sesión
+SUPER_ADMIN disponible para la comprobación productiva, por lo que el acceso
+autorizado no se declara verificado ni se introdujeron credenciales. La
+pantalla está desplegada; asignaciones de mapping en producción: **0 operaciones
+de escritura ejecutadas en este despliegue**, y ninguna confirmación real fue
+realizada.
+
+Rollback preparado por recurso: BL BACK al artefacto anterior observado
+`km0aljzabdiqtaixj9dsequu@sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f`
+(deployment `rlhzsonbpmykhwkihknepv0w` / código `16e208a`); BL FRONT al tag
+anterior `ktgdely86kx0by10p9cb91os:502e6463464de0a54b440362a64da0c31450818f`.
+Ante un fallo, restaurar sólo el recurso afectado y repetir sus healthchecks.
 
 ## Observación de release — 2026-09-14
 
@@ -39,7 +76,7 @@ identifican al producto correcto.
 
 | Repositorio | Responsabilidad | Código productivo al cierre |
 |---|---|---|
-| [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT: `502e6463464de0a54b440362a64da0c31450818f`; BACK: `16e208af6a50e5703bc8f6edd51d7ff11b9c6381` |
+| [Sherydans12/BL-002-EduPay](https://github.com/Sherydans12/BL-002-EduPay) | Administración de pagos, alumnos/cursos de origen, autenticación administrativa y API de integración | FRONT/BACK: `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c` |
 | [Sherydans12/edupay-academico](https://github.com/Sherydans12/edupay-academico) | Experiencia académica, autorización académica, aprendizaje, entregas, sincronización y notificaciones | FRONT: `4f5ad2839e08e561e0335f6e4fdedfe448f15415`; API: `e5bd78a3c0588df540878b130d7d22cd039cf7d1`; workers: `b2f489f3bfbb67da8fc8ff71be7ea551e1de27c9` |
 | [Sherydans12/edupay-identity](https://github.com/Sherydans12/edupay-identity) | Credenciales, sesiones, membresías, roles, activación, recuperación y auditoría de autenticación | OCI `b38849be78fee492f68f2d0e99cff3b69a08415a` |
 
@@ -102,7 +139,7 @@ distintos. No sustituirlos entre sí ni cambiar el pinned a `latest`.
 | Recurso | Rama configurada | Base / Dockerfile Coolify | Target / health |
 |---|---|---|---|
 | BL-002 FRONT | `main`, SHA fijado arriba | `/frontend` + `/Dockerfile` | `runner`; HTTP 127.0.0.1:3000/login |
-| BL-002 BACK | `main`, SHA fijado arriba | `/backend` + `/Dockerfile` | Etapa final; health público /api/v1/health; imagen observada `sha256:85b202901f77a60cb120f0cc720b878f54e0e570da4d8c191d3040ee511ef64f` |
+| BL-002 BACK | `main`, SHA fijado arriba | `/backend` + `/Dockerfile` | Etapa final; health público /api/v1/health; imagen observada `sha256:4b0f403a51bc45b3ce229bf01d97e108804d3326765f1e3f4e788834bac76a1a` |
 | Academic FRONT | `codex/production-latest-web-recovery`, SHA fijado arriba | `/` + `/deploy/Dockerfile.web` | `runtime`; HTTP 127.0.0.1:3000/login |
 
 Conservar los comandos del recurso validado. Academic FRONT escucha en todas

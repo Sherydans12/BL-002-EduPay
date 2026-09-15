@@ -1,5 +1,25 @@
 # Cierre de fase — actualización de release 2026-09-14
 
+## Actualización posterior — corte administrativo de mapping BL, 2026-09-15
+
+El merge `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c` quedó desplegado en BL
+BACK (`hyazttydvyryxkrvy9asscwo`, imagen local con manifiesto
+`sha256:4b0f403a51bc45b3ce229bf01d97e108804d3326765f1e3f4e788834bac76a1a`)
+y BL FRONT (`nkdxjzelyq4ontdnmt3zbh3t`, manifiesto
+`sha256:9b2193b1783b764ae2ff304f7ccd14154af6cb37277359d23cb0215301e3b2d9`).
+Ambos deployments fueron manuales y terminaron en `Success` con healthchecks
+`healthy`; BACK respondió `/api/v1/health` con HTTP 200 y base `up`, y FRONT
+respondió `/login` con HTTP 200.
+
+Este cierre distingue dos hechos: la pantalla administrativa de vinculación está
+en el bundle desplegado, pero en producción se hicieron **0 escrituras de
+mapping**. La comprobación de `/dashboard/vinculacion` sin sesión redirigió al
+login; como no había una sesión SUPER_ADMIN disponible, no se declara evidencia
+de acceso autorizado ni se ejecutó una consulta productiva con datos de tenant.
+No se activaron producer, publisher, shadow ni projection; no se ejecutaron
+migraciones y no se modificaron Académico, Identity o workers. La referencia de
+rollback permanece por recurso en `PRODUCTION.md`.
+
 **Cerrada la fase de remediación funcional, recuperación de versiones, limpieza
 de recursos y release con funcionalidades desactivadas.** Estado:
 RELEASE_DEPLOYED_FLAGS_OFF / COOLIFY_CLEANUP_COMPLETED.
