@@ -20,12 +20,13 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AssignCanonicalTenantMappingDto } from './dto/assign-canonical-tenant-mapping.dto';
+import { SuperAdminGuard } from '../auth/guards/super-admin.guard';
 import { CanonicalMappingPlatformGuard } from './guards/canonical-mapping-platform.guard';
 import { TenantsService } from './tenants.service';
 
 @ApiTags('tenants')
 @ApiBearerAuth('access-token')
-@UseGuards(CanonicalMappingPlatformGuard)
+@UseGuards(SuperAdminGuard)
 @Controller('tenants')
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
@@ -37,6 +38,7 @@ export class TenantsController {
   }
 
   @Get(':tenantId/canonical-mapping')
+  @UseGuards(CanonicalMappingPlatformGuard)
   @ApiOperation({
     summary: 'Consultar el mapeo explícito de tenant local a tenant canónico',
   })
@@ -47,6 +49,7 @@ export class TenantsController {
   }
 
   @Post(':tenantId/canonical-mapping')
+  @UseGuards(CanonicalMappingPlatformGuard)
   @ApiOperation({
     summary: 'Asignar de forma auditable el UUID canónico de un tenant local',
     description:

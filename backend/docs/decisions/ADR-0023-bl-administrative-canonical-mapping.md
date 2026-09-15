@@ -35,8 +35,9 @@ implementa esas propuestas futuras.
    `correlationId`, `reason` y `createdAt`. La referencia de evidencia se
    incorpora al `reason` sin secretos ni datos personales innecesarios.
 5. El tenant seleccionado es únicamente el recurso objetivo. Los endpoints
-   de esta superficie no aceptan un contexto de tenant seleccionado como
-   autorización y no amplían el acceso de `SUPER_ADMIN` a datos académicos.
+   de mapping no aceptan un contexto de tenant seleccionado como autorización;
+   el listado general de tenants conserva su guard existente. No se amplía el
+   acceso de `SUPER_ADMIN` a datos académicos.
 6. No se crean `OnboardingRun`, doble aprobación, persistencia de revisión,
    migraciones nuevas ni infraestructura de workflow. `producer`,
    `publisher` y `shadow` permanecen apagados.

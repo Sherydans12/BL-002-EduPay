@@ -46,6 +46,11 @@ reintentar con la misma correlación: la unicidad de la base y la relectura de
 la operación mantienen el resultado idempotente. Un conflicto detiene el
 flujo y no intenta reasignar.
 
+La política de plataforma (`CanonicalMappingPlatformGuard`) cubre la consulta y
+la asignación de mapping. `GET /api/tenants` conserva `SuperAdminGuard` para no
+alterar consumidores legítimos del listado; el header de tenant se omite sólo
+en las llamadas de la superficie de vinculación.
+
 ## Uso futuro en contratos
 
 En la Fase 1B, Académico publicará `canonicalTenantId` dentro del contrato

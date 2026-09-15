@@ -22,6 +22,7 @@ import {
   type Tenant,
   type TenantCanonicalMapping,
 } from "@/lib/api";
+import { getActiveTenantId } from "@/lib/tenant-store";
 import {
   ASSIGNMENT_TIMEOUT_MS,
   AssignmentTimeoutError,
@@ -150,7 +151,17 @@ export default function TenantCanonicalMappingPage() {
         const result = await tenantsApi.getAll();
         if (!active) return;
         setTenants(result);
-        setSelectedTenantId((current) => current || result[0]?.id || "");
+        const previousTenantId = getActiveTenantId();
+        setSelectedTenantId((current) => {
+          if (current) return current;
+          if (
+            previousTenantId &&
+            result.some((tenant) => tenant.id === previousTenantId)
+          ) {
+            return previousTenantId;
+          }
+          return result[0]?.id || "";
+        });
       } catch (error: unknown) {
         if (active) {
           setLoadingError(
