@@ -1,7 +1,7 @@
 # Validación de vinculación administrativa BL
 
 **Estado:** completada en entorno aislado, sin publicación ni despliegue  
-**Árbol validado:** `a2f5157c789ac7f92d3c9c7578f942cab0075f5e` (incluye
+**Árbol validado:** `abc8e4280b00cf2f241d78ce6299adc67fca4ffc` (incluye
 `a07c8d8`)  
 **Base exacta:** `origin/main` =
 `b569a9e0ad8ba3c0080576a697dd104e822909e7`  
@@ -22,8 +22,8 @@ producción. El proxy local de prueba registró método, ruta y presencia de
 | Caso | Evidencia observada | Resultado |
 | --- | --- | --- |
 | Sesión y selección previa | `SUPER_ADMIN` inició sesión, seleccionó `Synthetic BL Tenant A` en `TenantSwitcher` y abrió `/dashboard/vinculacion`; la pantalla mantuvo ese tenant seleccionado y ocultó el switcher | OK |
-| Aislamiento de headers | `GET /tenants/:id/canonical-mapping`, `POST ...?dryRun=true` y `POST .../canonical-mapping` llegaron sin `x-tenant-id` | OK |
-| Comportamiento normal | `GET /analytics/dashboard` después de seleccionar el tenant llegó con `x-tenant-id=synthetic-bl-tenant-a`; el listado `/tenants` siguió respondiendo `200` aun con contexto seleccionado | OK |
+| Aislamiento de headers | En la superficie de vinculación, `GET /tenants`, `GET /tenants/:id/canonical-mapping`, `POST ...?dryRun=true` y `POST .../canonical-mapping` llegaron sin `x-tenant-id` | OK |
+| Comportamiento normal | El `TenantSwitcher` mantuvo `x-tenant-id=synthetic-bl-tenant-a` en su `GET /tenants` y `GET /analytics/dashboard`; el listado siguió respondiendo `200` con contexto seleccionado | OK |
 | Consulta | La pantalla consultó el vínculo del tenant sintético y mostró que no existía | OK |
 | Dry run | La UI mostró `Validación local aprobada` y explicitó que no comprueba Identity ni reserva el vínculo; antes de confirmar la base tenía `0` mappings | OK |
 | Declaración manual | Se exigió checkbox, motivo y referencia sintéticos; la UI separó la declaración manual de la validación local y no la presentó como comprobación automática de Identity | OK |
@@ -61,9 +61,9 @@ Se ejecutó bajo las mismas condiciones en dos worktrees limpios, con
 npx tsc --noEmit --pretty false
 
 backend  origin/main: 0 errores, salida 0
-backend  a2f5157:     0 errores, salida 0
+backend  abc8e42:     0 errores, salida 0
 frontend origin/main: 29 errores, salida 1
-frontend a2f5157:     29 errores, salida 1
+frontend abc8e42:     29 errores, salida 1
 ```
 
 Los 29 diagnósticos de frontend son preexistentes: `next.config.ts` (`eslint`),
