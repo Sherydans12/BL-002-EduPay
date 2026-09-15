@@ -1107,7 +1107,6 @@ function platformRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const tenantsApi = {
   getAll: () => request<Tenant[]>("/tenants"),
-  getAllForPlatform: () => platformRequest<Tenant[]>("/tenants"),
   getCanonicalMapping: (tenantId: string) =>
     platformRequest<TenantCanonicalMapping>(
       `/tenants/${encodeURIComponent(tenantId)}/canonical-mapping`,

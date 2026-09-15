@@ -47,9 +47,9 @@ la operación mantienen el resultado idempotente. Un conflicto detiene el
 flujo y no intenta reasignar.
 
 La política de plataforma (`CanonicalMappingPlatformGuard`) cubre la consulta y
-la asignación de mapping. `GET /api/tenants` conserva `SuperAdminGuard` para no
-alterar consumidores legítimos del listado; el header de tenant se omite sólo
-en las llamadas de la superficie de vinculación.
+la asignación de mapping. `GET /api/tenants` conserva `SuperAdminGuard` y el
+header de tenant para no alterar consumidores legítimos del listado; el header
+se omite sólo en las operaciones `canonical-mapping`.
 
 ## Uso futuro en contratos
 

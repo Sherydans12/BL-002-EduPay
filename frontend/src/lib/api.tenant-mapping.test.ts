@@ -6,11 +6,16 @@ describe("tenantsApi platform context", () => {
     vi.unstubAllGlobals();
   });
 
-  it("no envía el tenant seleccionado al consultar operaciones de plataforma", async () => {
+  it("no envía el tenant seleccionado en la consulta de mapping", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ data: [] }),
+      json: async () => ({
+        data: {
+          tenantId: "colegio-seleccionado",
+          canonicalTenantId: "00000000-0000-4000-8000-000000000000",
+        },
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
     vi.stubGlobal("document", {
@@ -20,7 +25,7 @@ describe("tenantsApi platform context", () => {
       localStorage: { getItem: () => "colegio-seleccionado" },
     });
 
-    await tenantsApi.getAllForPlatform();
+    await tenantsApi.getCanonicalMapping("colegio-seleccionado");
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(requestInit.headers).toEqual({

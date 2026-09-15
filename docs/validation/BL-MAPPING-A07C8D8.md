@@ -22,8 +22,8 @@ producción. El proxy local de prueba registró método, ruta y presencia de
 | Caso | Evidencia observada | Resultado |
 | --- | --- | --- |
 | Sesión y selección previa | `SUPER_ADMIN` inició sesión, seleccionó `Synthetic BL Tenant A` en `TenantSwitcher` y abrió `/dashboard/vinculacion`; la pantalla mantuvo ese tenant seleccionado y ocultó el switcher | OK |
-| Aislamiento de headers | En la superficie de vinculación, `GET /tenants`, `GET /tenants/:id/canonical-mapping`, `POST ...?dryRun=true` y `POST .../canonical-mapping` llegaron sin `x-tenant-id` | OK |
-| Comportamiento normal | El `TenantSwitcher` mantuvo `x-tenant-id=synthetic-bl-tenant-a` en su `GET /tenants` y `GET /analytics/dashboard`; el listado siguió respondiendo `200` con contexto seleccionado | OK |
+| Aislamiento de headers | La superficie de vinculación usa la llamada normal para `GET /tenants`; sólo `GET /tenants/:id/canonical-mapping`, `POST ...?dryRun=true` y `POST .../canonical-mapping` omiten `x-tenant-id` | OK |
+| Comportamiento normal | `GET /tenants` y `GET /analytics/dashboard` mantienen `x-tenant-id=synthetic-bl-tenant-a`; el listado sigue respondiendo `200` con contexto seleccionado | OK |
 | Consulta | La pantalla consultó el vínculo del tenant sintético y mostró que no existía | OK |
 | Dry run | La UI mostró `Validación local aprobada` y explicitó que no comprueba Identity ni reserva el vínculo; antes de confirmar la base tenía `0` mappings | OK |
 | Declaración manual | Se exigió checkbox, motivo y referencia sintéticos; la UI separó la declaración manual de la validación local y no la presentó como comprobación automática de Identity | OK |
@@ -47,7 +47,7 @@ restricción visible. No se modificó configuración de flags.
 `findCanonicalMapping` y `assignCanonicalMapping` declaran además
 `CanonicalMappingPlatformGuard`, que exige rol local `SUPER_ADMIN`, actor
 autenticado, `tenantContext.tenantId === null` e identidad de plataforma. Así
-`GET /tenants` no cambia para consumidores legítimos, mientras que las dos
+`GET /tenants` no cambia para consumidores legítimos, mientras que sólo las dos
 operaciones de mapping quedan cubiertas. La cobertura está fijada por prueba de
 metadatos y por la prueba HTTP anterior. No se amplía `SUPER_ADMIN` a datos
 académicos.
