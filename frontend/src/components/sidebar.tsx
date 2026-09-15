@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useSyncExternalStore } from "react";
-import { Calculator, Mail, UserCircle } from "lucide-react";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { Calculator, Link2, Mail, UserCircle } from "lucide-react";
 import { TenantSwitcher } from "@/components/tenant-switcher";
 
 type SessionUser = {
@@ -12,7 +12,14 @@ type SessionUser = {
   role?: string;
 };
 
-const nav = [
+type NavItem = {
+  label: string;
+  href: string;
+  icon: ReactNode;
+  platformOnly?: boolean;
+};
+
+const nav: NavItem[] = [
   {
     label: "Dashboard",
     href: "/",
@@ -118,6 +125,12 @@ const nav = [
       </svg>
     ),
   },
+  {
+    label: "Vinculación de tenants",
+    href: "/dashboard/vinculacion",
+    platformOnly: true,
+    icon: <Link2 className="w-5 h-5" />,
+  },
 ];
 
 export function Sidebar() {
@@ -125,6 +138,10 @@ export function Sidebar() {
   const router = useRouter();
   const token = useSyncExternalStore(subscribeToCookieStore, getAuthToken, () => undefined);
   const sessionUser = useMemo(() => decodeSessionUser(token), [token]);
+  const isMappingSurface = pathname === "/dashboard/vinculacion";
+  const visibleNav = nav.filter(
+    (item) => !item.platformOnly || sessionUser?.role === "SUPER_ADMIN",
+  );
 
   const handleLogout = () => {
     document.cookie = "auth_token=; path=/; max-age=0; SameSite=Lax";
@@ -151,7 +168,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {nav.map((item) => {
+        {visibleNav.map((item) => {
           const isActive =
             item.href === "/"
               ? pathname === "/"
@@ -182,7 +199,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-[var(--color-border)]">
-        {sessionUser?.role === "SUPER_ADMIN" && <TenantSwitcher />}
+        {sessionUser?.role === "SUPER_ADMIN" && !isMappingSurface && <TenantSwitcher />}
 
         <div className="mb-3 px-4 py-3 rounded-xl bg-[var(--color-bg)]">
           <p className="text-xs text-[var(--color-text-muted)]">Sesión activa</p>

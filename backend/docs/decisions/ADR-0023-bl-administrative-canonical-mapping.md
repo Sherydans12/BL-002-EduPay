@@ -50,4 +50,3 @@ implementa esas propuestas futuras.
 - Si posteriormente se exige segregación de funciones, auditoría de cada
   transición o verificación automática entre servicios, deberá revisarse
   ADR-0022 y aprobarse una decisión y persistencia/contrato adicionales.
-

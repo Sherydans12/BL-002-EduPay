@@ -19,13 +19,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { SuperAdminGuard } from '../auth/guards/super-admin.guard';
 import { AssignCanonicalTenantMappingDto } from './dto/assign-canonical-tenant-mapping.dto';
+import { CanonicalMappingPlatformGuard } from './guards/canonical-mapping-platform.guard';
 import { TenantsService } from './tenants.service';
 
 @ApiTags('tenants')
 @ApiBearerAuth('access-token')
-@UseGuards(SuperAdminGuard)
+@UseGuards(CanonicalMappingPlatformGuard)
 @Controller('tenants')
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
