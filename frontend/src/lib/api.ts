@@ -68,6 +68,16 @@ function getTenantContextHeaders(token: string | null): Record<string, string> {
   return {};
 }
 
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 // ─── Binary Request Wrapper ───────────────────────────────────
 /**
  * Like `request`, but returns a raw Blob for binary responses (e.g. XLSX downloads).
@@ -111,7 +121,15 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
  * 3. Parsea errores del GlobalExceptionFilter: { statusCode, message }.
  * 4. Desenvuelve el envelope del TransformInterceptor: { data } → T.
  */
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+type RequestConfig = {
+  includeTenantContext?: boolean;
+};
+
+async function request<T>(
+  path: string,
+  options?: RequestInit,
+  config?: RequestConfig,
+): Promise<T> {
   // Construir headers base
   const headers: Record<string, string> = {};
 
@@ -120,7 +138,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  const tenantHeaders = getTenantContextHeaders(token);
+  const tenantHeaders =
+    config?.includeTenantContext === false
+      ? {}
+      : getTenantContextHeaders(token);
 
   // Content-Type (no para FormData, el browser lo pone con boundary)
   if (!(options?.body instanceof FormData)) {
@@ -146,7 +167,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const msg = Array.isArray(body.message)
       ? body.message.join(". ")
       : body.message || `Error ${res.status}`;
-    throw new Error(msg);
+    throw new ApiRequestError(msg, res.status);
   }
 
   const json = await res.json();
@@ -1069,8 +1090,51 @@ export interface Tenant {
   name: string;
 }
 
+export interface TenantCanonicalMapping {
+  tenantId: string;
+  canonicalTenantId: string;
+  assignedByUserId?: string;
+  correlationId?: string;
+  reason?: string;
+  createdAt?: string;
+  created?: boolean;
+  dryRun?: boolean;
+}
+
+function platformRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  return request<T>(path, options, { includeTenantContext: false });
+}
+
 export const tenantsApi = {
   getAll: () => request<Tenant[]>("/tenants"),
+  getCanonicalMapping: (tenantId: string) =>
+    platformRequest<TenantCanonicalMapping>(
+      `/tenants/${encodeURIComponent(tenantId)}/canonical-mapping`,
+    ),
+  preflightCanonicalMapping: (tenantId: string, canonicalTenantId: string) =>
+    platformRequest<TenantCanonicalMapping>(
+      `/tenants/${encodeURIComponent(tenantId)}/canonical-mapping?dryRun=true`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          canonicalTenantId,
+          reason: "Preflight local administrativo; sin escritura.",
+        }),
+      },
+    ),
+  assignCanonicalMapping: (
+    tenantId: string,
+    data: { canonicalTenantId: string; reason: string },
+    correlationId: string,
+  ) =>
+    platformRequest<TenantCanonicalMapping>(
+      `/tenants/${encodeURIComponent(tenantId)}/canonical-mapping`,
+      {
+        method: "POST",
+        headers: { "X-Correlation-Id": correlationId },
+        body: JSON.stringify(data),
+      },
+    ),
 };
 
 // ─── Roles & Permissions ──────────────────────────────────────
