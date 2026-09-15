@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { analyticsApi, tenantsApi } from "./api";
+import { tenantsApi } from "./api";
 
 describe("tenantsApi platform context", () => {
   afterEach(() => {
@@ -20,7 +20,7 @@ describe("tenantsApi platform context", () => {
       localStorage: { getItem: () => "colegio-seleccionado" },
     });
 
-    await tenantsApi.getAll();
+    await tenantsApi.getAllForPlatform();
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(requestInit.headers).toEqual({
@@ -29,7 +29,7 @@ describe("tenantsApi platform context", () => {
     });
   });
 
-  it("conserva el tenant seleccionado para operaciones normales", async () => {
+  it("conserva el tenant seleccionado para el listado normal", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -43,7 +43,7 @@ describe("tenantsApi platform context", () => {
       localStorage: { getItem: () => "colegio-seleccionado" },
     });
 
-    await analyticsApi.getDashboard();
+    await tenantsApi.getAll();
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(requestInit.headers).toEqual({

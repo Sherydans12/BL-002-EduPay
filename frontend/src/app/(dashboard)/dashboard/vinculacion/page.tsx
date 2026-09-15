@@ -148,7 +148,7 @@ export default function TenantCanonicalMappingPage() {
       try {
         setLoadingTenants(true);
         setLoadingError(null);
-        const result = await tenantsApi.getAll();
+        const result = await tenantsApi.getAllForPlatform();
         if (!active) return;
         setTenants(result);
         const previousTenantId = getActiveTenantId();
