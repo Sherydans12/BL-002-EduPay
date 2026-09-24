@@ -1,11 +1,24 @@
 # Topología productiva EduPay
 
-Verificado: **2026-09-15**, después de promover el corte administrativo de
-mapping BL con flags apagados. Estado funcional:
-**MAPPING_BL_DEPLOYED_FLAGS_OFF** (pantalla desplegada; no se asignaron
-mappings durante este despliegue).
-Esta es la referencia operativa vigente. Los ADR aceptados conservan autoridad
-sobre arquitectura y contratos; los runbooks anteriores son evidencia histórica.
+Verificación directa BL: **2026-09-15**, después de promover el corte
+administrativo de mapping, sin escrituras de mapping. Esa fotografía y su
+inventario son evidencia fechada de ese corte, no una verificación en vivo
+posterior.
+
+La fotografía transversal más reciente disponible en Git es del **2026-09-24**
+en el [inventario de EduPay Académico](https://github.com/Sherydans12/edupay-academico/blob/main/docs/operations/coolify-inventory.json)
+y el [mapa del ecosistema](https://github.com/Sherydans12/edupay-academico/blob/main/docs/architecture/edupay-ecosystem-architecture.md).
+Registra BL FRONT con build source `502e646` y BL BACK con build source
+`16e208a`/digest `85b202…`. El checkout Git comprobado el 24/09 está en
+`origin/main` `d3e40da`; los cambios desde el corte `04687aa` son sólo cuatro
+archivos `docs/operations/*`, lo cual no prueba qué artefacto está corriendo.
+Usa cada fotografía con su fecha y fuente. Git local no fue modificado.
+
+La verificación del 15/09 registró
+**MAPPING_BL_DEPLOYED_FLAGS_OFF**: interfaz desplegada, 0 escrituras reales de
+mapping, producer/publisher/shadow/projection desactivados. Los ADR aceptados
+conservan autoridad sobre arquitectura y contratos; cierres y runbooks
+anteriores son evidencia histórica salvo una fecha posterior enlazada.
 
 ## Observación del corte administrativo de mapping — 2026-09-15
 

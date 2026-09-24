@@ -2,18 +2,33 @@
 
 ## Estado operativo vigente
 
-Fase de remediación y limpieza cerrada el **2026-09-11**. FRONT y BACK son
-recursos separados en Coolify, ambos publicados en **502e646**.
+BL-002 es el dominio financiero del ecosistema. La última verificación directa
+de sus recursos documentada aquí corresponde al **2026-09-15**. El inventario
+transversal de Académico registra otra fotografía compartida el **2026-09-24**;
+la edición actual sólo actualizó Git y no verificó Coolify. `origin/main` ahora
+está en `d3e40da0bcf893e8d02f2c23d7c79a4d46b8071f`; los cambios desde el commit
+de release `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c` afectan cuatro documentos
+operativos y no prueban qué artefacto está corriendo. Consulta la fuente fechada
+antes de identificar commit de build o digest.
 
+- [Mapa transversal EduPay: dominios, conexiones y backlog](https://github.com/Sherydans12/edupay-academico/blob/main/docs/architecture/edupay-ecosystem-architecture.md).
+- [Índice de documentación BL-002](docs/README.md).
 - [Topología, repositorios, conexiones y recursos Coolify](docs/operations/PRODUCTION.md).
 - [Runbook de despliegue, rollback y entornos aislados](docs/operations/RUNBOOK.md).
 - [Cierre de fase y límites verificados](docs/operations/PHASE-CLOSEOUT.md).
-- [Inventario estructurado sin secretos](docs/operations/coolify-inventory.json).
+- [Última fotografía conjunta Coolify, verificada 2026-09-24](https://github.com/Sherydans12/edupay-academico/blob/main/docs/operations/coolify-inventory.json).
+- [Inventario local del corte BL del 2026-09-15](docs/operations/coolify-inventory.json), preservado como evidencia histórica.
 - [Reglas para agentes y próximas mejoras](AGENTS.md).
 
-Para continuar, crear un worktree desde `codex/production-stable-baseline`.
-Los directorios con WIP y las instrucciones locales no son la configuración
-productiva. El backup Académico/Identity no certifica recuperación de BL-002.
+Identity posee autenticación; Académico posee dominio académico y DIE; BL
+mantiene acceso administrativo legado y dominio financiero. La sincronización
+heredada BL → Académico es distinta de la proyección financiera Académico → BL,
+que sigue desactivada. DIE y sus datos están fuera de BL.
+
+Para desarrollo, usa un worktree propio desde `origin/main` actualizado. Los
+directorios con WIP no son configuración productiva. La restauración del backup
+real protegido de PostgreSQL BL está verificada; la consistencia completa de la
+base viva y la cobertura integral de uploads siguen sin certificarse.
 
 > Sistema de registro manual de pagos para colegios.
 
@@ -45,6 +60,31 @@ EduPay permite al personal administrativo de un colegio:
 | [frontend/AGENTS.md](frontend/AGENTS.md) | Next.js en este repo + enlace a la guía UI |
 | [docs/ACADEMICO-INTEGRATION.md](docs/ACADEMICO-INTEGRATION.md) | Contrato S2S EduPay → Académico, autenticación, cursores, snapshots y tombstones |
 | [docs/ACADEMIC-FINANCIAL-PROJECTION-SHADOW.md](docs/ACADEMIC-FINANCIAL-PROJECTION-SHADOW.md) | Proyección Académico → BL en modo shadow, desactivada y sin efectos financieros |
+| [docs/README.md](docs/README.md) | Índice actual y orden de lectura; marca guías históricas |
+
+---
+
+## Variables de entorno por finalidad
+
+Los nombres completos están en [`backend/.env.example`](backend/.env.example)
+y [`frontend/.env.example`](frontend/.env.example). Los valores se guardan en
+archivos ignorados localmente o en el gestor de secretos; no se copian a Git ni
+a bundles públicos.
+
+| Componente | Nombres | Finalidad |
+| --- | --- | --- |
+| BACK | `DATABASE_URL`, `PORT`, `NODE_ENV`, `JWT_SECRET` | PostgreSQL BL, puerto/runtime y firma de la sesión JWT local de BL. |
+| BACK → portal y Académico | `PORTAL_TENANT_KEYS`, `EDUPAY_ACADEMICO_INTEGRATION_TOKEN`, `EDUPAY_ACADEMICO_INTEGRATION_TOKEN_PREVIOUS`, `EDUPAY_ACADEMICO_CURSOR_SECRET`, `EDUPAY_ACADEMICO_ALLOWED_TENANTS`, `EDUPAY_ACADEMICO_RATE_LIMIT_PER_MINUTE` | Acceso de portal por tenant y feed heredado BL → Académico con token, rotación opcional, cursores y allowlist. Sólo server-side. |
+| Proyección Académico → BL | `ACADEMIC_FINANCIAL_PROJECTION_ENABLED`, `ACADEMIC_FINANCIAL_PROJECTION_BASE_URL`, `ACADEMIC_FINANCIAL_PROJECTION_TIMEOUT_MS`, `ACADEMIC_FINANCIAL_PROJECTION_INBOUND_CREDENTIALS`, `ACADEMIC_FINANCIAL_PROJECTION_SNAPSHOT_CREDENTIALS` | Consumer shadow y snapshots nuevos; permanecen desactivados hasta release explícito. |
+| BACK — web, correo y archivos | `PORTAL_URL`, `NEXT_PUBLIC_APP_URL`, `ENABLE_EMAILS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `UPLOAD_DIR` | Orígenes permitidos, entrega SMTP opcional y almacenamiento de archivos. |
+| FRONT | `NEXT_PUBLIC_API_URL`, `NODE_ENV`, `JWT_SECRET`, `NEXT_ALLOWED_DEV_ORIGINS` | URL pública del backend, runtime de Next, sesión del lado servidor y origen HMR sólo para desarrollo. `NEXT_PUBLIC_*` se incorpora al build. |
+
+El feed heredado BL → Académico no depende de la proyección shadow. DIE no se
+envía a BL.
+
+En producción `RUN_MIGRATIONS=false` impide que BACK ejecute migraciones al
+iniciar; se aplican mediante un cambio de release explícito, después de revisar
+el destino y el migrador.
 
 ---
 
@@ -85,10 +125,14 @@ cd BL-002-EduPay
 docker compose up -d
 ```
 
-Esto levanta un contenedor `edupay-postgres` en `localhost:5432` con:
+Esto levanta un contenedor `edupay-postgres` con el puerto local `5435` mapeado
+al `5432` del contenedor:
 - **Usuario**: `postgres`
 - **Contraseña**: `postgres`
 - **Base de datos**: `edupay`
+
+Configura `DATABASE_URL` local para el puerto publicado `5435`; el valor del
+archivo de ejemplo es ilustrativo y no toma el puerto de Compose.
 
 ### 3. Configurar variables de entorno
 
@@ -108,12 +152,12 @@ cd backend && npm install && cd ..
 cd frontend && npm install && cd ..
 ```
 
-### 5. Generar cliente Prisma y migrar base de datos
+### 5. Generar cliente Prisma y aplicar migraciones locales
 
 ```bash
 cd backend
 npx prisma generate
-npx prisma migrate dev --name init
+npm run db:migrate:deploy
 ```
 
 ### 6. Ejecutar el Seeder (usuario administrador)
@@ -249,6 +293,12 @@ Detalle de cada prueba, cobertura del flujo de pagos y CI: **[docs/TESTING.md](d
 La operación vigente usa Coolify con FRONT y BACK separados. Seguir
 [el runbook actual](docs/operations/RUNBOOK.md). README-deploy.md conserva
 referencias de cPanel como documentación histórica; no aplicarlas a la VPS actual.
+
+La guía local de este README usa el PostgreSQL Compose de desarrollo. En
+producción cada backend usa su PostgreSQL nativo de Coolify; los contenedores
+Compose `edupay-pilot` históricos no son destinos de migración productiva.
+Mantén `RUN_MIGRATIONS=false` en el backend productivo: las migraciones se
+ejecutan en una operación explícita y revisada.
 
 ## Licencia
 
