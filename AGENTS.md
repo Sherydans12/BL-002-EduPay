@@ -13,8 +13,10 @@ Leer [topología productiva](docs/operations/PRODUCTION.md),
 - PostgreSQL productivo BL-002 es 18; los contenedores de pruebas pueden usar
   otra versión explícita. No sustituir volumen/imagen por un ejemplo local.
 - Consultar UUID, SHA/digest y configuración vigentes; no inferir recursos desde
-  nombres parecidos o del último deployment. main tiene auto deploy activo al
-  cierre: revisar automatismos antes de fusionar.
+  nombres parecidos o del último deployment. El snapshot documentado en
+  `docs/operations/RUNBOOK.md` registra auto deploy desactivado para BL FRONT y
+  BACK desde 2026-09-14; es evidencia histórica y se debe revalidar Coolify
+  antes de publicar. Un merge a main no demuestra un deployment.
 - Crear rama codex/<mejora> y worktree propio desde la baseline publicada.
   No descartar cambios existentes, usar reset/clean/force push o integrar WIP
   para hacer parecer limpio un directorio.
