@@ -7,10 +7,12 @@ BL conserva su acceso administrativo legado.
 
 ## Estado comprobado y última verificación
 
-- Git, consultado el **2026-09-24**: `origin/main` en
-  `d3e40da0bcf893e8d02f2c23d7c79a4d46b8071f`. Entre el release documentado
-  `04687aa8c5249ad1f9be94c7ad62099fb41d5d6c` y ese ref, Git sólo muestra
-  cambios a cuatro documentos `docs/operations/*`; esto no verifica runtime.
+- Git, consultado el **2026-11-12**, antes de este cierre documental:
+  `main` y `origin/main` coinciden en
+  `684689b6551b71c3f86e04c6266f7b4d9c852d02`; el checkout estaba limpio.
+  Es estado de código fuente, no una verificación de runtime.
+- La revisión de ramas, PR y alcance está en
+  [auditoría de preparación del 2026-11-12](operations/workspace-readiness-audit-2026-11-12.md).
 - Verificación directa BL que contiene este repo: **2026-09-15** en
   [topología](operations/PRODUCTION.md) e
   [inventario Coolify local](operations/coolify-inventory.json).
@@ -46,6 +48,8 @@ no la base productiva, que es un recurso PostgreSQL nativo de Coolify.
   por UUID y no usar el Compose histórico; revisar `RUN_MIGRATIONS=false`,
   backup y migrador inmutable con digest en el runbook.
 
-La proyección shadow está desactivada. Su activación, el rollover anual y los
-cambios locales no integrados siguen aparcados hasta una revisión y autorización
-propias; documentarlos no constituye aceptación.
+La proyección financiera shadow de BL-002 permanece desactivada. El avance anual
+de matrículas y la admisión de alumnos pertenecen al dominio de Académico; no
+activan esta proyección ni justifican migraciones o escrituras de producción en
+BL-002. Los cambios de una rama, un stash o una nota operativa no se consideran
+integrados hasta verificarlos contra `origin/main`.
