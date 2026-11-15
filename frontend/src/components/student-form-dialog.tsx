@@ -11,7 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DropdownChevron } from "@/components/ui/dropdown-chevron";
-import { cmdkCourseFilter, cmdkPersonFilter } from "@/lib/flexible-search";
+import { cmdkCourseFilter } from "@/lib/flexible-search";
+import { searchGuardians } from "@/lib/person-search";
+import { PersonSearchPicker } from "@/components/person-search-picker";
 import { formatRut, sanitizeRutInput } from "@/lib/rut";
 import { studentSchema, type StudentFormData } from "@/lib/schemas/student.schema";
 
@@ -19,7 +21,6 @@ export type StudentFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courses: Course[];
-  guardians: Guardian[];
   /** null = crear alumno */
   editingStudent: Student | null;
   /** Si se crea desde la vista de un curso, preselecciona el curso */
@@ -31,13 +32,16 @@ export function StudentFormDialog({
   open,
   onOpenChange,
   courses,
-  guardians,
   editingStudent,
   defaultCourseId,
   onSaved,
 }: StudentFormDialogProps) {
   const [courseOpen, setCourseOpen] = useState(false);
-  const [guardianOpen, setGuardianOpen] = useState(false);
+  // Apoderado elegido; se busca en el servidor en vez de cargar todos.
+  const [selectedGuardian, setSelectedGuardian] = useState<Pick<
+    Guardian,
+    "id" | "name" | "rut"
+  > | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register, control, handleSubmit, reset, setValue, formState: { errors } } = useForm<StudentFormData>({
@@ -46,6 +50,15 @@ export function StudentFormDialog({
 
   useEffect(() => {
     if (!open) return;
+    setSelectedGuardian(
+      editingStudent?.guardian
+        ? {
+            id: editingStudent.guardian.id,
+            name: editingStudent.guardian.name,
+            rut: editingStudent.guardian.rut ?? null,
+          }
+        : null,
+    );
     if (editingStudent) {
       reset({
         rut: formatRut(editingStudent.rut),
@@ -184,50 +197,35 @@ export function StudentFormDialog({
             </div>
 
             <div className="col-span-full">
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Apoderado *</label>
+              <label htmlFor="student-form-guardian" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">Apoderado *</label>
               <Controller
                 name="guardianId"
                 control={control}
                 render={({ field }) => (
-                  <Popover open={guardianOpen} onOpenChange={setGuardianOpen}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2"
-                      >
-                        <span className="min-w-0 flex-1 truncate">
-                          {field.value ? guardians.find((g) => g.id === field.value)?.name : "Seleccionar apoderado..."}
-                        </span>
-                        <DropdownChevron />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[450px] p-0 z-[60]">
-                      <Command filter={cmdkPersonFilter} className="bg-transparent">
-                        <CommandInput placeholder="Buscar apoderado por nombre o RUT..." className="border-none focus:ring-0" />
-                        <CommandList>
-                          <CommandEmpty>No se encontró el apoderado.</CommandEmpty>
-                          <CommandGroup>
-                            {guardians.map((g) => (
-                              <CommandItem
-                                key={g.id}
-                                value={`${g.name}\t${g.rut ?? ""}`}
-                                onSelect={() => {
-                                  field.onChange(g.id);
-                                  setGuardianOpen(false);
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <div className="flex flex-col">
-                                  <span>{g.name}</span>
-                                  {g.rut && <span className="text-xs text-[var(--color-text-muted)]">{g.rut}</span>}
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <PersonSearchPicker
+                    id="student-form-guardian"
+                    selectedLabel={
+                      field.value && selectedGuardian?.id === field.value
+                        ? selectedGuardian.name
+                        : null
+                    }
+                    placeholder="Seleccionar apoderado..."
+                    searchPlaceholder="Buscar apoderado por nombre o RUT..."
+                    searchAriaLabel="Buscar apoderado por nombre o RUT"
+                    search={searchGuardians}
+                    triggerClassName="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] text-left text-white focus:border-[var(--color-primary)] outline-none flex items-center gap-2"
+                    contentClassName="w-[min(450px,calc(100vw-2rem))] p-0 z-[60]"
+                    renderItem={(g) => (
+                      <div className="flex flex-col">
+                        <span>{g.name}</span>
+                        {g.rut && <span className="text-xs text-[var(--color-text-muted)]">{g.rut}</span>}
+                      </div>
+                    )}
+                    onSelect={(g) => {
+                      setSelectedGuardian({ id: g.id, name: g.name, rut: g.rut ?? null });
+                      field.onChange(g.id);
+                    }}
+                  />
                 )}
               />
               {errors.guardianId && <p className="text-red-400 text-xs mt-1">{errors.guardianId.message}</p>}

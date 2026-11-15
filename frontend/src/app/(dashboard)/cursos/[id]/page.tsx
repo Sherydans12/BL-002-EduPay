@@ -15,8 +15,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { coursesApi } from "@/lib/api";
-import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
-import type { Course, CourseWithStudents, Guardian, Student } from "@/lib/api";
+import { fetchAllCourses } from "@/lib/fetch-all-pages";
+import type { Course, CourseWithStudents, Student } from "@/lib/api";
 import { StudentFormDialog } from "@/components/student-form-dialog";
 import { matchesStudentRow } from "@/lib/flexible-search";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,6 @@ export default function CourseStudentsPage() {
 
   const [course, setCourse] = useState<CourseWithStudents | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -105,12 +104,10 @@ export default function CourseStudentsPage() {
   }, [courseId]);
 
   useEffect(() => {
-    Promise.all([fetchAllCourses(), fetchAllGuardians()])
-      .then(([cRes, gRes]) => {
-        setCourses(cRes);
-        setGuardians(gRes);
-      })
-      .catch(() => {});
+    // Guardians are searched on the server inside StudentFormDialog.
+    fetchAllCourses()
+      .then(setCourses)
+      .catch(() => toast.error("No se pudieron cargar los cursos"));
   }, []);
 
   const filtered = useMemo(() => {
@@ -392,7 +389,6 @@ export default function CourseStudentsPage() {
         open={isDialogOpen}
         onOpenChange={handleDialogOpenChange}
         courses={courses}
-        guardians={guardians}
         editingStudent={editingStudent}
         defaultCourseId={courseId}
         onSaved={reloadCourse}

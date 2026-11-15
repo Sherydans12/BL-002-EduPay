@@ -8,7 +8,9 @@ import {
   downloadBlob,
   resolveUploadUrl,
 } from "@/lib/api";
-import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
+import { fetchAllCourses } from "@/lib/fetch-all-pages";
+import { searchStudents } from "@/lib/person-search";
+import { PersonSearchPicker } from "@/components/person-search-picker";
 import type {
   Payment,
   Course,
@@ -112,7 +114,9 @@ export default function ReportsPage() {
 
   // General references
   const [courses, setCourses] = useState<Course[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
+  // Student filter searches the server; only the chosen one is kept.
+  const [selectedReportStudent, setSelectedReportStudent] =
+    useState<Student | null>(null);
 
   // Sábana / Matriz state
   const [matrixData, setMatrixData] = useState<SchoolFeeMatrixResponse | null>(
@@ -157,7 +161,6 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchAllCourses().then(setCourses).catch(() => {});
-    fetchAllStudents().then(setStudents).catch(() => {});
   }, []);
 
   // Fetch Matrix from Backend
@@ -993,34 +996,49 @@ export default function ReportsPage() {
                   </NativeSelectField>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5">
+                  <label
+                    htmlFor="reports-student-filter"
+                    className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-1.5"
+                  >
                     Alumno
                   </label>
-                  <NativeSelectField>
-                    <select
-                      value={filters.studentId}
-                      onChange={(e) =>
-                        setFilters((f) => ({
-                          ...f,
-                          studentId: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-white outline-none"
-                    >
-                      <option value="">Todos los alumnos</option>
-                      {students
-                        .filter(
-                          (s) =>
-                            !filters.courseId ||
-                            s.courseId === Number(filters.courseId),
-                        )
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </select>
-                  </NativeSelectField>
+                  <PersonSearchPicker
+                    id="reports-student-filter"
+                    selectedLabel={
+                      filters.studentId &&
+                      selectedReportStudent?.id === Number(filters.studentId)
+                        ? selectedReportStudent.name
+                        : null
+                    }
+                    placeholder="Todos los alumnos"
+                    searchPlaceholder="Buscar alumno por nombre o RUT..."
+                    searchAriaLabel="Buscar alumno por nombre o RUT"
+                    search={(query) =>
+                      searchStudents(query, {
+                        courseId: filters.courseId
+                          ? Number(filters.courseId)
+                          : undefined,
+                      })
+                    }
+                    scopeKey={filters.courseId}
+                    clearLabel="Todos los alumnos"
+                    onClear={() => {
+                      setSelectedReportStudent(null);
+                      setFilters((f) => ({ ...f, studentId: "" }));
+                    }}
+                    renderItem={(s) => (
+                      <div className="flex flex-col">
+                        <span>{s.name}</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">
+                          {s.rut} · {s.course?.name}
+                        </span>
+                      </div>
+                    )}
+                    onSelect={(s) => {
+                      setSelectedReportStudent(s);
+                      setFilters((f) => ({ ...f, studentId: String(s.id) }));
+                    }}
+                  />
                 </div>
               </div>
 

@@ -59,8 +59,8 @@ import {
   guardianSchema,
   type GuardianFormData,
 } from "@/lib/schemas/guardian.schema";
-import { fetchAllStudents } from "@/lib/fetch-all-pages";
-import { cmdkPersonFilter } from "@/lib/flexible-search";
+import { searchStudents } from "@/lib/person-search";
+import { PersonSearchPicker } from "@/components/person-search-picker";
 import { formatCLP } from "@/lib/currency-utils";
 
 export default function GuardiansPage() {
@@ -83,9 +83,11 @@ export default function GuardiansPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [allStudents, setAllStudents] = useState<Student[]>([]);
-  const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentPickerOpen, setStudentPickerOpen] = useState(false);
+  // Names of the students assigned in the dialog, keyed by id. Students are
+  // searched on the server instead of loading the whole roster.
+  const [assignedStudentInfo, setAssignedStudentInfo] = useState<
+    Record<number, { name: string; courseName?: string }>
+  >({});
 
   const {
     register,
@@ -142,24 +144,11 @@ export default function GuardiansPage() {
     void loadGuardians();
   }, [page, pageSize, debouncedSearch]);
 
-  const loadStudentsForPicker = async () => {
-    if (allStudents.length > 0) return;
-    setStudentsLoading(true);
-    try {
-      const data = await fetchAllStudents();
-      setAllStudents(data);
-    } catch {
-      toast.error("Error al cargar lista de alumnos");
-    } finally {
-      setStudentsLoading(false);
-    }
-  };
-
   const openCreateDialog = async () => {
     setEditingGuardian(null);
     reset({ rut: "", name: "", email: "", phone: "", studentIds: [] });
+    setAssignedStudentInfo({});
     setIsDialogOpen(true);
-    void loadStudentsForPicker();
   };
 
   const openEditDialog = async (g: Guardian) => {
@@ -167,6 +156,14 @@ export default function GuardiansPage() {
     try {
       const detail = await guardiansApi.getOne(g.id);
       const studentIds = (detail.students ?? []).map((s) => s.id);
+      setAssignedStudentInfo(
+        Object.fromEntries(
+          (detail.students ?? []).map((s) => [
+            s.id,
+            { name: s.name, courseName: s.course?.name },
+          ]),
+        ),
+      );
       reset({
         rut: g.rut ? formatRut(g.rut) : "",
         name: g.name,
@@ -182,9 +179,16 @@ export default function GuardiansPage() {
         phone: g.phone ?? "",
         studentIds: g.students.map((s) => Number(s.id)),
       });
+      setAssignedStudentInfo(
+        Object.fromEntries(
+          g.students.map((s) => [
+            Number(s.id),
+            { name: s.name, courseName: s.course?.name },
+          ]),
+        ),
+      );
     }
     setIsDialogOpen(true);
-    void loadStudentsForPicker();
   };
 
   const onSubmit = async (data: GuardianFormData) => {
@@ -634,7 +638,10 @@ export default function GuardiansPage() {
 
               {/* Selector de Alumnos a Cargo */}
               <div className="sm:col-span-2 space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                <label
+                  htmlFor="guardian-form-students"
+                  className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]"
+                >
                   Alumnos a Cargo (Grupo Familiar)
                 </label>
 
@@ -643,9 +650,13 @@ export default function GuardiansPage() {
                   control={control}
                   render={({ field }) => {
                     const selectedIds = field.value ?? [];
-                    const selectedStudents = allStudents.filter((s) =>
-                      selectedIds.includes(s.id),
-                    );
+                    const selectedStudents = selectedIds.map((id) => ({
+                      id,
+                      name: assignedStudentInfo[id]?.name ?? `Alumno #${id}`,
+                      course: assignedStudentInfo[id]?.courseName
+                        ? { name: assignedStudentInfo[id]!.courseName! }
+                        : undefined,
+                    }));
 
                     const toggleStudent = (id: number) => {
                       const exists = selectedIds.includes(id);
@@ -657,65 +668,39 @@ export default function GuardiansPage() {
 
                     return (
                       <div className="space-y-2">
-                        <Popover
-                          open={studentPickerOpen}
-                          onOpenChange={setStudentPickerOpen}
-                        >
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-left text-xs text-white focus:border-[var(--color-primary)] outline-none flex items-center justify-between"
-                            >
-                              <span className="text-[var(--color-text-muted)]">
-                                {studentsLoading
-                                  ? "Cargando alumnos..."
-                                  : "Buscar e incorporar alumnos a este apoderado..."}
-                              </span>
-                              <DropdownChevron />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[400px] p-0 z-[60] bg-[var(--color-surface)] border-[var(--color-border)] text-white">
-                            <Command
-                              filter={cmdkPersonFilter}
-                              className="bg-transparent"
-                            >
-                              <CommandInput
-                                placeholder="Buscar alumno por nombre o RUT..."
-                                className="border-none focus:ring-0 text-xs"
-                              />
-                              <CommandList className="max-h-56">
-                                <CommandEmpty>No se encontró el alumno.</CommandEmpty>
-                                <CommandGroup>
-                                  {allStudents.map((s) => {
-                                    const isSelected = selectedIds.includes(s.id);
-                                    return (
-                                      <CommandItem
-                                        key={s.id}
-                                        value={`${s.name}\t${s.rut ?? ""}`}
-                                        onSelect={() => toggleStudent(s.id)}
-                                        className="cursor-pointer text-xs"
-                                      >
-                                        <div className="flex items-center justify-between w-full">
-                                          <div>
-                                            <span className="font-semibold text-white">{s.name}</span>
-                                            <span className="text-[10px] text-blue-300 ml-1.5">
-                                              ({s.course?.name})
-                                            </span>
-                                          </div>
-                                          {isSelected && (
-                                            <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
-                                              Asignado
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
+                        <PersonSearchPicker
+                          id="guardian-form-students"
+                          selectedLabel={null}
+                          placeholder="Buscar e incorporar alumnos a este apoderado..."
+                          searchPlaceholder="Buscar alumno por nombre o RUT..."
+                          searchAriaLabel="Buscar alumno por nombre o RUT"
+                          search={searchStudents}
+                          keepOpenOnSelect
+                          triggerClassName="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-left text-xs text-white focus:border-[var(--color-primary)] outline-none flex items-center justify-between"
+                          contentClassName="w-[min(400px,calc(100vw-2rem))] p-0 z-[60] bg-[var(--color-surface)] border-[var(--color-border)] text-white"
+                          renderItem={(s) => (
+                            <div className="flex items-center justify-between w-full text-xs">
+                              <div>
+                                <span className="font-semibold text-white">{s.name}</span>
+                                <span className="text-[10px] text-blue-300 ml-1.5">
+                                  ({s.course?.name})
+                                </span>
+                              </div>
+                              {selectedIds.includes(s.id) && (
+                                <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
+                                  Asignado
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                          onSelect={(s) => {
+                            setAssignedStudentInfo((current) => ({
+                              ...current,
+                              [s.id]: { name: s.name, courseName: s.course?.name },
+                            }));
+                            toggleStudent(s.id);
+                          }}
+                        />
 
                         {/* Chips de Alumnos Seleccionados */}
                         <div className="flex flex-wrap gap-1.5 pt-1">
