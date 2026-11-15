@@ -88,11 +88,13 @@ export class StudentsService {
     limit = 50,
     search?: string,
     status?: StudentStatus,
+    guardianId?: number,
   ) {
     const skip = (page - 1) * limit;
     const where: Prisma.StudentWhereInput = {
       deletedAt: null,
       ...(courseId ? { courseId } : {}),
+      ...(guardianId ? { guardianId } : {}),
       ...(status ? { status } : {}),
       ...(buildStudentSearchWhere(search) ?? {}),
     };

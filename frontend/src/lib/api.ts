@@ -660,6 +660,8 @@ export const guardiansApi = {
 // ─── Students ─────────────────────────────────────────────────
 export type StudentsListParams = {
   courseId?: number;
+  /** Hermanos de una familia: alumnos del apoderado indicado. */
+  guardianId?: number;
   status?: StudentStatus;
   page?: number;
   limit?: number;
@@ -670,6 +672,7 @@ export const studentsApi = {
   getAll: (params?: StudentsListParams) => {
     const qs = new URLSearchParams();
     if (params?.courseId) qs.set("courseId", params.courseId.toString());
+    if (params?.guardianId) qs.set("guardianId", params.guardianId.toString());
     if (params?.status) qs.set("status", params.status);
     if (params?.page) qs.set("page", params.page.toString());
     if (params?.limit) qs.set("limit", params.limit.toString());
