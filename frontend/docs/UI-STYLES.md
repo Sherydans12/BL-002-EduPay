@@ -83,6 +83,26 @@ import { DropdownChevron } from "@/components/ui/dropdown-chevron";
 
 **Popover sobre tablas o modales:** usa `PopoverContent` con `className` que incluya `z-[60]` si el contenido queda tapado.
 
+#### Búsqueda de alumnos y apoderados (padrones grandes)
+
+No descargues el padrón completo para llenar un `Command` de personas. Usa
+`usePersonSearch` (`src/lib/use-person-search.ts`) con `searchStudents` o
+`searchGuardians` (`src/lib/person-search.ts`):
+
+- `Command shouldFilter={false}`: el filtrado lo hace el servidor (nombre o RUT).
+- `CommandInput` controlado (`value` / `onValueChange`) y con `aria-label`.
+- Consulta tras 300 ms sin escribir, desde 2 caracteres y con 20 resultados
+  como máximo; filtros externos (p. ej. curso) van en `scopeKey`.
+- Muestra el estado con `personSearchStatusText` en un `role="status"`
+  (`Mostrando 20 de N. Escribe más para acotar.`) y ofrece **Reintentar** si
+  la búsqueda falla.
+- Para hermanos usa `fetchGuardianStudents(guardianId)`, no un filtro local.
+
+`fetchAll*` (`src/lib/fetch-all-pages.ts`) queda para catálogos pequeños como
+cursos. El BACK rechaza `limit` mayor que 200 en alumnos, apoderados, cursos y
+pagos. Pantallas que aún cargan el padrón completo: alumnos, apoderados,
+cobranzas/setup, cursos/[id], reportes y el modal de comunicaciones.
+
 ### 4.2 `<select>` nativo (curso, método de pago, filtros simples)
 
 El navegador dibuja una flecha distinta y mal alineada si se deja el select pelado.
@@ -147,6 +167,9 @@ Ya incluye `ChevronDownIcon`. Úsalo cuando el flujo encaje con el primitivo; pa
 3. ¿Todo desplegable visual usa **DropdownChevron** o **NativeSelectField**?
 4. ¿El trigger del combobox tiene **truncate** para nombres largos?
 5. ¿Popover necesita **z-[60]** encima de tablas o overlays?
+6. ¿Cada `<label>` tiene `htmlFor` apuntando al `id` de su campo?
+7. ¿Un error de carga muestra un estado con **Reintentar** en lugar de datos de otra consulta?
+8. ¿Las búsquedas de personas consultan al servidor en vez de cargar el padrón completo?
 
 ---
 

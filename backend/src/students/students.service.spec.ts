@@ -249,3 +249,51 @@ describe('StudentsService structured names', () => {
     });
   });
 });
+
+describe('StudentsService list filters', () => {
+  const prisma = {
+    student: {
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
+  };
+  const service = new StudentsService(prisma as unknown as PrismaService);
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.student.findMany.mockResolvedValue([]);
+    prisma.student.count.mockResolvedValue(0);
+  });
+
+  it('filters siblings by guardian and keeps the bounded page window', async () => {
+    const result = await service.findAll(
+      undefined,
+      2,
+      20,
+      undefined,
+      undefined,
+      7,
+    );
+
+    const [findArgs] = prisma.student.findMany.mock.calls[0] as [
+      { where: Record<string, unknown>; skip: number; take: number },
+    ];
+    expect(findArgs.where).toMatchObject({ deletedAt: null, guardianId: 7 });
+    expect(findArgs.skip).toBe(20);
+    expect(findArgs.take).toBe(20);
+    expect(prisma.student.count).toHaveBeenCalledWith({
+      where: findArgs.where,
+    });
+    expect(result.meta).toEqual({ total: 0, page: 2, limit: 20, lastPage: 0 });
+  });
+
+  it('does not filter by guardian when none is requested', async () => {
+    await service.findAll(3, 1, 50);
+
+    const [findArgs] = prisma.student.findMany.mock.calls[0] as [
+      { where: Record<string, unknown> },
+    ];
+    expect(findArgs.where).toMatchObject({ courseId: 3 });
+    expect(findArgs.where).not.toHaveProperty('guardianId');
+  });
+});

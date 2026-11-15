@@ -26,6 +26,7 @@ import { UpdateGuardianDto } from './dto/update-guardian.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import { assertPageLimit } from '../common/pagination/page-limit';
 
 @ApiTags('guardians')
 @Controller('guardians')
@@ -80,6 +81,7 @@ export class GuardiansController {
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
     const trimmed = search?.trim();
+    assertPageLimit(page, limit);
     return this.guardiansService.findAll(page, limit, trimmed || undefined);
   }
 

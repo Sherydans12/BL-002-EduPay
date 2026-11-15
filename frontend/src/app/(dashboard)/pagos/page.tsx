@@ -9,14 +9,15 @@ import {
   type FormEvent,
 } from "react";
 import { paymentsApi, downloadBlob, resolveUploadUrl } from "@/lib/api";
-import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
+import { fetchAllCourses } from "@/lib/fetch-all-pages";
+import { personSearchStatusText, searchStudents } from "@/lib/person-search";
+import { usePersonSearch } from "@/lib/use-person-search";
 import type { PaymentGroup, Student, Course, PaymentMethod } from "@/lib/api";
 import {
   getGroupBoletaFileUrl,
   getGroupBoletaNumber,
   getGroupPayerLabel,
 } from "@/lib/payment-group-utils";
-import { cmdkPersonFilter } from "@/lib/flexible-search";
 import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import { toast } from "sonner";
 import {
@@ -66,7 +67,6 @@ import {
 } from "@/components/ui/popover";
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -116,9 +116,24 @@ export default function PagosMasterPage() {
   const [activeTab, setActiveTab] = useState<"historial" | "pendientes">("historial");
 
   const [courses, setCourses] = useState<Course[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
   const [courseFilter, setCourseFilter] = useState("");
+  // Student filter searches the server, scoped to the selected course.
+  const [studentFilterText, setStudentFilterText] = useState("");
+  const [selectedFilterStudent, setSelectedFilterStudent] =
+    useState<Student | null>(null);
+  const searchFilterStudents = useCallback(
+    (query: string) =>
+      searchStudents(query, {
+        courseId: courseFilter ? Number(courseFilter) : undefined,
+      }),
+    [courseFilter],
+  );
+  const studentFilterSearch = usePersonSearch(
+    studentFilterText,
+    searchFilterStudents,
+    { scopeKey: courseFilter },
+  );
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [filterMethod, setFilterMethod] = useState<PaymentMethod | "ALL">(
     "ALL",
   );
@@ -167,24 +182,12 @@ export default function PagosMasterPage() {
   useEffect(() => {
     fetchAllCourses()
       .then(setCourses)
-      .catch(() => {});
-    fetchAllStudents()
-      .then(setStudents)
-      .catch(() => {});
+      .catch(() => toast.error("No se pudieron cargar los cursos del filtro"));
   }, []);
-
-  useEffect(() => {
-    if (courseFilter) {
-      setFilteredStudents(
-        students.filter((s) => s.courseId === Number(courseFilter)),
-      );
-    } else {
-      setFilteredStudents(students);
-    }
-  }, [courseFilter, students]);
 
   const fetchGroups = useCallback(async () => {
     setLoading(true);
+    setHistoryError(null);
     try {
       const params: Record<string, string> = {
         page: page.toString(),
@@ -205,7 +208,12 @@ export default function PagosMasterPage() {
       setTotalPages(res.meta.totalPages ?? res.meta.lastPage ?? 1);
       setTotalCount(res.meta.total);
     } catch {
-      toast.error("Error al cargar historial de pagos");
+      // Do not keep rows from a previous query under the new filters.
+      setGroups([]);
+      setTotalCount(0);
+      setHistoryError(
+        "No se pudo cargar el historial de pagos con los filtros aplicados.",
+      );
     } finally {
       setLoading(false);
     }
@@ -236,6 +244,8 @@ export default function PagosMasterPage() {
     };
     setFilters(empty);
     setAppliedFilters(empty);
+    setSelectedFilterStudent(null);
+    setStudentFilterText("");
     setCourseFilter("");
     setFilterMethod("ALL");
     setBoletaFilter("ALL");
@@ -291,8 +301,8 @@ export default function PagosMasterPage() {
   };
 
   const selectedStudent =
-    filters.studentId != null
-      ? students.find((s) => s.id === filters.studentId)
+    filters.studentId != null && selectedFilterStudent?.id === filters.studentId
+      ? selectedFilterStudent
       : undefined;
 
   // Compute key statistics for KPI cards
@@ -642,12 +652,12 @@ export default function PagosMasterPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {/* Alumno Popover */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+            <label htmlFor="payments-history-alumno" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
               Alumno
             </label>
             <Popover open={studentOpen} onOpenChange={setStudentOpen}>
               <PopoverTrigger asChild>
-                <button
+                <button id="payments-history-alumno"
                   type="button"
                   className={`${fieldClass} flex items-center gap-2 text-left`}
                 >
@@ -665,16 +675,45 @@ export default function PagosMasterPage() {
                 className="w-[min(400px,calc(100vw-2rem))] p-0 z-[60]"
                 align="start"
               >
-                <Command filter={cmdkPersonFilter} className="bg-transparent">
-                  <CommandInput placeholder="Buscar por nombre o RUT..." />
+                <Command shouldFilter={false} className="bg-transparent">
+                  <CommandInput
+                    aria-label="Buscar alumno por nombre o RUT"
+                    placeholder="Buscar por nombre o RUT..."
+                    value={studentFilterText}
+                    onValueChange={setStudentFilterText}
+                  />
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--color-text-muted)]"
+                  >
+                    <span>
+                      {personSearchStatusText({
+                        query: studentFilterSearch.query,
+                        loading: studentFilterSearch.loading,
+                        error: studentFilterSearch.error,
+                        shown: studentFilterSearch.items.length,
+                        total: studentFilterSearch.total,
+                      })}
+                    </span>
+                    {studentFilterSearch.error ? (
+                      <button
+                        type="button"
+                        onClick={studentFilterSearch.retry}
+                        className="shrink-0 rounded-md border border-[var(--color-border)] px-2 py-1 text-white"
+                      >
+                        Reintentar
+                      </button>
+                    ) : null}
+                  </div>
                   <CommandList>
-                    <CommandEmpty>No se encontró el alumno.</CommandEmpty>
                     <CommandGroup>
-                      {filteredStudents.map((s) => (
+                      {studentFilterSearch.items.map((s) => (
                         <CommandItem
                           key={s.id}
-                          value={`${s.name}\t${s.rut}`}
+                          value={`student-${s.id}`}
                           onSelect={() => {
+                            setSelectedFilterStudent(s);
                             setFilters((f) => ({ ...f, studentId: s.id }));
                             setStudentOpen(false);
                           }}
@@ -697,11 +736,11 @@ export default function PagosMasterPage() {
 
           {/* Curso */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+            <label htmlFor="payments-history-curso" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
               Curso
             </label>
             <NativeSelectField>
-              <select
+              <select id="payments-history-curso"
                 value={courseFilter}
                 onChange={(e) => {
                   setCourseFilter(e.target.value);
@@ -721,10 +760,10 @@ export default function PagosMasterPage() {
 
           {/* Fecha Inicio */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+            <label htmlFor="payments-history-fecha-inicio" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
               Fecha Inicio
             </label>
-            <input
+            <input id="payments-history-fecha-inicio"
               type="date"
               value={filters.dateFrom}
               onChange={(e) =>
@@ -736,10 +775,10 @@ export default function PagosMasterPage() {
 
           {/* Fecha Fin */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+            <label htmlFor="payments-history-fecha-fin" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
               Fecha Fin
             </label>
-            <input
+            <input id="payments-history-fecha-fin"
               type="date"
               value={filters.dateTo}
               onChange={(e) =>
@@ -752,7 +791,7 @@ export default function PagosMasterPage() {
 
           {/* Método de Pago */}
           <div>
-            <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+            <label htmlFor="payments-history-metodo-de-pago" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
               Método de Pago
             </label>
             <Select
@@ -761,7 +800,7 @@ export default function PagosMasterPage() {
                 setFilterMethod(value as PaymentMethod | "ALL")
               }
             >
-              <SelectTrigger
+              <SelectTrigger id="payments-history-metodo-de-pago"
                 className={`${fieldClass} h-auto min-h-[42px] w-full rounded-xl px-4 py-2.5`}
               >
                 <SelectValue />
@@ -861,11 +900,29 @@ export default function PagosMasterPage() {
         <TabsContent value="historial" className="mt-0">
           <div className="glass rounded-2xl overflow-hidden shadow-xl border border-[var(--color-border)]">
             <div className="px-6 py-3 bg-[var(--color-bg)]/40 border-b border-[var(--color-border)]/60 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
-              <span>Hacé clic en cualquier fila para expandir el desglose detallado de cuotas y conceptos.</span>
+              <span>Haz clic en cualquier fila para ver el desglose de cuotas y conceptos.</span>
               <span className="text-[11px] font-mono">Página {page} de {totalPages}</span>
             </div>
 
-            {loading ? (
+            {historyError && !loading ? (
+              <div
+                role="alert"
+                className="flex flex-col items-center justify-center py-16 gap-3 text-center"
+              >
+                <AlertTriangle className="w-8 h-8 text-[var(--color-danger)]" aria-hidden />
+                <p className="text-sm font-medium text-white">{historyError}</p>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  No se muestran resultados anteriores para evitar confusiones.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void fetchGroups()}
+                  className="mt-1 rounded-xl border border-[var(--color-border)] px-4 py-2 text-sm text-white hover:bg-[var(--color-surface-hover)]"
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : loading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3">
                 <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs text-[var(--color-text-muted)]">Cargando transacciones...</span>
@@ -1257,10 +1314,10 @@ export default function PagosMasterPage() {
           <form onSubmit={handleResolveBoleta} className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                <label htmlFor="payments-history-fecha-de-pago" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
                   Fecha de pago
                 </label>
-                <input
+                <input id="payments-history-fecha-de-pago"
                   type="date"
                   value={editPaymentDate}
                   onChange={(event) => setEditPaymentDate(event.target.value)}
@@ -1270,11 +1327,11 @@ export default function PagosMasterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+                <label htmlFor="payments-history-metodo" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
                   Método
                 </label>
                 <NativeSelectField>
-                  <select
+                  <select id="payments-history-metodo"
                     value={editMethod}
                     onChange={(event) =>
                       setEditMethod(event.target.value as PaymentMethod)
@@ -1292,10 +1349,10 @@ export default function PagosMasterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+              <label htmlFor="payments-history-n-de-boleta-sii" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
                 N° de Boleta SII
               </label>
-              <input
+              <input id="payments-history-n-de-boleta-sii"
                 type="text"
                 value={boletaNumber}
                 onChange={(event) => setBoletaNumber(event.target.value)}
@@ -1305,10 +1362,10 @@ export default function PagosMasterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+              <label htmlFor="payments-history-archivo-pdf-de-boleta" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
                 Archivo PDF de Boleta
               </label>
-              <input
+              <input id="payments-history-archivo-pdf-de-boleta"
                 type="file"
                 accept="application/pdf,.pdf"
                 onChange={(event) =>
@@ -1322,10 +1379,10 @@ export default function PagosMasterPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
+              <label htmlFor="payments-history-observaciones-notas" className="block text-xs font-medium text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wider">
                 Observaciones / Notas
               </label>
-              <textarea
+              <textarea id="payments-history-observaciones-notas"
                 value={editNotes}
                 onChange={(event) => setEditNotes(event.target.value)}
                 className={fieldClass}

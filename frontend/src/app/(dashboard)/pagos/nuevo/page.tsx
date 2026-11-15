@@ -14,9 +14,17 @@ import {
   chargesApi,
   guardiansApi,
   conceptsApi,
+  studentsApi,
   buildPaymentBatchFormData,
 } from "@/lib/api";
-import { fetchAllStudents, fetchAllGuardians } from "@/lib/fetch-all-pages";
+import {
+  fetchGuardianStudents,
+  mergeStudents,
+  personSearchStatusText,
+  searchGuardians,
+  searchStudents,
+} from "@/lib/person-search";
+import { usePersonSearch } from "@/lib/use-person-search";
 import type { Student, Guardian, Charge, PaymentConcept } from "@/lib/api";
 import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import { toast } from "sonner";
@@ -27,7 +35,6 @@ import {
 } from "@/components/ui/popover";
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -36,7 +43,6 @@ import {
 import {
   DropdownChevron,
 } from "@/components/ui/dropdown-chevron";
-import { cmdkPersonFilter } from "@/lib/flexible-search";
 import { useDropzone } from "react-dropzone";
 import {
   UploadCloud,
@@ -91,9 +97,13 @@ export default function NewPaymentPage() {
   const autoSelectedStudentIdRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentsLoaded, setStudentsLoaded] = useState(false);
-  const [guardians, setGuardians] = useState<Guardian[]>([]);
+  // Alumnos conocidos en esta pantalla (seleccionados, hermanos y enlace).
+  // No se descarga el padrón completo: la búsqueda consulta al servidor.
+  const [studentCache, setStudentCache] = useState<Record<number, Student>>({});
+  const [siblingsByGuardian, setSiblingsByGuardian] = useState<
+    Record<number, Student[]>
+  >({});
+  const requestedFamiliesRef = useRef<Set<number>>(new Set());
   const [concepts, setConcepts] = useState<PaymentConcept[]>([]);
   const [pendingCharges, setPendingCharges] = useState<Record<number, Charge[]>>({});
   const [loadingCharges, setLoadingCharges] = useState<Record<number, boolean>>({});
@@ -102,6 +112,18 @@ export default function NewPaymentPage() {
   // Search popovers
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<"STUDENT" | "GUARDIAN">("STUDENT");
+  const [searchText, setSearchText] = useState("");
+  const studentSearch = usePersonSearch(searchText, searchStudents, {
+    enabled: searchMode === "STUDENT",
+  });
+  const guardianSearch = usePersonSearch(searchText, searchGuardians, {
+    enabled: searchMode === "GUARDIAN",
+  });
+  const activeSearch = searchMode === "STUDENT" ? studentSearch : guardianSearch;
+  const activeSearchShown =
+    searchMode === "STUDENT"
+      ? studentSearch.items.length
+      : guardianSearch.items.length;
 
   // Selected students tracked as an ordered list of student IDs
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
@@ -168,8 +190,8 @@ export default function NewPaymentPage() {
   const notes = watch("notes") ?? "";
 
   const studentById = useMemo(
-    () => new Map(students.map((s) => [s.id, s])),
-    [students],
+    () => new Map(Object.values(studentCache).map((s) => [s.id, s])),
+    [studentCache],
   );
 
   const selectedStudents = useMemo(() => {
@@ -181,16 +203,35 @@ export default function NewPaymentPage() {
 
   const primaryStudent = selectedStudents[0];
 
-  // Load students, guardians, and concepts on mount
+  // Load payment concepts on mount; people are searched on demand.
   useEffect(() => {
-    Promise.all([
-      fetchAllStudents().then(setStudents),
-      fetchAllGuardians().then(setGuardians),
-      conceptsApi.getAll().then(setConcepts).catch(() => []),
-    ])
-      .catch(() => {})
-      .finally(() => setStudentsLoaded(true));
+    conceptsApi
+      .getAll()
+      .then(setConcepts)
+      .catch(() => toast.error("No se pudieron cargar los conceptos de pago"));
   }, []);
+
+  const rememberFamily = useCallback(
+    (guardianId: number, family: Student[]) => {
+      setStudentCache((current) => mergeStudents(current, family));
+      setSiblingsByGuardian((current) => ({ ...current, [guardianId]: family }));
+    },
+    [],
+  );
+
+  // Load siblings once per family to suggest them without the full roster.
+  const loadSiblings = useCallback(
+    (guardianId: number) => {
+      if (requestedFamiliesRef.current.has(guardianId)) return;
+      requestedFamiliesRef.current.add(guardianId);
+      fetchGuardianStudents(guardianId)
+        .then((family) => rememberFamily(guardianId, family))
+        .catch(() => {
+          requestedFamiliesRef.current.delete(guardianId);
+        });
+    },
+    [rememberFamily],
+  );
 
   // Update totalAmount whenever allocations change
   useEffect(() => {
@@ -263,6 +304,9 @@ export default function NewPaymentPage() {
         return;
       }
 
+      setStudentCache((current) => mergeStudents(current, [student]));
+      loadSiblings(student.guardianId);
+
       let alreadyAdded = false;
       setSelectedStudentIds((prev) => {
         if (prev.includes(student.id)) {
@@ -312,6 +356,7 @@ export default function NewPaymentPage() {
       append,
       getValues,
       loadPendingCharges,
+      loadSiblings,
       selectedStudentIds.length,
       syncGuardianFromStudent,
     ],
@@ -320,7 +365,15 @@ export default function NewPaymentPage() {
   // Select a guardian and load all of their children
   const handleSelectGuardian = useCallback(
     async (guardian: Guardian) => {
-      const children = students.filter((s) => s.guardianId === guardian.id);
+      let children: Student[];
+      try {
+        children = await fetchGuardianStudents(guardian.id);
+      } catch {
+        toast.error("No se pudieron cargar los alumnos del apoderado");
+        return;
+      }
+      requestedFamiliesRef.current.add(guardian.id);
+      rememberFamily(guardian.id, children);
       if (children.length === 0) {
         toast.error("Este apoderado no tiene alumnos registrados");
         return;
@@ -363,16 +416,20 @@ export default function NewPaymentPage() {
     [
       append,
       loadPendingCharges,
+      rememberFamily,
       remove,
-      students,
       syncGuardianFromGuardianRecord,
     ],
   );
 
   // Auto-select requested student from URL query param if present
+  const handleAddStudentRef = useRef(handleAddStudent);
+  useEffect(() => {
+    handleAddStudentRef.current = handleAddStudent;
+  }, [handleAddStudent]);
+
   useEffect(() => {
     if (
-      !studentsLoaded ||
       !Number.isInteger(requestedStudentId) ||
       requestedStudentId <= 0 ||
       autoSelectedStudentIdRef.current === requestedStudentId
@@ -380,24 +437,12 @@ export default function NewPaymentPage() {
       return;
     }
 
-    const requestedStudent = students.find(
-      (student) => student.id === requestedStudentId,
-    );
-
     autoSelectedStudentIdRef.current = requestedStudentId;
-
-    if (!requestedStudent) {
-      toast.error("No se encontró el alumno indicado en el enlace");
-      return;
-    }
-
-    void handleAddStudent(requestedStudent);
-  }, [
-    handleAddStudent,
-    requestedStudentId,
-    students,
-    studentsLoaded,
-  ]);
+    studentsApi
+      .getOne(requestedStudentId)
+      .then((student) => void handleAddStudentRef.current(student))
+      .catch(() => toast.error("No se encontró el alumno indicado en el enlace"));
+  }, [requestedStudentId]);
 
   // Remove a student and all their allocations
   const handleRemoveStudent = useCallback(
@@ -523,11 +568,11 @@ export default function NewPaymentPage() {
   const getSiblingSuggestions = useCallback(
     (student: Student) => {
       const currentSet = new Set(selectedStudentIds);
-      return students.filter(
-        (s) => s.guardianId === student.guardianId && !currentSet.has(s.id),
+      return (siblingsByGuardian[student.guardianId] ?? []).filter(
+        (s) => !currentSet.has(s.id),
       );
     },
-    [selectedStudentIds, students],
+    [selectedStudentIds, siblingsByGuardian],
   );
 
   // Dropzone for boleta PDF
@@ -585,9 +630,9 @@ export default function NewPaymentPage() {
 
     setSubmitting(true);
     try {
-      const firstStudent = students.find(
-        (s) => s.id === data.allocations[0]?.studentId,
-      );
+      const firstStudentId = data.allocations[0]?.studentId;
+      const firstStudent =
+        firstStudentId != null ? studentById.get(firstStudentId) : undefined;
       if (!data.useAltPayer && firstStudent) {
         const updatePayload: {
           name: string;
@@ -819,9 +864,16 @@ export default function NewPaymentPage() {
                   </button>
                 </div>
 
-                <Command filter={cmdkPersonFilter} className="bg-transparent">
+                <Command shouldFilter={false} className="bg-transparent">
                   <CommandInput
                     ref={searchInputRef}
+                    value={searchText}
+                    onValueChange={setSearchText}
+                    aria-label={
+                      searchMode === "STUDENT"
+                        ? "Buscar alumno por nombre, apellido o RUT"
+                        : "Buscar apoderado por nombre o RUT"
+                    }
                     placeholder={
                       searchMode === "STUDENT"
                         ? "Escribe nombre, apellido o RUT del alumno..."
@@ -829,18 +881,39 @@ export default function NewPaymentPage() {
                     }
                     className="text-white placeholder:text-[var(--color-text-muted)]"
                   />
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--color-text-muted)]"
+                  >
+                    <span>
+                      {personSearchStatusText({
+                        query: activeSearch.query,
+                        loading: activeSearch.loading,
+                        error: activeSearch.error,
+                        shown: activeSearchShown,
+                        total: activeSearch.total,
+                      })}
+                    </span>
+                    {activeSearch.error ? (
+                      <button
+                        type="button"
+                        onClick={activeSearch.retry}
+                        className="shrink-0 rounded-md border border-[var(--color-border)] px-2 py-1 text-white hover:bg-[var(--color-surface-hover)]"
+                      >
+                        Reintentar
+                      </button>
+                    ) : null}
+                  </div>
                   <CommandList className="max-h-72">
-                    <CommandEmpty className="py-6 text-center text-xs text-[var(--color-text-muted)]">
-                      No se encontraron resultados.
-                    </CommandEmpty>
                     <CommandGroup>
                       {searchMode === "STUDENT"
-                        ? students.map((s) => {
+                        ? studentSearch.items.map((s) => {
                             const isAlreadyAdded = selectedStudentIds.includes(s.id);
                             return (
                               <CommandItem
                                 key={s.id}
-                                value={`${s.name}\t${s.rut}\t${s.course?.name ?? ""}`}
+                                value={`student-${s.id}`}
                                 onSelect={() => void handleAddStudent(s)}
                                 className="cursor-pointer py-2.5 px-3 hover:bg-[var(--color-surface-hover)] transition-colors flex items-center justify-between"
                               >
@@ -867,10 +940,10 @@ export default function NewPaymentPage() {
                               </CommandItem>
                             );
                           })
-                        : guardians.map((g) => (
+                        : guardianSearch.items.map((g) => (
                             <CommandItem
                               key={g.id}
-                              value={`${g.name}\t${g.rut ?? ""}`}
+                              value={`guardian-${g.id}`}
                               onSelect={() => void handleSelectGuardian(g)}
                               className="cursor-pointer py-2.5 px-3 hover:bg-[var(--color-surface-hover)] transition-colors flex items-center justify-between"
                             >
@@ -992,7 +1065,7 @@ export default function NewPaymentPage() {
               {/* Selector Rápido de Fecha */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+                  <label htmlFor="new-payment-fecha-del-pago" className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                     Fecha del Pago *
                   </label>
                   <div className="flex items-center gap-1">
@@ -1020,7 +1093,7 @@ export default function NewPaymentPage() {
                     </button>
                   </div>
                 </div>
-                <input
+                <input id="new-payment-fecha-del-pago"
                   type="date"
                   {...register("paymentDate")}
                   className={errors.paymentDate ? inputErr : inputOk}
@@ -1095,10 +1168,10 @@ export default function NewPaymentPage() {
               ) : (
                 <div className="space-y-3 animate-fade-in">
                   <div>
-                    <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">
+                    <label htmlFor="new-payment-n-de-boleta-sii" className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1 uppercase tracking-wider">
                       N° de Boleta SII *
                     </label>
-                    <input
+                    <input id="new-payment-n-de-boleta-sii"
                       type="text"
                       placeholder="Ej. BOL-10492"
                       {...register("boletaNumber")}
@@ -1188,10 +1261,10 @@ export default function NewPaymentPage() {
                 ) : (
                   <div className="space-y-3 animate-fade-in text-xs">
                     <div>
-                      <label className="block font-medium text-[var(--color-text-secondary)] mb-1">
+                      <label htmlFor="new-payment-nombre-apoderado" className="block font-medium text-[var(--color-text-secondary)] mb-1">
                         Nombre Apoderado *
                       </label>
-                      <input
+                      <input id="new-payment-nombre-apoderado"
                         type="text"
                         {...register("guardianName")}
                         className={errors.guardianName ? inputErr : inputOk}
@@ -1202,7 +1275,7 @@ export default function NewPaymentPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block font-medium text-[var(--color-text-secondary)]">
+                          <label htmlFor="new-payment-guardian-rut" className="block font-medium text-[var(--color-text-secondary)]">
                             RUT
                           </label>
                           {initialGuardianState.hasRut ? (
@@ -1215,7 +1288,7 @@ export default function NewPaymentPage() {
                             </span>
                           )}
                         </div>
-                        <input
+                        <input id="new-payment-guardian-rut"
                           type="text"
                           readOnly={initialGuardianState.hasRut}
                           placeholder={initialGuardianState.hasRut ? undefined : "12.345.678-9"}
@@ -1233,7 +1306,7 @@ export default function NewPaymentPage() {
 
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block font-medium text-[var(--color-text-secondary)]">
+                          <label htmlFor="new-payment-guardian-phone" className="block font-medium text-[var(--color-text-secondary)]">
                             Teléfono
                           </label>
                           {initialGuardianState.hasPhone ? (
@@ -1246,7 +1319,7 @@ export default function NewPaymentPage() {
                             </span>
                           )}
                         </div>
-                        <input
+                        <input id="new-payment-guardian-phone"
                           type="tel"
                           readOnly={initialGuardianState.hasPhone}
                           placeholder={initialGuardianState.hasPhone ? undefined : "+56 9 1234 5678"}
@@ -1265,7 +1338,7 @@ export default function NewPaymentPage() {
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="block font-medium text-[var(--color-text-secondary)]">
+                        <label htmlFor="new-payment-guardian-email" className="block font-medium text-[var(--color-text-secondary)]">
                           Correo Electrónico (Notificación)
                         </label>
                         {initialGuardianState.hasEmail ? (
@@ -1278,7 +1351,7 @@ export default function NewPaymentPage() {
                           </span>
                         )}
                       </div>
-                      <input
+                      <input id="new-payment-guardian-email"
                         type="email"
                         readOnly={initialGuardianState.hasEmail}
                         placeholder={initialGuardianState.hasEmail ? undefined : "apoderado@ejemplo.cl"}
@@ -1298,10 +1371,10 @@ export default function NewPaymentPage() {
               ) : (
                 <div className="space-y-3 animate-fade-in text-xs">
                   <div>
-                    <label className="block font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label htmlFor="new-payment-nombre-del-pagador" className="block font-medium text-[var(--color-text-secondary)] mb-1">
                       Nombre del Pagador *
                     </label>
-                    <input
+                    <input id="new-payment-nombre-del-pagador"
                       type="text"
                       placeholder="Nombre completo"
                       {...register("payerName")}
@@ -1310,10 +1383,10 @@ export default function NewPaymentPage() {
                     <FieldError message={errors.payerName?.message} />
                   </div>
                   <div>
-                    <label className="block font-medium text-[var(--color-text-secondary)] mb-1">
+                    <label htmlFor="new-payment-rut-del-pagador" className="block font-medium text-[var(--color-text-secondary)] mb-1">
                       RUT del Pagador
                     </label>
-                    <input
+                    <input id="new-payment-rut-del-pagador"
                       type="text"
                       placeholder="12.345.678-9"
                       {...register("payerRut")}
@@ -1327,10 +1400,10 @@ export default function NewPaymentPage() {
 
             {/* Tarjeta de Notas y Referencia */}
             <div className="glass rounded-2xl p-5 space-y-3 border border-[var(--color-border)]">
-              <label className="block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              <label htmlFor="new-payment-observaciones-notas-internas" className="block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
                 Observaciones / Notas Internas
               </label>
-              <input
+              <input id="new-payment-observaciones-notas-internas"
                 type="text"
                 placeholder="Notas adicionales sobre este pago (opcional)"
                 {...register("notes")}

@@ -3,12 +3,14 @@ import {
   IsOptional,
   IsDateString,
   IsInt,
+  Max,
   Min,
   IsEnum,
   IsBoolean,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { MAX_PAGE_LIMIT } from '../../common/pagination/page-limit';
 
 export class FilterPaymentsDto {
   @ApiPropertyOptional({
@@ -95,10 +97,12 @@ export class FilterPaymentsDto {
     example: 20,
     default: 50,
     minimum: 1,
+    maximum: MAX_PAGE_LIMIT,
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(MAX_PAGE_LIMIT)
   limit?: number;
 }

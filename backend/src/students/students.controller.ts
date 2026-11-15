@@ -12,6 +12,7 @@ import {
   DefaultValuePipe,
   Res,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -28,6 +29,10 @@ import { ReviewStudentNameDto } from './dto/review-student-name.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
+import {
+  assertPageLimit,
+  MAX_PAGE_LIMIT,
+} from '../common/pagination/page-limit';
 
 @ApiTags('students')
 @Controller('students')
@@ -122,6 +127,12 @@ export class StudentsController {
     description: 'Filtrar por ID de curso',
   })
   @ApiQuery({
+    name: 'guardianId',
+    required: false,
+    type: Number,
+    description: 'Filtrar por ID de apoderado (hermanos de una familia)',
+  })
+  @ApiQuery({
     name: 'status',
     required: false,
     enum: ['ACTIVE', 'INACTIVE', 'GRADUATED'],
@@ -134,7 +145,13 @@ export class StudentsController {
     description: 'Buscar por nombre o RUT (coincidencia parcial)',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
-  @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 50,
+    description: `Entre 1 y ${MAX_PAGE_LIMIT}`,
+  })
   @ApiResponse({
     status: 200,
     description: 'Lista paginada de alumnos con curso y apoderado',
@@ -143,10 +160,21 @@ export class StudentsController {
     @Query('courseId') courseId?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
-    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit?: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+    @Query('guardianId') guardianId?: string,
   ) {
+    assertPageLimit(page, limit);
     const parsedCourseId = courseId ? Number(courseId) : undefined;
+    let parsedGuardianId: number | undefined;
+    if (guardianId !== undefined && guardianId !== '') {
+      parsedGuardianId = Number(guardianId);
+      if (!Number.isInteger(parsedGuardianId) || parsedGuardianId < 1) {
+        throw new BadRequestException(
+          'guardianId debe ser un entero positivo.',
+        );
+      }
+    }
     const trimmed = search?.trim();
     const parsedStatus =
       status === 'ACTIVE' || status === 'INACTIVE' || status === 'GRADUATED'
@@ -158,6 +186,7 @@ export class StudentsController {
       limit,
       trimmed || undefined,
       parsedStatus,
+      parsedGuardianId,
     );
   }
 

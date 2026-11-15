@@ -158,4 +158,49 @@ describe('Payments (e2e)', () => {
       )
       .expect(401);
   });
+
+  it('GET /api/students filtra hermanos por apoderado y acota el tamaño de página', async () => {
+    const seeded = await prisma.student.findUniqueOrThrow({
+      where: { id: ctx.studentId },
+      select: { guardianId: true },
+    });
+
+    const family = await request(app.getHttpServer())
+      .get(`/api/students?guardianId=${seeded.guardianId}&limit=200`)
+      .set('Authorization', `Bearer ${ctx.accessToken}`)
+      .expect(200);
+    const familyIds = (family.body.data as Array<{ id: number }>).map(
+      (student) => student.id,
+    );
+    expect(familyIds).toEqual(
+      expect.arrayContaining([ctx.studentId, ctx.student2Id]),
+    );
+    expect(
+      (family.body.data as Array<{ guardianId: number }>).every(
+        (student) => student.guardianId === seeded.guardianId,
+      ),
+    ).toBe(true);
+    expect(family.body.meta).toMatchObject({ page: 1, limit: 200 });
+
+    const noFamily = await request(app.getHttpServer())
+      .get('/api/students?guardianId=999999')
+      .set('Authorization', `Bearer ${ctx.accessToken}`)
+      .expect(200);
+    expect(noFamily.body.data).toEqual([]);
+    expect(noFamily.body.meta.total).toBe(0);
+
+    for (const path of [
+      '/api/students?limit=201',
+      '/api/students?limit=0',
+      '/api/students?page=0',
+      '/api/students?guardianId=abc',
+      '/api/courses?limit=201',
+      '/api/payments/groups?limit=201',
+    ]) {
+      await request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${ctx.accessToken}`)
+        .expect(400);
+    }
+  });
 });
