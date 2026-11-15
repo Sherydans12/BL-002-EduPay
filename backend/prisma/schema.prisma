@@ -429,6 +429,22 @@ model AcademicFinancialProjection {
   version               BigInt
   sourceUpdatedAt       DateTime
   operation             AcademicFinancialProjectionOperation
+  /// Contract v2 descriptors (ADR-0025). Nullable only for rows applied before v2.
+  /// studentNationalId (RUN/IPE) is sensitive: never log it or return it outside
+  /// the records that need it.
+  studentFirstName           String?   @db.VarChar(120)
+  studentLastName            String?   @db.VarChar(120)
+  studentNationalIdType      String?   @db.VarChar(8)
+  studentNationalId          String?   @db.VarChar(20)
+  /// BL Student.integrationId when the student came from the legacy feed.
+  studentLegacyIntegrationId String?   @db.VarChar(200)
+  courseLabel                String?   @db.VarChar(160)
+  /// BL Course.integrationId when the course came from the legacy feed.
+  courseLegacyIntegrationId  String?   @db.VarChar(200)
+  academicYearLabel          String?   @db.VarChar(160)
+  academicYearStartDate      DateTime? @db.Date
+  academicYearEndDate        DateTime? @db.Date
+  academicYearStatus         String?   @db.VarChar(16)
   lastEventId           String?                            @db.Uuid
   lastSnapshotId        String?                            @db.Uuid
   createdAt             DateTime                           @default(now())
@@ -437,6 +453,8 @@ model AcademicFinancialProjection {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, academicEnrollmentId])
+  @@index([tenantId, studentLegacyIntegrationId])
+  @@index([tenantId, courseLegacyIntegrationId])
   @@index([canonicalTenantId, academicEnrollmentId])
   @@index([tenantId, academicYearId, enrollmentStatus])
   @@index([tenantId, operation, sourceUpdatedAt])

@@ -6,6 +6,7 @@ import {
   AcademicFinancialProjectionConsumerController,
   AcademicFinancialProjectionShadowAdminController,
 } from './academic-financial-projection.controller';
+import { AcademicFinancialProjectionReconciliationService } from './academic-financial-projection-reconciliation.service';
 import { AcademicFinancialProjectionSnapshotService } from './academic-financial-projection-snapshot.service';
 import { AcademicFinancialProjectionService } from './academic-financial-projection.service';
 
@@ -19,6 +20,7 @@ import { AcademicFinancialProjectionService } from './academic-financial-project
     AcademicFinancialProjectionAuthGuard,
     AcademicFinancialProjectionService,
     AcademicFinancialProjectionSnapshotService,
+    AcademicFinancialProjectionReconciliationService,
   ],
 })
 export class AcademicFinancialProjectionModule {}

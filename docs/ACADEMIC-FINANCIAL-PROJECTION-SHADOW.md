@@ -1,4 +1,4 @@
-# Academic Financial Projection v1 — shadow de BL
+# Academic Financial Projection v2 — shadow de BL
 
 Estado: **Fases 1A, 1B y 1C implementadas en worktrees aislados; shadow BL
 desactivado por defecto y no conectado a decisiones financieras**. No hay
@@ -8,6 +8,34 @@ BL puede mantener una proyección académica shadow procedente de Académico,
 pero dicha proyección aún no participa de obligaciones, cuotas, pagos,
 conciliación, reportes, portal ni roster legado. Esta integración no reemplaza
 el feed BL → Académico existente y no toca el bloque local de rollover.
+
+## Contrato v2 (ADR-0025)
+
+Desde 2026-11-15 el consumer acepta **solo** el contrato v2 de Académico
+(`...enrollment.upserted.v2` / `...tombstoned.v2`, `schemaVersion: "2"`); v1
+nunca se activó y se cuarentena como `INVALID_CONTRACT`. Además de los
+identificadores, cada matrícula trae:
+
+- `student`: nombres, `nationalIdType`/`nationalId` (RUN o IPE canónico, sin
+  puntos ni guion; ambos o ninguno) y `legacyIntegrationId`;
+- `course`: etiqueta y `legacyIntegrationId`;
+- `academicYear`: etiqueta, fechas `YYYY-MM-DD` y estado.
+
+`legacyIntegrationId` es el `integrationId` de BL que Académico conserva para
+fichas y cursos de origen `EDUPAY`; es `null` para registros creados en
+Académico. La validación es estricta: campos extra, pares RUN/IPE incompletos,
+RUN con formato, fechas imposibles o estados desconocidos se cuarentenan sin
+tocar la sombra.
+
+Los descriptores se guardan solo en `academic_financial_projections`
+(migración `20261115160000_academic_financial_projection_v2_descriptors`,
+aditiva y nullable). **RUN/IPE es dato sensible**: no se registra en logs ni
+auditoría y el reporte de conciliación no lo devuelve. La cuarentena conserva
+el payload completo para diagnóstico, igual que antes.
+
+La sombra sigue sin escribir `Student`, `Course`, `Charge` ni `Payment`. Crear
+o actualizar alumnos y cursos de BL desde la proyección es un corte posterior
+(modo escritura) que exige la conciliación limpia descrita abajo.
 
 ## Frontera de datos
 
@@ -82,14 +110,36 @@ El informe muestra `missing`, `extra`, `stale`, `versionMismatch`,
 `tenantMismatch`, `mappingMissing` y `tombstonePending`. Puede reparar sólo
 la shadow projection con nuevo snapshot/replay; jamás toca pagos o cargos.
 
-`GET .../legacy-comparison` compara conteos de roster legado contra la shadow
-projection de modo observacional. Informa alumnos/cursos sin correspondencia
-explícita, pero no crea matching automático por nombre/RUT/label.
+`GET .../legacy-comparison` es la **conciliación v2** contra el roster
+legado. Es de solo lectura, exige `SUPER_ADMIN` y vincula **solo** por
+`legacyIntegrationId` ↔ `integrationId`; el RUN se usa únicamente para detectar
+conflictos y nunca para vincular. No compara nombres ni etiquetas.
+
+| Categoría | Significado | Tipo |
+| --- | --- | --- |
+| `students.linked` / `courses.linked` | Referencia heredada encontrada en BL | OK |
+| `students.newInAcademico` / `courses.newInAcademico` | Sin referencia: se crearía en modo escritura | OK |
+| `*.legacyReferenceNotFound` | La referencia no existe (o está borrada) en BL | Bloqueante |
+| `students.duplicateLegacyReference` | Dos alumnos de Académico apuntan al mismo alumno BL | Bloqueante |
+| `students.runMismatch` | Vinculado, pero el RUN difiere del RUT en BL | Bloqueante |
+| `students.runConflictWithLegacy` | Alumno nuevo cuyo RUN ya existe en BL | Bloqueante |
+| `students.missingDescriptors` | Fila aplicada antes de v2; requiere nuevo snapshot | Bloqueante |
+| `*.onlyInLegacyBl` | Registro BL que ninguna matrícula activa referencia | Requiere decisión |
+
+Cada categoría entrega `count` completo y hasta 20 identificadores (UUID de
+Académico o `integrationId` de BL), nunca nombres ni RUN. `blocking`,
+`requiresDecision` y `readyForWriteMode` resumen si se puede pasar a
+escritura. Con el padrón del 2026-11-15 (241 alumnos en Académico y 246 en BL)
+se esperan al menos 5 `students.onlyInLegacyBl` que alguien debe decidir.
 
 ## Migración y límites
 
-`20260903113000_add_academic_financial_projection_shadow` está **CREADA y
-validada contra schema Prisma; NO EJECUTADA en una base real**. No contiene
+`20260903113000_add_academic_financial_projection_shadow` se aplicó en la
+base BL productiva junto con el mapping canónico; sus tablas quedaron vacías
+(ver `docs/operations/PRODUCTION.md`).
+`20261115160000_academic_financial_projection_v2_descriptors` agrega once
+columnas nullable y dos índices a la sombra; tampoco se ejecutó en una base
+real y requiere recovery point y autorización del runbook. No contiene
 backfill, activación, sincronización ni cambios a finance. Su prueba sólo está
 permitida en una base PostgreSQL aislada.
 
