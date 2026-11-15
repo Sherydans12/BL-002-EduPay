@@ -4,8 +4,8 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { studentsApi, downloadBlob } from "@/lib/api";
 import type { StudentStatus } from "@/lib/api";
-import { fetchAllCourses, fetchAllGuardians } from "@/lib/fetch-all-pages";
-import type { Student, Course, Guardian } from "@/lib/api";
+import { fetchAllCourses } from "@/lib/fetch-all-pages";
+import type { Student, Course } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Users,
@@ -68,7 +68,6 @@ function needsGuardianAlert(student: Student): boolean {
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -91,12 +90,10 @@ export default function StudentsPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchAllCourses(), fetchAllGuardians()])
-      .then(([cRes, gRes]) => {
-        setCourses(cRes);
-        setGuardians(gRes);
-      })
-      .catch(() => {});
+    // Guardians are searched on the server inside StudentFormDialog.
+    fetchAllCourses()
+      .then(setCourses)
+      .catch(() => toast.error("No se pudieron cargar los cursos"));
   }, []);
 
   useEffect(() => {
@@ -589,7 +586,6 @@ export default function StudentsPage() {
           open={isDialogOpen}
           onOpenChange={handleDialogOpenChange}
           courses={courses}
-          guardians={guardians}
           editingStudent={editingStudent}
           onSaved={handleStudentSaved}
         />

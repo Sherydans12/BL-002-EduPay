@@ -13,7 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { communicationsApi, type Course, type Student } from "@/lib/api";
-import { fetchAllCourses, fetchAllStudents } from "@/lib/fetch-all-pages";
+import { fetchAllCourses } from "@/lib/fetch-all-pages";
+import { fetchStudentsForCourse, searchStudents } from "@/lib/person-search";
+import { PersonSearchPicker } from "@/components/person-search-picker";
 import { toast } from "sonner";
 import { Mail, Send, Sparkles, User, Users } from "lucide-react";
 
@@ -29,7 +31,9 @@ export function SendCustomCommunicationModal({
   onSent,
 }: SendCustomCommunicationModalProps) {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
+  // Individual mode searches the server; course mode loads that course
+  // only when sending.
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [targetType, setTargetType] = useState<"individual" | "course">("individual");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
@@ -46,15 +50,12 @@ export function SendCustomCommunicationModal({
     let cancelled = false;
     setLoadingData(true);
 
-    Promise.all([fetchAllCourses(), fetchAllStudents()])
-      .then(([coursesData, studentsData]) => {
-        if (!cancelled) {
-          setCourses(coursesData);
-          setStudents(studentsData);
-        }
+    fetchAllCourses()
+      .then((coursesData) => {
+        if (!cancelled) setCourses(coursesData);
       })
       .catch(() => {
-        if (!cancelled) toast.error("Error al cargar lista de cursos y alumnos");
+        if (!cancelled) toast.error("Error al cargar la lista de cursos");
       })
       .finally(() => {
         if (!cancelled) setLoadingData(false);
@@ -66,18 +67,16 @@ export function SendCustomCommunicationModal({
   }, [open]);
 
   // When student selection changes in individual mode
-  const handleStudentSelect = (studentIdStr: string) => {
-    setSelectedStudentId(studentIdStr);
-    const student = students.find((s) => s.id === Number(studentIdStr));
-    if (student) {
-      const guardian = student.guardian;
-      if (guardian?.email) {
-        setRecipientEmail(guardian.email);
-        setRecipientName(guardian.name);
-      } else {
-        setRecipientEmail("");
-        setRecipientName(student.name);
-      }
+  const handleStudentSelect = (student: Student) => {
+    setSelectedStudent(student);
+    setSelectedStudentId(String(student.id));
+    const guardian = student.guardian;
+    if (guardian?.email) {
+      setRecipientEmail(guardian.email);
+      setRecipientName(guardian.name);
+    } else {
+      setRecipientEmail("");
+      setRecipientName(student.name);
     }
   };
 
@@ -107,11 +106,16 @@ export function SendCustomCommunicationModal({
         toast.success("Comunicación enviada exitosamente");
       } else {
         // Broadcast to course
-        const targetStudents = students.filter(
-          (s) =>
-            selectedCourseId === "" ||
-            s.courseId === Number(selectedCourseId),
-        );
+        let targetStudents: Student[];
+        try {
+          targetStudents = await fetchStudentsForCourse(
+            selectedCourseId ? Number(selectedCourseId) : undefined,
+          );
+        } catch {
+          toast.error("No se pudo cargar la lista de alumnos del curso");
+          setSending(false);
+          return;
+        }
         const validRecipients = targetStudents.filter(
           (s) => s.guardian?.email && s.guardian.email.trim().length > 0,
         );
@@ -147,6 +151,7 @@ export function SendCustomCommunicationModal({
       setSubject("");
       setMessage("");
       setSelectedStudentId("");
+      setSelectedStudent(null);
       setSelectedCourseId("");
       setRecipientEmail("");
       setRecipientName("");
@@ -213,23 +218,37 @@ export function SendCustomCommunicationModal({
           {targetType === "individual" ? (
             <div className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 p-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+                <label
+                  htmlFor="communication-student"
+                  className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]"
+                >
                   Seleccionar Alumno
                 </label>
-                <NativeSelectField
-                  value={selectedStudentId}
-                  onChange={(e) => handleStudentSelect(e.target.value)}
-                  disabled={loadingData}
-                  className="mt-1.5 h-10 w-full rounded-xl border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-white"
-                >
-                  <option value="">Selecciona un alumno...</option>
-                  {students.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.course?.name ? `(${s.course.name})` : ""}{" "}
-                      {s.guardian?.name ? `— Apod: ${s.guardian.name}` : ""}
-                    </option>
-                  ))}
-                </NativeSelectField>
+                <div className="mt-1.5">
+                  <PersonSearchPicker
+                    id="communication-student"
+                    selectedLabel={
+                      selectedStudent
+                        ? `${selectedStudent.name}${selectedStudent.course?.name ? ` (${selectedStudent.course.name})` : ""}`
+                        : null
+                    }
+                    placeholder="Selecciona un alumno..."
+                    searchPlaceholder="Buscar alumno por nombre o RUT..."
+                    searchAriaLabel="Buscar alumno por nombre o RUT"
+                    search={searchStudents}
+                    renderItem={(s) => (
+                      <div className="flex flex-col">
+                        <span>{s.name}</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">
+                          {s.course?.name ?? "Sin curso"}
+                          {s.guardian?.name ? ` · Apod: ${s.guardian.name}` : ""}
+                        </span>
+                      </div>
+                    )}
+                    onSelect={handleStudentSelect}
+                    triggerClassName="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-left text-sm text-white flex items-center gap-2"
+                  />
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">

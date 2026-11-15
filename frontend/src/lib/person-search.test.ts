@@ -13,6 +13,7 @@ vi.mock("@/lib/api", () => ({
 import type { Student } from "@/lib/api";
 import {
   fetchGuardianStudents,
+  fetchStudentsForCourse,
   mergeStudents,
   normalizePersonQuery,
   PERSON_SEARCH_LIMIT,
@@ -98,6 +99,37 @@ describe("person search", () => {
     await fetchGuardianStudents(1);
 
     expect(studentsGetAll).toHaveBeenCalledTimes(5);
+  });
+
+  it("loads one course in bounded pages only when an action needs it", async () => {
+    studentsGetAll
+      .mockResolvedValueOnce(page([syntheticStudent(1)], 2, 1, 2))
+      .mockResolvedValueOnce(page([syntheticStudent(2)], 2, 2, 2));
+
+    const students = await fetchStudentsForCourse(4);
+
+    expect(students.map((student) => student.id)).toEqual([1, 2]);
+    expect(studentsGetAll).toHaveBeenNthCalledWith(1, {
+      page: 1,
+      limit: 200,
+      courseId: 4,
+    });
+    expect(studentsGetAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads the whole school without a course filter", async () => {
+    studentsGetAll.mockResolvedValueOnce(page([syntheticStudent(1)], 1));
+
+    await fetchStudentsForCourse();
+
+    expect(studentsGetAll).toHaveBeenCalledWith({ page: 1, limit: 200 });
+  });
+
+  it("refuses to load more than the bounded number of pages", async () => {
+    studentsGetAll.mockResolvedValue(page([syntheticStudent(1)], 999999, 1, 9999));
+
+    await expect(fetchStudentsForCourse(1)).rejects.toThrow(/máximo/);
+    expect(studentsGetAll).toHaveBeenCalledTimes(100);
   });
 
   it("merges students into the cache without dropping known ones", () => {

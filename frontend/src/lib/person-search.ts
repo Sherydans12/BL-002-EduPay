@@ -66,6 +66,31 @@ export async function fetchGuardianStudents(
   return all;
 }
 
+/** Tope de páginas al cargar los alumnos de un curso o del colegio. */
+const COURSE_MAX_PAGES = 100;
+
+/**
+ * Carga los alumnos de un curso (o de todo el colegio si no se indica) en
+ * páginas acotadas. Úsalo solo al ejecutar una acción que realmente necesita
+ * ese conjunto (p. ej. un envío por curso), no para llenar un selector.
+ */
+export async function fetchStudentsForCourse(
+  courseId?: number,
+): Promise<Student[]> {
+  const all: Student[] = [];
+  for (let page = 1; page <= COURSE_MAX_PAGES; page += 1) {
+    const res = await studentsApi.getAll({
+      page,
+      limit: FAMILY_PAGE_LIMIT,
+      ...(courseId ? { courseId } : {}),
+    });
+    all.push(...res.data);
+    const lastPage = res.meta.lastPage ?? res.meta.totalPages ?? 1;
+    if (page >= lastPage || res.data.length === 0) return all;
+  }
+  throw new Error("El curso supera el máximo de alumnos que se puede cargar.");
+}
+
 /** Incorpora alumnos al caché local por id, sin perder los ya conocidos. */
 export function mergeStudents(
   current: Record<number, Student>,

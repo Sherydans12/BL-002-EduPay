@@ -100,8 +100,11 @@ No descargues el padrón completo para llenar un `Command` de personas. Usa
 
 `fetchAll*` (`src/lib/fetch-all-pages.ts`) queda para catálogos pequeños como
 cursos. El BACK rechaza `limit` mayor que 200 en alumnos, apoderados, cursos y
-pagos. Pantallas que aún cargan el padrón completo: alumnos, apoderados,
-cobranzas/setup, cursos/[id], reportes y el modal de comunicaciones.
+pagos. Para un selector, usa `PersonSearchPicker`
+(`src/components/person-search-picker.tsx`). Para una acción sobre un curso
+completo (p. ej. un envío), usa `fetchStudentsForCourse` solo al ejecutarla.
+La única pantalla que aún carga el padrón completo es cobranzas/setup, porque
+su resumen se calcula en el navegador; moverlo requiere un endpoint agregado.
 
 ### 4.2 `<select>` nativo (curso, método de pago, filtros simples)
 
