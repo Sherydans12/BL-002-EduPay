@@ -12,15 +12,42 @@ import { AcademicFinancialProjectionConfigService } from './academic-financial-p
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const EVENT_TYPES = new Set([
-  'academic.financial-projection.enrollment.upserted.v1',
-  'academic.financial-projection.enrollment.tombstoned.v1',
-]);
+/**
+ * Contract v2 (ADR-0025). v1 was never activated in any environment, so it is
+ * rejected and quarantined as INVALID_CONTRACT.
+ */
+const SCHEMA_VERSION = '2';
+const UPSERTED_EVENT = 'academic.financial-projection.enrollment.upserted.v2';
+const TOMBSTONED_EVENT =
+  'academic.financial-projection.enrollment.tombstoned.v2';
+const EVENT_TYPES = new Set([UPSERTED_EVENT, TOMBSTONED_EVENT]);
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ACADEMIC_YEAR_STATUSES = ['DRAFT', 'ACTIVE', 'CLOSED', 'ARCHIVED'];
+
+export type AcademicFinancialProjectionStudent = {
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly nationalIdType: 'RUN' | 'IPE' | null;
+  readonly nationalId: string | null;
+  readonly legacyIntegrationId: string | null;
+};
+
+export type AcademicFinancialProjectionCourse = {
+  readonly label: string;
+  readonly legacyIntegrationId: string | null;
+};
+
+export type AcademicFinancialProjectionAcademicYear = {
+  readonly label: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly status: 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
+};
 
 export type AcademicFinancialProjectionEvent = {
   readonly eventId: string;
   readonly eventType: string;
-  readonly schemaVersion: '1';
+  readonly schemaVersion: '2';
   readonly canonicalTenantId: string;
   readonly aggregateType: 'ACADEMIC_ENROLLMENT';
   readonly aggregateId: string;
@@ -39,6 +66,9 @@ export type AcademicFinancialProjectionEvent = {
     readonly version: number;
     readonly updatedAt: string;
     readonly operation: 'UPSERT' | 'TOMBSTONE';
+    readonly student: AcademicFinancialProjectionStudent;
+    readonly course: AcademicFinancialProjectionCourse;
+    readonly academicYear: AcademicFinancialProjectionAcademicYear;
   };
 };
 
@@ -240,43 +270,6 @@ export class AcademicFinancialProjectionService {
     return report;
   }
 
-  async legacyComparison(tenantId: string) {
-    const [legacyStudents, legacyCourses, projections] = await Promise.all([
-      this.prisma.student.count({ where: { tenantId, deletedAt: null } }),
-      this.prisma.course.count({ where: { tenantId, deletedAt: null } }),
-      this.prisma.academicFinancialProjection.findMany({
-        where: { tenantId },
-        select: {
-          academicStudentId: true,
-          academicCourseId: true,
-          academicYearId: true,
-          operation: true,
-        },
-      }),
-    ]);
-    const active = projections.filter((item) => item.operation === 'UPSERT');
-    return {
-      tenantId,
-      legacy: { students: legacyStudents, courses: legacyCourses },
-      shadow: {
-        activeEnrollments: active.length,
-        students: new Set(active.map((item) => item.academicStudentId)).size,
-        courses: new Set(active.map((item) => item.academicCourseId)).size,
-        academicYears: new Set(active.map((item) => item.academicYearId)).size,
-      },
-      correspondence: {
-        automaticMatching: false,
-        studentsWithoutExplicitCorrespondence: new Set(
-          active.map((item) => item.academicStudentId),
-        ).size,
-        coursesWithoutExplicitCorrespondence: new Set(
-          active.map((item) => item.academicCourseId),
-        ).size,
-        note: 'No name, RUT, slug, or label matching is performed. This report is intentionally observational.',
-      },
-    };
-  }
-
   private async applyEvent(
     tx: Prisma.TransactionClient,
     event: AcademicFinancialProjectionEvent,
@@ -344,6 +337,7 @@ export class AcademicFinancialProjectionService {
       readonly lastSnapshotId?: string;
     },
   ) {
+    const { student, course, academicYear } = payload;
     return {
       tenantId,
       canonicalTenantId: payload.canonicalTenantId,
@@ -357,6 +351,19 @@ export class AcademicFinancialProjectionService {
       version: BigInt(payload.version),
       sourceUpdatedAt: new Date(payload.updatedAt),
       operation: payload.operation,
+      studentFirstName: student.firstName,
+      studentLastName: student.lastName,
+      studentNationalIdType: student.nationalIdType,
+      studentNationalId: student.nationalId,
+      studentLegacyIntegrationId: student.legacyIntegrationId,
+      courseLabel: course.label,
+      courseLegacyIntegrationId: course.legacyIntegrationId,
+      academicYearLabel: academicYear.label,
+      academicYearStartDate: new Date(
+        `${academicYear.startDate}T00:00:00.000Z`,
+      ),
+      academicYearEndDate: new Date(`${academicYear.endDate}T00:00:00.000Z`),
+      academicYearStatus: academicYear.status,
       ...(references.lastEventId !== undefined
         ? { lastEventId: references.lastEventId }
         : {}),
@@ -396,13 +403,13 @@ export class AcademicFinancialProjectionService {
       payload,
     } as AcademicFinancialProjectionEvent;
     if (
-      event.schemaVersion !== '1' ||
+      event.schemaVersion !== SCHEMA_VERSION ||
       !EVENT_TYPES.has(event.eventType) ||
       event.aggregateType !== 'ACADEMIC_ENROLLMENT' ||
       event.aggregateId !== payload.academicEnrollmentId ||
       event.entityVersion !== payload.version ||
       event.canonicalTenantId !== payload.canonicalTenantId ||
-      (event.eventType.endsWith('tombstoned.v1')
+      (event.eventType === TOMBSTONED_EVENT
         ? payload.operation !== 'TOMBSTONE'
         : payload.operation !== 'UPSERT')
     )
@@ -425,6 +432,9 @@ export class AcademicFinancialProjectionService {
       'version',
       'updatedAt',
       'operation',
+      'student',
+      'course',
+      'academicYear',
     ]);
     const payload = {
       canonicalTenantId: this.uuid(record.canonicalTenantId),
@@ -439,6 +449,9 @@ export class AcademicFinancialProjectionService {
       version: this.version(record.version),
       updatedAt: this.timestamp(record.updatedAt),
       operation: this.string(record.operation),
+      student: this.parseStudent(record.student),
+      course: this.parseCourse(record.course),
+      academicYear: this.parseAcademicYear(record.academicYear),
     } as AcademicFinancialProjectionEvent['payload'];
     if (
       !['ACTIVE', 'INACTIVE'].includes(payload.enrollmentStatus) ||
@@ -451,6 +464,59 @@ export class AcademicFinancialProjectionService {
     )
       throw new Error('invalid payload');
     return payload;
+  }
+
+  private parseStudent(value: unknown): AcademicFinancialProjectionStudent {
+    const record = this.record(value, [
+      'firstName',
+      'lastName',
+      'nationalIdType',
+      'nationalId',
+      'legacyIntegrationId',
+    ]);
+    const nationalIdType =
+      record.nationalIdType === null
+        ? null
+        : this.oneOf(record.nationalIdType, ['RUN', 'IPE']);
+    const nationalId =
+      record.nationalId === null ? null : this.nationalId(record.nationalId);
+    if ((nationalIdType === null) !== (nationalId === null))
+      throw new Error('national id pair');
+    return {
+      firstName: this.text(record.firstName, 120),
+      lastName: this.text(record.lastName, 120),
+      nationalIdType: nationalIdType as 'RUN' | 'IPE' | null,
+      nationalId,
+      legacyIntegrationId: this.optionalText(record.legacyIntegrationId, 200),
+    };
+  }
+
+  private parseCourse(value: unknown): AcademicFinancialProjectionCourse {
+    const record = this.record(value, ['label', 'legacyIntegrationId']);
+    return {
+      label: this.text(record.label, 160),
+      legacyIntegrationId: this.optionalText(record.legacyIntegrationId, 200),
+    };
+  }
+
+  private parseAcademicYear(
+    value: unknown,
+  ): AcademicFinancialProjectionAcademicYear {
+    const record = this.record(value, [
+      'label',
+      'startDate',
+      'endDate',
+      'status',
+    ]);
+    return {
+      label: this.text(record.label, 160),
+      startDate: this.date(record.startDate),
+      endDate: this.date(record.endDate),
+      status: this.oneOf(
+        record.status,
+        ACADEMIC_YEAR_STATUSES,
+      ) as AcademicFinancialProjectionAcademicYear['status'],
+    };
   }
 
   private async quarantineInvalid(
@@ -504,6 +570,37 @@ export class AcademicFinancialProjectionService {
     if (typeof value !== 'string' || value.length === 0)
       throw new Error('string');
     return value;
+  }
+  private text(value: unknown, max: number): string {
+    const parsed = this.string(value).trim();
+    if (parsed.length === 0 || parsed.length > max) throw new Error('text');
+    return parsed;
+  }
+  private optionalText(value: unknown, max: number): string | null {
+    if (value === null) return null;
+    const parsed = this.string(value);
+    if (parsed.length > max) throw new Error('text');
+    return parsed;
+  }
+  private oneOf(value: unknown, allowed: readonly string[]): string {
+    const parsed = this.string(value);
+    if (!allowed.includes(parsed)) throw new Error('enum');
+    return parsed;
+  }
+  /** Académico sends RUN/IPE already canonical: upper-case alphanumerics. */
+  private nationalId(value: unknown): string {
+    const parsed = this.string(value);
+    if (!/^[0-9A-Z]{1,20}$/.test(parsed)) throw new Error('national id');
+    return parsed;
+  }
+  private date(value: unknown): string {
+    const parsed = this.string(value);
+    if (
+      !ISO_DATE.test(parsed) ||
+      new Date(`${parsed}T00:00:00.000Z`).toISOString().slice(0, 10) !== parsed
+    )
+      throw new Error('date');
+    return parsed;
   }
   private correlation(value: unknown): string {
     const parsed = this.string(value);

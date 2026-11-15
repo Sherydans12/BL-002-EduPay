@@ -16,6 +16,7 @@ import {
   AcademicFinancialProjectionAuthGuard,
   type AcademicFinancialProjectionRequest,
 } from './academic-financial-projection-auth.guard';
+import { AcademicFinancialProjectionReconciliationService } from './academic-financial-projection-reconciliation.service';
 import { AcademicFinancialProjectionSnapshotService } from './academic-financial-projection-snapshot.service';
 import { AcademicFinancialProjectionService } from './academic-financial-projection.service';
 
@@ -50,6 +51,7 @@ export class AcademicFinancialProjectionShadowAdminController {
   constructor(
     private readonly snapshots: AcademicFinancialProjectionSnapshotService,
     private readonly projection: AcademicFinancialProjectionService,
+    private readonly reconciliationReport: AcademicFinancialProjectionReconciliationService,
   ) {}
 
   @Post('tenants/:tenantId/snapshots')
@@ -73,8 +75,9 @@ export class AcademicFinancialProjectionShadowAdminController {
     return this.projection.reconcileSnapshot(tenantId, snapshotId);
   }
 
+  /** Read-only v2 reconciliation against the legacy roster (ADR-0025). */
   @Get('tenants/:tenantId/legacy-comparison')
   legacyComparison(@Param('tenantId') tenantId: string) {
-    return this.projection.legacyComparison(tenantId);
+    return this.reconciliationReport.legacyReconciliation(tenantId);
   }
 }

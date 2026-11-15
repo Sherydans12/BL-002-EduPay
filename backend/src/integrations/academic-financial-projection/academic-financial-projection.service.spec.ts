@@ -6,8 +6,8 @@ const enrollment = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 const event = (version = 8, overrides: Record<string, unknown> = {}) => ({
   eventId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  eventType: 'academic.financial-projection.enrollment.upserted.v1',
-  schemaVersion: '1',
+  eventType: 'academic.financial-projection.enrollment.upserted.v2',
+  schemaVersion: '2',
   canonicalTenantId: canonical,
   aggregateType: 'ACADEMIC_ENROLLMENT',
   aggregateId: enrollment,
@@ -26,9 +26,32 @@ const event = (version = 8, overrides: Record<string, unknown> = {}) => ({
     version,
     updatedAt: '2026-09-03T12:00:00.000Z',
     operation: 'UPSERT',
+    // Synthetic data only; the RUN is a sequential test value.
+    student: {
+      firstName: 'Alumna',
+      lastName: 'Sintética',
+      nationalIdType: 'RUN',
+      nationalId: '111111111',
+      legacyIntegrationId: '0f0f0f0f-0f0f-40f0-80f0-0f0f0f0f0f0f',
+    },
+    course: {
+      label: '1° Básico A',
+      legacyIntegrationId: '0e0e0e0e-0e0e-40e0-80e0-0e0e0e0e0e0e',
+    },
+    academicYear: {
+      label: '2027',
+      startDate: '2027-03-01',
+      endDate: '2027-12-15',
+      status: 'DRAFT',
+    },
   },
   ...overrides,
 });
+
+const withPayload = (changes: Record<string, unknown>) => {
+  const base = event();
+  return { ...base, payload: { ...base.payload, ...changes } };
+};
 
 describe('AcademicFinancialProjectionService', () => {
   const consumedFind = jest.fn();
@@ -132,9 +155,109 @@ describe('AcademicFinancialProjectionService', () => {
         },
       }),
     );
-    expect(
-      Object.keys(projectionUpsert.mock.calls[0]![0].create).join(','),
-    ).not.toMatch(/name|rut|email|payment/i);
+    const created = projectionUpsert.mock.calls[0]![0].create;
+    expect(created).toMatchObject({
+      studentFirstName: 'Alumna',
+      studentLastName: 'Sintética',
+      studentNationalIdType: 'RUN',
+      studentNationalId: '111111111',
+      studentLegacyIntegrationId: '0f0f0f0f-0f0f-40f0-80f0-0f0f0f0f0f0f',
+      courseLabel: '1° Básico A',
+      courseLegacyIntegrationId: '0e0e0e0e-0e0e-40e0-80e0-0e0e0e0e0e0e',
+      academicYearLabel: '2027',
+      academicYearStartDate: new Date('2027-03-01T00:00:00.000Z'),
+      academicYearEndDate: new Date('2027-12-15T00:00:00.000Z'),
+      academicYearStatus: 'DRAFT',
+    });
+    expect(Object.keys(created).join(',')).not.toMatch(
+      /email|guardian|payment|charge|rut/i,
+    );
+  });
+
+  it('quarantines a v1 event: v1 was never activated', async () => {
+    const legacy = event();
+    await expect(
+      service.consume(
+        {
+          ...legacy,
+          eventType: 'academic.financial-projection.enrollment.upserted.v1',
+          schemaVersion: '1',
+        },
+        canonical,
+      ),
+    ).resolves.toEqual({
+      outcome: 'QUARANTINED',
+      reasonCode: 'INVALID_CONTRACT',
+    });
+    expect(projectionUpsert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'a RUN type without its value',
+      { student: { ...event().payload.student, nationalId: null } },
+    ],
+    [
+      'an unexpected student field',
+      { student: { ...event().payload.student, email: 'x@example.test' } },
+    ],
+    [
+      'a formatted RUN instead of the canonical value',
+      { student: { ...event().payload.student, nationalId: '11.111.111-1' } },
+    ],
+    ['a missing course descriptor', { course: undefined }],
+    [
+      'an impossible year date',
+      {
+        academicYear: {
+          ...event().payload.academicYear,
+          endDate: '2027-02-30',
+        },
+      },
+    ],
+    [
+      'an unknown year status',
+      { academicYear: { ...event().payload.academicYear, status: 'OPEN' } },
+    ],
+  ])(
+    'quarantines %s without touching the projection',
+    async (_case, changes) => {
+      const payload = { ...event().payload, ...changes } as Record<
+        string,
+        unknown
+      >;
+      if (payload.course === undefined) delete payload.course;
+      await expect(
+        service.consume({ ...event(), payload }, canonical),
+      ).resolves.toEqual({
+        outcome: 'QUARANTINED',
+        reasonCode: 'INVALID_CONTRACT',
+      });
+      expect(projectionUpsert).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts a manual student with IPE and no legacy reference', async () => {
+    await expect(
+      service.consume(
+        withPayload({
+          student: {
+            firstName: 'Alumno',
+            lastName: 'Nuevo',
+            nationalIdType: 'IPE',
+            nationalId: '100200300',
+            legacyIntegrationId: null,
+          },
+          course: { label: '1° Básico B', legacyIntegrationId: null },
+        }),
+        canonical,
+      ),
+    ).resolves.toEqual({ outcome: 'APPLIED' });
+    expect(projectionUpsert.mock.calls[0]![0].create).toMatchObject({
+      studentNationalIdType: 'IPE',
+      studentLegacyIntegrationId: null,
+      courseLegacyIntegrationId: null,
+    });
   });
 
   it('does not apply a duplicate event or overwrite a stale version', async () => {
@@ -197,7 +320,7 @@ describe('AcademicFinancialProjectionService', () => {
   it('accepts a logical tombstone and never deletes a financial record', async () => {
     const tombstone = event(10, {
       eventId: '99999999-9999-4999-8999-999999999999',
-      eventType: 'academic.financial-projection.enrollment.tombstoned.v1',
+      eventType: 'academic.financial-projection.enrollment.tombstoned.v2',
       payload: {
         ...event(10).payload,
         enrollmentStatus: 'INACTIVE',
