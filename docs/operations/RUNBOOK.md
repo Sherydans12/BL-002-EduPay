@@ -167,6 +167,12 @@ Checksums SHA-256 canónicos registrados por Prisma después de la aplicación:
   `d8fb59768ad9d89339d968576ac0f0c7f0e1ef5d18c10652b23b8e1040bdf85bd`
 - `20261115160000_academic_financial_projection_v2_descriptors/migration.sql` →
   `7c040eeda9104b4483ca1123c917884e52e34cc7625e99658fbf079402d12e3f`
+- `20261116120000_billing_by_academic_year/migration.sql` →
+  `44afb70baa97424cf4f760b8e25c48224dac46733c0b9c6f49fdf2d8bdc3211d`
+  (2026-11-16, migrar **antes** del redeploy porque el código nuevo lee las
+  columnas nuevas; aplicada con runner desechable de la imagen en servicio y
+  migraciones montadas en solo lectura; ver
+  [evidencia](billing-by-academic-year-release-2026-11-16.md))
   (aplicada el 2026-11-15 con `npx prisma migrate deploy` dentro de BL BACK
   `33ffdaf`, después de su redeploy con la sombra apagada; ver
   [evidencia](financial-projection-shadow-activation-2026-11-15.md))
