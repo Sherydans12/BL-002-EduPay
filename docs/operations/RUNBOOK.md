@@ -96,6 +96,14 @@ Comprobar el contenedor y la conectividad privada antes de cambiarlo.
   verificable, antes de cualquier cambio posterior de esquema o datos.
   Antes de su próximo cambio con riesgo de datos, demostrar cobertura de su
   PostgreSQL 18 y uploads con herramientas compatibles y restauración aislada.
+- El servicio de backup nativo cubre Académico e Identity (helper PG15), **no**
+  BL-002. Recovery point BL usado el 2026-11-15, en la terminal del servidor:
+  `pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc` ejecutado dentro del
+  contenedor de la base (sin exponer credenciales) y `tar -czf` de
+  `/edupay-backend-uploads`, en `/root/edupay-recovery/bl-002/<UTC>/` con
+  `umask 077` y `SHA256SUMS`. Verificación: `pg_restore` en un contenedor
+  desechable con la misma imagen de la base, `--network none`, y comparación de
+  conteos contra la base viva; después eliminarlo.
 - Existe un backup administrativo Coolify separado; tampoco reemplaza un
   backup de datos de negocio.
 - Conservar recovery points anteriores. Nunca borrar volúmenes o ejecutar
@@ -157,6 +165,11 @@ Checksums SHA-256 canónicos registrados por Prisma después de la aplicación:
   `fee0f6ccdab5fde3c3cfdae1381ad7a0941bf1ebc1c6a578df3cd8f29402fcf8`
 - `scripts/academic-financial-projection-preflight.sql` →
   `d8fb59768ad9d89339d968576ac0f0c7f0e1ef5d18c10652b23b8e1040bdf85bd`
+- `20261115160000_academic_financial_projection_v2_descriptors/migration.sql` →
+  `7c040eeda9104b4483ca1123c917884e52e34cc7625e99658fbf079402d12e3f`
+  (aplicada el 2026-11-15 con `npx prisma migrate deploy` dentro de BL BACK
+  `33ffdaf`, después de su redeploy con la sombra apagada; ver
+  [evidencia](financial-projection-shadow-activation-2026-11-15.md))
 
 La diferencia frente a los hashes propuestos inicialmente quedó explicada por
 finales de línea, no por contenido SQL: el checkout autorizado de Windows

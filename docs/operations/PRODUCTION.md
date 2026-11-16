@@ -1,5 +1,27 @@
 # Topología productiva EduPay
 
+## Estado operativo vigente — 2026-11-16 (proyección v2 en sombra)
+
+Verificación directa del 2026-11-15/16; evidencia en
+[financial-projection-shadow-activation-2026-11-15.md](financial-projection-shadow-activation-2026-11-15.md).
+
+| Recurso | Código | Artefacto | Estado |
+|---|---|---|---|
+| BL BACK `km0aljzabdiqtaixj9dsequu` | `33ffdafbbb82180a1d40d6473fe0b851daee4b22` | imagen local `sha256:6135b820652d921ae507f7304967b5b00f0286ed59266b47563373648c15284e` | Healthy; `/api/v1/health` 200; `RUN_MIGRATIONS=false` |
+| BL FRONT `ktgdely86kx0by10p9cb91os` | `d72b0da` | imagen local `sha256:a0a4e6a3cd69518f4875c8af7beb9b1ed4a2a202f8d3ea78d5009cd47036c73d` | Healthy |
+| PostgreSQL BL `dms5i3e0i5t4kyh7h683mi7v` | — | PostgreSQL 18.3; ledger 37 intentos (29 aplicados, 8 revertidos resueltos, 0 sin resolver); última `20261115160000_academic_financial_projection_v2_descriptors` | Healthy |
+
+Mapping canónico: `colegio-conquistadores` ↔
+`6dc797a8-2012-4c28-b212-c1449109a12f` (2026-11-15 23:17:32 UTC). Sombra v2
+encendida (`ACADEMIC_FINANCIAL_PROJECTION_ENABLED=true`, credencial de snapshot
+y URL base de Académico); credencial entrante sin cargar y publisher de
+Académico apagado. La sombra concilia 242/242 alumnos y 12/12 cursos; no
+escribe alumnos, cursos, cuotas ni pagos. Recovery point previo a la migración:
+`/root/edupay-recovery/bl-002/20261115T230006Z/`. Rollback de BL BACK: imagen
+local `km0aljzabdiqtaixj9dsequu:d72b0da37544f912289bbdce9066278d8e4339ce`.
+
+Las secciones siguientes son evidencia histórica fechada.
+
 Verificación directa BL: **2026-09-15**, después de promover el corte
 administrativo de mapping, sin escrituras de mapping. Esa fotografía y su
 inventario son evidencia fechada de ese corte, no una verificación en vivo
