@@ -3,6 +3,10 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
+import {
+  ensureActiveAcademicYear,
+  ensureEnrollment,
+} from './academic-year-seed';
 
 function createPrisma() {
   const connectionString = process.env.DATABASE_URL!;
@@ -150,6 +154,10 @@ async function main() {
     '1° Medio A',
   ];
 
+  const activeYear = await ensureActiveAcademicYear(
+    prisma,
+    'colegio-conquistadores',
+  );
   const cursos: { id: number; name: string }[] = [];
   for (const name of cursosData) {
     const existing = await prisma.course.findFirst({
@@ -158,7 +166,11 @@ async function main() {
     if (existing) {
       cursos.push(existing);
     } else {
-      cursos.push(await prisma.course.create({ data: { name } }));
+      cursos.push(
+        await prisma.course.create({
+          data: { name, academicYearId: activeYear.id },
+        }),
+      );
     }
   }
   console.log(`✅ ${cursos.length} cursos asegurados.`);
@@ -276,7 +288,12 @@ async function main() {
     },
   ];
 
-  const alumnos: { id: number }[] = [];
+  const alumnos: {
+    id: number;
+    tenantId: string;
+    courseId: number;
+    financialSetup: 'PENDING' | 'CONFIGURED';
+  }[] = [];
   for (const a of alumnosData) {
     const existing = await prisma.student.findUnique({
       where: {
@@ -301,6 +318,9 @@ async function main() {
     }
   }
   console.log(`✅ ${alumnos.length} alumnos asegurados.`);
+  for (const alumno of alumnos) {
+    await ensureEnrollment(prisma, alumno, activeYear.id);
+  }
 
   // ─── 8. Cargos y Pagos ───────────────────────────────────────
   const activeStudents = alumnos.filter(
@@ -320,6 +340,7 @@ async function main() {
 
   for (let i = 0; i < activeStudents.length; i++) {
     const student = activeStudents[i];
+    const enrollment = await ensureEnrollment(prisma, student, activeYear.id);
 
     // Matrícula (pagada)
     const existingMat = await prisma.charge.findFirst({
@@ -333,6 +354,7 @@ async function main() {
       const chargeM = await prisma.charge.create({
         data: {
           studentId: student.id,
+          enrollmentId: enrollment.id,
           conceptId: matricula.id,
           amount: 120000,
           paidAmount: 120000,
@@ -373,6 +395,7 @@ async function main() {
         const charge = await prisma.charge.create({
           data: {
             studentId: student.id,
+            enrollmentId: enrollment.id,
             conceptId: mensualidad.id,
             amount: 75000,
             paidAmount: isPaid ? 75000 : 0,
@@ -411,6 +434,7 @@ async function main() {
         const chargeA = await prisma.charge.create({
           data: {
             studentId: student.id,
+            enrollmentId: enrollment.id,
             conceptId: actividades.id,
             amount: 25000,
             paidAmount: 25000,

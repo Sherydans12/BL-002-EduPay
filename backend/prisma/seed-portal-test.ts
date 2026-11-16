@@ -9,6 +9,10 @@ import {
   StudentStatus,
 } from '@prisma/client';
 import { Pool } from 'pg';
+import {
+  ensureActiveAcademicYear,
+  ensureEnrollment,
+} from './academic-year-seed';
 
 const GUARDIAN_RUT = '12.345.678-9';
 const MARTINA_RUT = '20.000.000-5';
@@ -86,6 +90,7 @@ async function main(): Promise<void> {
       },
     });
 
+    const activeYear = await ensureActiveAcademicYear(tx, TEST_TENANT_ID);
     const terceroMedio =
       (await tx.course.findFirst({
         where: {
@@ -95,7 +100,11 @@ async function main(): Promise<void> {
         },
       })) ??
       (await tx.course.create({
-        data: { tenantId: TEST_TENANT_ID, name: '3° Medio' },
+        data: {
+          tenantId: TEST_TENANT_ID,
+          name: '3° Medio',
+          academicYearId: activeYear.id,
+        },
       }));
 
     const quintoBasico =
@@ -107,7 +116,11 @@ async function main(): Promise<void> {
         },
       })) ??
       (await tx.course.create({
-        data: { tenantId: TEST_TENANT_ID, name: '5° Básico' },
+        data: {
+          tenantId: TEST_TENANT_ID,
+          name: '5° Básico',
+          academicYearId: activeYear.id,
+        },
       }));
 
     const guardian = await tx.guardian.upsert({
@@ -175,6 +188,13 @@ async function main(): Promise<void> {
       },
     });
 
+    const martinaEnrollment = await ensureEnrollment(
+      tx,
+      martina,
+      activeYear.id,
+    );
+    const tomasEnrollment = await ensureEnrollment(tx, tomas, activeYear.id);
+
     // Permite ejecutar nuevamente el seeder y recuperar el escenario inicial.
     const previousCharges = await tx.charge.findMany({
       where: {
@@ -240,6 +260,7 @@ async function main(): Promise<void> {
       data: {
         tenantId: TEST_TENANT_ID,
         studentId: martina.id,
+        enrollmentId: martinaEnrollment.id,
         conceptId: mensualidad.id,
         amount: 50000,
         paidAmount: 50000,
@@ -253,6 +274,7 @@ async function main(): Promise<void> {
       data: {
         tenantId: TEST_TENANT_ID,
         studentId: martina.id,
+        enrollmentId: martinaEnrollment.id,
         conceptId: mensualidad.id,
         amount: 50000,
         paidAmount: 0,
@@ -266,6 +288,7 @@ async function main(): Promise<void> {
       data: {
         tenantId: TEST_TENANT_ID,
         studentId: martina.id,
+        enrollmentId: martinaEnrollment.id,
         conceptId: mensualidad.id,
         amount: 50000,
         paidAmount: 0,
@@ -279,6 +302,7 @@ async function main(): Promise<void> {
       data: {
         tenantId: TEST_TENANT_ID,
         studentId: tomas.id,
+        enrollmentId: tomasEnrollment.id,
         conceptId: mensualidad.id,
         amount: 45000,
         paidAmount: 0,

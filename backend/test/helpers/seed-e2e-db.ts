@@ -1,5 +1,9 @@
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import {
+  ensureActiveAcademicYear,
+  ensureEnrollment,
+} from '../../prisma/academic-year-seed';
 
 export type E2eSeedContext = {
   accessToken: string;
@@ -20,6 +24,8 @@ const E2E_PERMISSIONS = [
 export async function resetE2eDatabase(prisma: PrismaService): Promise<void> {
   await prisma.payment.deleteMany();
   await prisma.paymentGroup.deleteMany();
+  await prisma.charge.deleteMany();
+  await prisma.enrollment.deleteMany();
   await prisma.student.deleteMany();
   await prisma.guardian.deleteMany();
   await prisma.course.deleteMany();
@@ -60,7 +66,13 @@ export async function seedE2eDatabase(
     },
   });
 
-  const course = await prisma.course.create({ data: { name: 'Curso E2E' } });
+  const activeYear = await ensureActiveAcademicYear(
+    prisma,
+    'colegio-conquistadores',
+  );
+  const course = await prisma.course.create({
+    data: { name: 'Curso E2E', academicYearId: activeYear.id },
+  });
   const guardian = await prisma.guardian.create({
     data: {
       rut: '11.111.111-1',
@@ -86,6 +98,9 @@ export async function seedE2eDatabase(
       guardianId: guardian.id,
     },
   });
+
+  await ensureEnrollment(prisma, student, activeYear.id);
+  await ensureEnrollment(prisma, student2, activeYear.id);
 
   const concept = await prisma.paymentConcept.create({
     data: {

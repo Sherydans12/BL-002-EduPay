@@ -1,5 +1,10 @@
 import { StudentsService } from './students.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AcademicYearsService } from '../academic-years/academic-years.service';
+
+const activeYearOnly = {
+  activeYear: jest.fn().mockResolvedValue({ id: 1, label: '2026' }),
+} as unknown as AcademicYearsService;
 
 describe('StudentsService structured names', () => {
   const prisma = {
@@ -11,12 +16,22 @@ describe('StudentsService structured names', () => {
       findMany: jest.fn(),
       update: jest.fn(),
     },
+    enrollment: { create: jest.fn(), updateMany: jest.fn() },
+    $transaction: jest.fn(),
   };
-  const service = new StudentsService(prisma as unknown as PrismaService);
+  const service = new StudentsService(
+    prisma as unknown as PrismaService,
+    activeYearOnly,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.course.findFirst.mockResolvedValue({ id: 1 });
+    prisma.$transaction.mockImplementation((operation) => operation(prisma));
+    prisma.course.findFirst.mockResolvedValue({
+      id: 1,
+      academicYearId: 1,
+      tenantId: 'tenant-a',
+    });
     prisma.guardian.findFirst.mockResolvedValue({ id: 1 });
   });
 
@@ -48,6 +63,74 @@ describe('StudentsService structured names', () => {
       }),
     );
     expect(result.integrationReady).toBe(true);
+  });
+
+  it('creates the ACTIVE year enrollment with the student', async () => {
+    prisma.student.create.mockImplementation(({ data }) =>
+      Promise.resolve({
+        ...data,
+        id: 30,
+        tenantId: 'tenant-a',
+        status: 'ACTIVE',
+      }),
+    );
+
+    await service.create({
+      rut: '12.345.678-5',
+      firstName: 'Ana',
+      lastName: 'Silva',
+      courseId: 1,
+      guardianId: 1,
+    });
+
+    expect(activeYearOnly.activeYear).toHaveBeenCalledWith('tenant-a');
+    expect(prisma.enrollment.create).toHaveBeenCalledWith({
+      data: {
+        tenantId: 'tenant-a',
+        studentId: 30,
+        courseId: 1,
+        academicYearId: 1,
+        status: 'ACTIVE',
+      },
+    });
+  });
+
+  it('rejects a course from another academic year', async () => {
+    prisma.course.findFirst.mockResolvedValue({
+      id: 9,
+      academicYearId: 2,
+      tenantId: 'tenant-a',
+    });
+
+    await expect(
+      service.create({
+        rut: '12.345.678-5',
+        firstName: 'Ana',
+        lastName: 'Silva',
+        courseId: 9,
+        guardianId: 1,
+      }),
+    ).rejects.toThrow('El curso no pertenece al año académico activo');
+    expect(prisma.student.create).not.toHaveBeenCalled();
+  });
+
+  it('moves only the ACTIVE year enrollment when the course changes', async () => {
+    prisma.student.findFirst.mockResolvedValue({
+      id: 12,
+      name: 'Ana Silva',
+      firstName: 'Ana',
+      lastName: 'Silva',
+    });
+    prisma.student.update.mockImplementation(({ data }) =>
+      Promise.resolve({ ...data, firstName: 'Ana', lastName: 'Silva' }),
+    );
+
+    await service.update(12, { courseId: 1 });
+
+    expect(prisma.enrollment.updateMany).toHaveBeenCalledWith({
+      where: { studentId: 12, academicYearId: 1 },
+      data: { courseId: 1 },
+    });
   });
 
   it('does not guess structured fields from a legacy name update', async () => {
@@ -257,7 +340,10 @@ describe('StudentsService list filters', () => {
       count: jest.fn(),
     },
   };
-  const service = new StudentsService(prisma as unknown as PrismaService);
+  const service = new StudentsService(
+    prisma as unknown as PrismaService,
+    activeYearOnly,
+  );
 
   beforeEach(() => {
     jest.clearAllMocks();

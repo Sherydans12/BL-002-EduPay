@@ -2,6 +2,10 @@ import 'dotenv/config';
 import { PrismaClient, ChargeStatus, FinancialSetupStatus, StudentStatus } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import {
+  ensureActiveAcademicYear,
+  ensureEnrollment,
+} from '../prisma/academic-year-seed';
 
 function calculateDv(rutBody: number): string {
   let sum = 0;
@@ -99,10 +103,16 @@ async function main() {
       '3° Medio A',
     ];
 
+    const activeYear = await ensureActiveAcademicYear(prisma, TENANT_ID);
     const courses: Record<string, number> = {};
     for (const name of courseNames) {
       const existing = await prisma.course.findFirst({
-        where: { tenantId: TENANT_ID, name, deletedAt: null },
+        where: {
+          tenantId: TENANT_ID,
+          academicYearId: activeYear.id,
+          name,
+          deletedAt: null,
+        },
       });
       if (existing) {
         courses[name] = existing.id;
@@ -111,6 +121,7 @@ async function main() {
           data: {
             tenantId: TENANT_ID,
             name,
+            academicYearId: activeYear.id,
           },
         });
         courses[name] = created.id;
@@ -274,6 +285,12 @@ async function main() {
         });
         console.log(`  🎓 Alumno: ${student.name} (${student.rut}) -> Curso: ${st.courseName}`);
 
+        const enrollment = await ensureEnrollment(
+          prisma,
+          student,
+          activeYear.id,
+        );
+
         // Crear o actualizar cuotas
         for (const ch of st.charges) {
           const conceptId = concepts[ch.concept];
@@ -294,6 +311,7 @@ async function main() {
               data: {
                 tenantId: TENANT_ID,
                 studentId: student.id,
+                enrollmentId: enrollment.id,
                 conceptId,
                 amount: ch.amount,
                 paidAmount: ch.paid,

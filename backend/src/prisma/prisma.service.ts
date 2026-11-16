@@ -5,6 +5,8 @@ import { Pool } from 'pg';
 import { tenantContext } from '../core/tenant/tenant.context';
 
 const TENANT_MODELS = new Set([
+  'AcademicYear',
+  'Enrollment',
   'Course',
   'Guardian',
   'Student',

@@ -10,6 +10,10 @@ import {
   StudentStatus,
 } from '@prisma/client';
 import { Pool } from 'pg';
+import {
+  ensureActiveAcademicYear,
+  ensureEnrollment,
+} from '../prisma/academic-year-seed';
 
 const DEMO_TENANT_ID = 'colegio-pruebas' as const;
 const SEED_MARKER = 'DEMO_TENANT_SEED';
@@ -39,6 +43,7 @@ async function upsertCharge(
   tx: Prisma.TransactionClient,
   data: {
     studentId: number;
+    enrollmentId: number;
     conceptId: number;
     amount: number;
     paidAmount: number;
@@ -57,6 +62,7 @@ async function upsertCharge(
   const chargeData = {
     tenantId: DEMO_TENANT_ID,
     studentId: data.studentId,
+    enrollmentId: data.enrollmentId,
     conceptId: data.conceptId,
     amount: data.amount,
     paidAmount: data.paidAmount,
@@ -146,10 +152,12 @@ async function main(): Promise<void> {
       },
     });
 
+    const activeYear = await ensureActiveAcademicYear(tx, DEMO_TENANT_ID);
     const firstGrade = await tx.course.upsert({
       where: {
-        tenantId_name: {
+        tenantId_academicYearId_name: {
           tenantId: DEMO_TENANT_ID,
+          academicYearId: activeYear.id,
           name: '1° Básico A',
         },
       },
@@ -157,12 +165,14 @@ async function main(): Promise<void> {
       create: {
         tenantId: DEMO_TENANT_ID,
         name: '1° Básico A',
+        academicYearId: activeYear.id,
       },
     });
     const secondGrade = await tx.course.upsert({
       where: {
-        tenantId_name: {
+        tenantId_academicYearId_name: {
           tenantId: DEMO_TENANT_ID,
+          academicYearId: activeYear.id,
           name: '2° Básico A',
         },
       },
@@ -170,6 +180,7 @@ async function main(): Promise<void> {
       create: {
         tenantId: DEMO_TENANT_ID,
         name: '2° Básico A',
+        academicYearId: activeYear.id,
       },
     });
 
@@ -306,8 +317,16 @@ async function main(): Promise<void> {
       },
     });
 
+    const martinaEnrollment = await ensureEnrollment(
+      tx,
+      martina,
+      activeYear.id,
+    );
+    const tomasEnrollment = await ensureEnrollment(tx, tomas, activeYear.id);
+
     const paidCharge = await upsertCharge(tx, {
       studentId: martina.id,
+      enrollmentId: martinaEnrollment.id,
       conceptId: enrollment.id,
       amount: enrollment.defaultAmount,
       paidAmount: enrollment.defaultAmount,
@@ -317,6 +336,7 @@ async function main(): Promise<void> {
     });
     const pendingCharge = await upsertCharge(tx, {
       studentId: martina.id,
+      enrollmentId: martinaEnrollment.id,
       conceptId: tuition.id,
       amount: tuition.defaultAmount,
       paidAmount: 0,
@@ -326,6 +346,7 @@ async function main(): Promise<void> {
     });
     const overdueCharge = await upsertCharge(tx, {
       studentId: tomas.id,
+      enrollmentId: tomasEnrollment.id,
       conceptId: tuition.id,
       amount: tuition.defaultAmount,
       paidAmount: 0,

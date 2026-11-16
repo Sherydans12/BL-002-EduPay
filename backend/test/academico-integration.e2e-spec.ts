@@ -5,6 +5,7 @@ import { createE2eApp } from './helpers/create-e2e-app';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { randomUUID } from 'node:crypto';
+import { ensureActiveAcademicYear } from '../prisma/academic-year-seed';
 
 const TOKEN = `${randomUUID()}${randomUUID()}`;
 const CURSOR_SECRET = `${randomUUID()}${randomUUID()}`;
@@ -61,16 +62,22 @@ describe('Académico integration API', () => {
       create: { id: TENANT_B, slug: TENANT_B, name: 'Académico E2E B' },
     });
 
+    const yearA = await ensureActiveAcademicYear(prisma, TENANT_A);
+    const yearB = await ensureActiveAcademicYear(prisma, TENANT_B);
     courseA1 = await prisma.course.create({
-      data: { tenantId: TENANT_A, name: 'Course A1' },
+      data: { tenantId: TENANT_A, name: 'Course A1', academicYearId: yearA.id },
       select: { id: true, integrationId: true },
     });
     courseA2 = await prisma.course.create({
-      data: { tenantId: TENANT_A, name: 'Course A2' },
+      data: { tenantId: TENANT_A, name: 'Course A2', academicYearId: yearA.id },
       select: { id: true, integrationId: true },
     });
     const courseB = await prisma.course.create({
-      data: { tenantId: TENANT_B, name: 'Private Course B' },
+      data: {
+        tenantId: TENANT_B,
+        name: 'Private Course B',
+        academicYearId: yearB.id,
+      },
       select: { id: true },
     });
 

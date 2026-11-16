@@ -13,6 +13,7 @@ import { validateNameTokenPreservation } from './student-name-validation.util';
 import { Prisma, StudentStatus } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
 import { buildStudentSearchWhere } from '../common/search/flexible-search';
+import { AcademicYearsService } from '../academic-years/academic-years.service';
 
 const STUDENT_STATUS_LABELS: Record<StudentStatus, string> = {
   ACTIVE: 'Activo',
@@ -22,10 +23,39 @@ const STUDENT_STATUS_LABELS: Record<StudentStatus, string> = {
 
 const RELATED_RECORD_NOT_FOUND =
   'Registro relacionado no encontrado o pertenece a otro colegio';
+const COURSE_OUTSIDE_ACTIVE_YEAR =
+  'El curso no pertenece al año académico activo';
 
 @Injectable()
 export class StudentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly academicYears: AcademicYearsService,
+  ) {}
+
+  /**
+   * Student.courseId mirrors the ACTIVE year's enrollment: the course must
+   * belong to that year.
+   */
+  private async activeYearForCourse(
+    courseId: number | undefined,
+    studentTenantId?: string,
+  ) {
+    const course =
+      courseId !== undefined
+        ? await this.prisma.course.findFirst({
+            where: { id: courseId, deletedAt: null },
+            select: { academicYearId: true, tenantId: true },
+          })
+        : null;
+    const tenantId = course?.tenantId ?? studentTenantId;
+    if (!tenantId) throw new NotFoundException(RELATED_RECORD_NOT_FOUND);
+    const activeYear = await this.academicYears.activeYear(tenantId);
+    if (course && course.academicYearId !== activeYear.id) {
+      throw new BadRequestException(COURSE_OUTSIDE_ACTIVE_YEAR);
+    }
+    return activeYear;
+  }
 
   private async assertStudentRelationsExist(
     courseId?: number,
@@ -53,20 +83,35 @@ export class StudentsService {
 
   async create(dto: CreateStudentDto) {
     await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
+    const activeYear = await this.activeYearForCourse(dto.courseId);
     const name = this.legacyName(dto.firstName, dto.lastName);
 
     try {
-      const student = await this.prisma.student.create({
-        data: {
-          rut: dto.rut,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          courseId: dto.courseId,
-          guardianId: dto.guardianId,
-          status: dto.status,
-          name,
-        },
-        include: { course: true, guardian: true },
+      const student = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.student.create({
+          data: {
+            rut: dto.rut,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            courseId: dto.courseId,
+            guardianId: dto.guardianId,
+            status: dto.status,
+            name,
+          },
+          include: { course: true, guardian: true },
+        });
+        // The financial plan is configured on this enrollment.
+        await tx.enrollment.create({
+          data: {
+            tenantId: created.tenantId,
+            studentId: created.id,
+            courseId: created.courseId,
+            academicYearId: activeYear.id,
+            status:
+              created.status === StudentStatus.ACTIVE ? 'ACTIVE' : 'INACTIVE',
+          },
+        });
+        return created;
       });
       return { ...student, integrationReady: true };
     } catch (error) {
@@ -173,6 +218,10 @@ export class StudentsService {
   async update(id: number, dto: UpdateStudentDto) {
     const current = await this.findOne(id);
     await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
+    const activeYear =
+      dto.courseId !== undefined || dto.status !== undefined
+        ? await this.activeYearForCourse(dto.courseId, current.tenantId)
+        : null;
     const { name: requestedLegacyName, firstName, lastName, ...updates } = dto;
     const nextFirstName = firstName ?? current.firstName;
     const nextLastName = lastName ?? current.lastName;
@@ -192,6 +241,20 @@ export class StudentsService {
         },
         include: { course: true, guardian: true },
       });
+      if (activeYear) {
+        await this.prisma.enrollment.updateMany({
+          where: { studentId: id, academicYearId: activeYear.id },
+          data: {
+            ...(dto.courseId !== undefined ? { courseId: dto.courseId } : {}),
+            ...(dto.status !== undefined
+              ? {
+                  status:
+                    dto.status === StudentStatus.ACTIVE ? 'ACTIVE' : 'INACTIVE',
+                }
+              : {}),
+          },
+        });
+      }
       return {
         ...student,
         integrationReady: this.isIntegrationReady(student),
@@ -211,9 +274,15 @@ export class StudentsService {
 
   async remove(id: number) {
     await this.findOne(id);
-    return this.prisma.student.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.enrollment.updateMany({
+        where: { studentId: id, status: 'ACTIVE' },
+        data: { status: 'INACTIVE' },
+      });
+      return tx.student.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
     });
   }
 

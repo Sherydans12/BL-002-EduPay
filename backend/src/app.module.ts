@@ -8,6 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
+import { AcademicYearsModule } from './academic-years/academic-years.module';
 import { CoursesModule } from './courses/courses.module';
 import { GuardiansModule } from './guardians/guardians.module';
 import { StudentsModule } from './students/students.module';
@@ -45,6 +46,7 @@ import { AcademicFinancialProjectionModule } from './integrations/academic-finan
     UsersModule,
     RolesModule,
     ReportsModule,
+    AcademicYearsModule,
     CoursesModule,
     GuardiansModule,
     StudentsModule,
