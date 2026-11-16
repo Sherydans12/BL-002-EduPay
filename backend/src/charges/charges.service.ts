@@ -14,6 +14,7 @@ import {
   type PaymentGroup,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AcademicYearsService } from '../academic-years/academic-years.service';
 import {
   FinancialPlanPaymentAllocationDto,
   SetupFinancialPlanDto,
@@ -33,7 +34,34 @@ export interface StudentAccountStatement {
 
 @Injectable()
 export class ChargesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly academicYears: AcademicYearsService,
+  ) {}
+
+  /** Whether the year is the tenant's ACTIVE one (it mirrors into Student). */
+  private async isActiveYear(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    academicYearId: number,
+  ): Promise<boolean> {
+    const active = await tx.academicYear.findFirst({
+      where: { tenantId, status: 'ACTIVE' },
+      orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+    return active?.id === academicYearId;
+  }
+
+  private async requireStudent(studentId: number) {
+    const student = await this.prisma.student.findFirst({
+      where: { id: studentId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new NotFoundException(`Student #${studentId} not found`);
+    }
+  }
 
   private resolveStatusFromPaidAmount(
     amount: number,
@@ -143,19 +171,18 @@ export class ChargesService {
   async setupStudentFinancialPlan(
     studentId: number,
     dto: SetupFinancialPlanDto,
+    academicYearId?: number,
   ) {
-    const student = await this.prisma.student.findFirst({
-      where: { id: studentId, deletedAt: null },
-      select: { id: true, financialSetup: true },
-    });
+    await this.requireStudent(studentId);
+    const enrollment = await this.academicYears.enrollmentFor(
+      this.prisma,
+      studentId,
+      academicYearId,
+    );
 
-    if (!student) {
-      throw new NotFoundException(`Student #${studentId} not found`);
-    }
-
-    if (student.financialSetup !== FinancialSetupStatus.PENDING) {
+    if (enrollment.financialSetup !== FinancialSetupStatus.PENDING) {
       throw new BadRequestException(
-        `Student #${studentId} financial plan is already configured`,
+        `Student #${studentId} financial plan is already configured for this academic year`,
       );
     }
 
@@ -166,6 +193,7 @@ export class ChargesService {
         const createdCharge = await tx.charge.create({
           data: {
             studentId,
+            enrollmentId: enrollment.id,
             conceptId: charge.conceptId,
             amount: charge.amount,
             dueDate: new Date(charge.dueDate),
@@ -183,10 +211,22 @@ export class ChargesService {
         createdChargeIds,
       );
 
-      await tx.student.update({
-        where: { id: studentId },
+      await tx.enrollment.update({
+        where: { id: enrollment.id },
         data: { financialSetup: FinancialSetupStatus.CONFIGURED },
       });
+      if (
+        await this.isActiveYear(
+          tx,
+          enrollment.tenantId,
+          enrollment.academicYearId,
+        )
+      ) {
+        await tx.student.update({
+          where: { id: studentId },
+          data: { financialSetup: FinancialSetupStatus.CONFIGURED },
+        });
+      }
 
       return createdChargeIds.length;
     });
@@ -197,20 +237,45 @@ export class ChargesService {
     };
   }
 
-  findPlanByStudent(studentId: number) {
+  async findPlanByStudent(studentId: number, academicYearId?: number) {
+    const enrollment = await this.academicYears.enrollmentFor(
+      this.prisma,
+      studentId,
+      academicYearId,
+    );
     return this.prisma.charge.findMany({
-      where: { studentId, deletedAt: null },
+      where: { studentId, enrollmentId: enrollment.id, deletedAt: null },
       include: { concept: true },
       orderBy: { dueDate: 'asc' },
     });
   }
 
+  /**
+   * Without `academicYearId` the statement covers every year (unchanged
+   * behaviour). With it, only that year's charges and the payments allocated
+   * to them.
+   */
   async getStudentAccountStatement(
     studentId: number,
+    academicYearId?: number,
   ): Promise<StudentAccountStatement> {
+    const enrollmentId =
+      academicYearId === undefined
+        ? undefined
+        : (
+            await this.academicYears.enrollmentFor(
+              this.prisma,
+              studentId,
+              academicYearId,
+            )
+          ).id;
     const [charges, payments, logs] = await Promise.all([
       this.prisma.charge.findMany({
-        where: { studentId, deletedAt: null },
+        where: {
+          studentId,
+          deletedAt: null,
+          ...(enrollmentId !== undefined ? { enrollmentId } : {}),
+        },
         include: { concept: true },
         orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
       }),
@@ -219,6 +284,9 @@ export class ChargesService {
           studentId,
           deletedAt: null,
           paymentGroup: { is: { deletedAt: null } },
+          ...(enrollmentId !== undefined
+            ? { charge: { is: { enrollmentId } } }
+            : {}),
         },
         include: { paymentGroup: true, concept: true },
         orderBy: [{ paymentDate: 'asc' }, { id: 'asc' }],
@@ -264,25 +332,25 @@ export class ChargesService {
   async updateStudentFinancialPlan(
     studentId: number,
     dto: UpdateFinancialPlanDto,
+    academicYearId?: number,
   ) {
-    const student = await this.prisma.student.findFirst({
-      where: { id: studentId, deletedAt: null },
-      select: { id: true, financialSetup: true },
-    });
+    await this.requireStudent(studentId);
+    const enrollment = await this.academicYears.enrollmentFor(
+      this.prisma,
+      studentId,
+      academicYearId,
+    );
 
-    if (!student) {
-      throw new NotFoundException(`Student #${studentId} not found`);
-    }
-
-    if (student.financialSetup !== FinancialSetupStatus.CONFIGURED) {
+    if (enrollment.financialSetup !== FinancialSetupStatus.CONFIGURED) {
       throw new BadRequestException(
-        `Student #${studentId} financial plan is not configured`,
+        `Student #${studentId} financial plan is not configured for this academic year`,
       );
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Only this year's charges: editing the 2027 plan never touches 2026.
       const currentCharges = await tx.charge.findMany({
-        where: { studentId, deletedAt: null },
+        where: { studentId, enrollmentId: enrollment.id, deletedAt: null },
         orderBy: { dueDate: 'asc' },
       });
 
@@ -322,6 +390,7 @@ export class ChargesService {
           const createdCharge = await tx.charge.create({
             data: {
               studentId,
+              enrollmentId: enrollment.id,
               conceptId: payloadCharge.conceptId,
               amount: payloadCharge.amount,
               dueDate: new Date(payloadCharge.dueDate),
@@ -366,7 +435,7 @@ export class ChargesService {
       await this.recalculateCharges(tx, chargeIdsByPayloadIndex);
 
       return tx.charge.findMany({
-        where: { studentId, deletedAt: null },
+        where: { studentId, enrollmentId: enrollment.id, deletedAt: null },
         include: { concept: true },
         orderBy: { dueDate: 'asc' },
       });

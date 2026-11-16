@@ -43,6 +43,19 @@ enum FinancialSetupStatus {
   CONFIGURED
 }
 
+/// Lifecycle of an academic year, mirrored from Académico (ADR-0025).
+enum AcademicYearStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum NotificationType {
   BOLETA_DELIVERY
   PAYMENT_RECEIPT
@@ -99,7 +112,9 @@ model Tenant {
   name               String
   slug               String                  @unique
   isActive           Boolean                 @default(true)
+  academicYears      AcademicYear[]
   courses            Course[]
+  enrollments        Enrollment[]
   guardians          Guardian[]
   students           Student[]
   paymentConcepts    PaymentConcept[]
@@ -128,12 +143,18 @@ model Course {
   tenantId                   String    @default("colegio-conquistadores")
   tenant                     Tenant    @relation(fields: [tenantId], references: [id])
   name                       String
+  /// Each course belongs to one academic year: "1° Básico A" 2026 and 2027
+  /// are different courses (ADR-0025).
+  academicYearId             Int
+  academicYear               AcademicYear @relation(fields: [academicYearId], references: [id])
   students                   Student[]
+  enrollments                Enrollment[]
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
   deletedAt                  DateTime?
 
-  @@unique([tenantId, name])
+  @@unique([tenantId, academicYearId, name])
+  @@index([academicYearId])
   @@index([tenantId])
   @@index([tenantId, integrationVersion, integrationId])
   @@index([tenantId, integrationCreatedSequence, integrationId])
@@ -178,13 +199,17 @@ model Student {
   firstName                  String?
   lastName                   String?
   status                     StudentStatus        @default(ACTIVE)
+  /// Transitional mirror of the ACTIVE academic year's enrollment. Billing
+  /// reads and writes Enrollment.financialSetup; this field follows it.
   financialSetup             FinancialSetupStatus @default(PENDING)
+  /// Transitional mirror of the ACTIVE academic year's enrollment course.
   courseId                   Int
   guardianId                 Int
   course                     Course               @relation(fields: [courseId], references: [id])
   guardian                   Guardian             @relation(fields: [guardianId], references: [id])
   payments                   Payment[]
   charges                    Charge[]
+  enrollments                Enrollment[]
   notificationLogs           NotificationLog[]
   createdAt                  DateTime             @default(now())
   updatedAt                  DateTime             @updatedAt
@@ -300,6 +325,10 @@ model Charge {
   student    Student        @relation(fields: [studentId], references: [id])
   conceptId  Int
   concept    PaymentConcept @relation(fields: [conceptId], references: [id])
+  /// The enrollment (student + academic year) this charge bills. The due
+  /// date does not define the year: a 2027 enrollment fee may fall in 2026.
+  enrollmentId Int
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id])
   amount     Int
   paidAmount Int            @default(0)
   dueDate    DateTime
@@ -311,7 +340,59 @@ model Charge {
   deletedAt  DateTime?
 
   @@index([tenantId])
+  @@index([enrollmentId])
   @@map("charges")
+}
+
+/// An academic year of the tenant. Académico owns years (ADR-0025); BL keeps
+/// this local record to scope courses, enrollments and billing.
+model AcademicYear {
+  id                      Int                @id @default(autoincrement())
+  tenantId                String
+  tenant                  Tenant             @relation(fields: [tenantId], references: [id])
+  label                   String             @db.VarChar(160)
+  startDate               DateTime           @db.Date
+  endDate                 DateTime           @db.Date
+  status                  AcademicYearStatus @default(ACTIVE)
+  /// Académico AcademicYear.id when the year is linked to the canonical one.
+  canonicalAcademicYearId String?            @db.Uuid
+  courses                 Course[]
+  enrollments             Enrollment[]
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  @@unique([tenantId, label])
+  @@unique([tenantId, canonicalAcademicYearId])
+  @@index([tenantId, status])
+  @@map("academic_years")
+}
+
+/// A student's enrollment in one course for one academic year. The financial
+/// plan (its charges) belongs to the enrollment, so 2026 and 2027 plans of the
+/// same student are independent.
+model Enrollment {
+  id                    Int                  @id @default(autoincrement())
+  tenantId              String
+  tenant                Tenant               @relation(fields: [tenantId], references: [id])
+  studentId             Int
+  student               Student              @relation(fields: [studentId], references: [id])
+  courseId              Int
+  course                Course               @relation(fields: [courseId], references: [id])
+  academicYearId        Int
+  academicYear          AcademicYear         @relation(fields: [academicYearId], references: [id])
+  status                EnrollmentStatus     @default(ACTIVE)
+  financialSetup        FinancialSetupStatus @default(PENDING)
+  /// Académico CourseEnrollment.id once the projection write mode links it.
+  canonicalEnrollmentId String?              @db.Uuid
+  charges               Charge[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@unique([studentId, academicYearId])
+  @@unique([tenantId, canonicalEnrollmentId])
+  @@index([tenantId, academicYearId, status])
+  @@index([courseId])
+  @@map("enrollments")
 }
 
 model NotificationLog {

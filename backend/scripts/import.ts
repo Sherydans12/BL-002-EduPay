@@ -19,6 +19,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  ensureActiveAcademicYear,
+  ensureEnrollment,
+} from '../prisma/academic-year-seed';
 import * as ExcelJS from 'exceljs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -240,6 +244,8 @@ async function main() {
     logger: ['error', 'warn'],
   });
   const prisma = app.get(PrismaService);
+  // Courses and enrollments imported here belong to the ACTIVE academic year.
+  const activeYear = await ensureActiveAcademicYear(prisma, PRIMARY_TENANT_ID);
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(EXCEL_FILE_PATH);
@@ -278,14 +284,22 @@ async function main() {
     // ── Upsert del Curso ──────────────────────────────────────────────────────
     let courseId: number;
     const existingCourse = await prisma.course.findFirst({
-      where: { tenantId: PRIMARY_TENANT_ID, name: layout.nombreCurso },
+      where: {
+        tenantId: PRIMARY_TENANT_ID,
+        academicYearId: activeYear.id,
+        name: layout.nombreCurso,
+      },
       select: { id: true },
     });
     if (existingCourse) {
       courseId = existingCourse.id;
     } else {
       const newCourse = await prisma.course.create({
-        data: { tenantId: PRIMARY_TENANT_ID, name: layout.nombreCurso },
+        data: {
+          tenantId: PRIMARY_TENANT_ID,
+          name: layout.nombreCurso,
+          academicYearId: activeYear.id,
+        },
         select: { id: true },
       });
       courseId = newCourse.id;
@@ -404,10 +418,21 @@ async function main() {
             },
             data: { name: nombreAlumno, courseId, guardianId: guardian.id },
           });
+          const enrollment = await ensureEnrollment(
+            prisma,
+            { id: existingStudent.id, tenantId: PRIMARY_TENANT_ID, courseId },
+            activeYear.id,
+          );
+          if (enrollment.courseId !== courseId) {
+            await prisma.enrollment.update({
+              where: { id: enrollment.id },
+              data: { courseId },
+            });
+          }
           sheetUpdated++;
           totalStudentsUpdated++;
         } else {
-          await prisma.student.create({
+          const created = await prisma.student.create({
             data: {
               tenantId: PRIMARY_TENANT_ID,
               rut: rutAlumno,
@@ -415,7 +440,13 @@ async function main() {
               courseId,
               guardianId: guardian.id,
             },
+            select: { id: true },
           });
+          await ensureEnrollment(
+            prisma,
+            { id: created.id, tenantId: PRIMARY_TENANT_ID, courseId },
+            activeYear.id,
+          );
           sheetCreated++;
           totalStudentsCreated++;
         }
