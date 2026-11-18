@@ -83,6 +83,14 @@ class RowConflict extends Error {
   }
 }
 
+/** An upserted, active enrollment (not closed nor tombstoned). */
+export function isActiveRow(row: {
+  operation: string;
+  enrollmentStatus: string;
+}): boolean {
+  return row.operation !== 'TOMBSTONE' && row.enrollmentStatus === 'ACTIVE';
+}
+
 /** Uppercase digits and K: the same normalization as `students.rut_normalized`. */
 export function normalizeNationalId(value: string | null | undefined): string {
   return (value ?? '').toUpperCase().replace(/[^0-9K]/g, '');
@@ -94,8 +102,9 @@ export function normalizeNationalId(value: string | null | undefined): string {
  *
  * - Links existing records by canonical id or legacy `integrationId`; never by
  *   name, course or email.
- * - Creates years, courses and enrollments. Never creates a student: a new
- *   student waits in the intake until an operator assigns a guardian.
+ * - Creates years, courses and enrollments only for an active enrollment of
+ *   a linked student. Never creates a student: a new student waits in the
+ *   intake until an operator assigns a guardian.
  * - Never deletes. A tombstone or inactive enrollment only deactivates the
  *   linked BL enrollment; charges and payments are untouched.
  * - Never changes a RUN: a difference is reported, not written.
@@ -213,22 +222,24 @@ export class AcademicFinancialProjectionWriterService {
       ) {
         throw new RowConflict('SKIPPED', 'DESCRIPTORS_MISSING');
       }
-      const yearId = await this.resolveYear(tx, tenantId, row, changes);
-      const courseId = await this.resolveCourse(
+      // The student comes first: a row that cannot reach an enrollment must
+      // not create years or courses in BL (e.g. a closed test enrollment).
+      const studentId = await this.resolveStudent(tx, tenantId, row, changes);
+      const active = isActiveRow(row);
+      if (studentId === null) {
+        return active
+          ? { ...base, outcome: 'PENDING_INTAKE', reasonCode: 'NEW_STUDENT' }
+          : { ...base, outcome: 'SKIPPED', reasonCode: 'INACTIVE_NOT_LINKED' };
+      }
+      // Only an active enrollment may create its year and course; a closed one
+      // can only update what BL already has.
+      const { yearId, courseId } = await this.resolveStructure(
         tx,
         tenantId,
         row,
-        yearId,
         changes,
+        active,
       );
-      const studentId = await this.resolveStudent(tx, tenantId, row, changes);
-      if (studentId === null) {
-        return {
-          ...base,
-          outcome: 'PENDING_INTAKE',
-          reasonCode: 'NEW_STUDENT',
-        };
-      }
       await this.resolveEnrollment(
         tx,
         tenantId,
@@ -274,11 +285,52 @@ export class AcademicFinancialProjectionWriterService {
           OR s."financialSetup" <> e."financialSetup")`;
   }
 
+  /**
+   * Year and course of an active row, created when missing. Used by the
+   * intake right before it creates the student of that row.
+   */
+  async ensureYearAndCourse(
+    tx: Tx,
+    tenantId: string,
+    row: Row,
+  ): Promise<{ yearId: number; courseId: number }> {
+    if (!isActiveRow(row)) {
+      throw new Error('Only an active enrollment can create its course.');
+    }
+    return this.resolveStructure(tx, tenantId, row, [], true);
+  }
+
+  private async resolveStructure(
+    tx: Tx,
+    tenantId: string,
+    row: Row,
+    changes: WriteChange[],
+    allowCreate: boolean,
+  ): Promise<{ yearId: number; courseId: number }> {
+    const yearId = await this.resolveYear(
+      tx,
+      tenantId,
+      row,
+      changes,
+      allowCreate,
+    );
+    const courseId = await this.resolveCourse(
+      tx,
+      tenantId,
+      row,
+      yearId,
+      changes,
+      allowCreate,
+    );
+    return { yearId, courseId };
+  }
+
   private async resolveYear(
     tx: Tx,
     tenantId: string,
     row: Row,
     changes: WriteChange[],
+    allowCreate: boolean,
   ): Promise<number> {
     const label = row.academicYearLabel!;
     const status = row.academicYearStatus as AcademicYearStatus;
@@ -301,6 +353,9 @@ export class AcademicFinancialProjectionWriterService {
         });
         changes.push('YEAR_LINKED');
       } else {
+        if (!allowCreate) {
+          throw new RowConflict('SKIPPED', 'INACTIVE_NOT_LINKED');
+        }
         year = await tx.academicYear.create({
           data: {
             tenantId,
@@ -356,6 +411,7 @@ export class AcademicFinancialProjectionWriterService {
     row: Row,
     yearId: number,
     changes: WriteChange[],
+    allowCreate: boolean,
   ): Promise<number> {
     const label = row.courseLabel!;
     let course = await tx.course.findFirst({
@@ -392,6 +448,9 @@ export class AcademicFinancialProjectionWriterService {
         });
         changes.push('COURSE_LINKED');
       } else {
+        if (!allowCreate) {
+          throw new RowConflict('SKIPPED', 'INACTIVE_NOT_LINKED');
+        }
         course = await tx.course.create({
           data: {
             tenantId,
@@ -496,10 +555,7 @@ export class AcademicFinancialProjectionWriterService {
     target: { yearId: number; courseId: number; studentId: number },
     changes: WriteChange[],
   ): Promise<void> {
-    const status: EnrollmentStatus =
-      row.operation === 'TOMBSTONE' || row.enrollmentStatus !== 'ACTIVE'
-        ? 'INACTIVE'
-        : 'ACTIVE';
+    const status: EnrollmentStatus = isActiveRow(row) ? 'ACTIVE' : 'INACTIVE';
     const linked = await tx.enrollment.findFirst({
       where: { tenantId, canonicalEnrollmentId: row.academicEnrollmentId },
     });
