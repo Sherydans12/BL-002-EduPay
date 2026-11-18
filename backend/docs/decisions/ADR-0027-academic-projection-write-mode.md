@@ -80,9 +80,13 @@ columnas `students.canonicalStudentId`, `students.nationalIdType`,
 `courses.canonicalCourseId` (únicos por tenant) y las de resultado en
 `academic_financial_projections`. No modifica filas existentes.
 
+## Pantalla de la bandeja
+
+El FRONT la ofrece en **Alumnos → Nuevos desde Académico**
+(`/alumnos/por-incorporar`); ver `frontend/docs/ACADEMIC-INTAKE.md`.
+
 ## Fuera de este corte
 
-- La pantalla de la bandeja en el FRONT de BL (usa los endpoints de arriba).
 - Retirar el alta y edición de alumnos y cursos en BL (ADR-0025, después de
   verificar la escritura).
 - Eventos de proyección desde el sync heredado de Académico: sus escrituras no
