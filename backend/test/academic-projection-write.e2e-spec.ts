@@ -38,6 +38,7 @@ describe('Academic projection write mode (e2e)', () => {
   const newStudentEnrollment = randomUUID();
   const student2Inactive = randomUUID();
   const orphanEnrollment = randomUUID();
+  const closedTestEnrollment = randomUUID();
   let year2026: { label: string; startDate: Date; endDate: Date };
   let course2026: { id: number; integrationId: string; name: string };
   let student1: { id: number; integrationId: string; courseId: number };
@@ -201,6 +202,21 @@ describe('Academic projection write mode (e2e)', () => {
             legacy: randomUUID(),
           },
         }),
+        // A closed test enrollment of a student BL never had: it must not
+        // create its course in BL (found in the 2026-11-18 production plan).
+        {
+          ...shadowRow({
+            enrollmentId: closedTestEnrollment,
+            studentId: randomUUID(),
+            courseId: randomUUID(),
+            yearId: year2026Canonical,
+            year: y2026,
+            courseLabel: 'TEST-ONLY — Curso de prueba',
+            status: 'INACTIVE',
+            student: { firstName: 'Prueba', lastName: 'Cerrada' },
+          }),
+          operation: 'TOMBSTONE' as const,
+        },
       ],
     });
   }, 60_000);
@@ -224,12 +240,12 @@ describe('Academic projection write mode (e2e)', () => {
     const chargesBefore = await prisma.charge.count();
     const plan = await writer.run(TENANT, { dryRun: true });
 
-    expect(plan.rows).toBe(5);
+    expect(plan.rows).toBe(6);
     expect(plan.outcomes).toEqual({
       APPLIED: 2,
       PENDING_INTAKE: 1,
       CONFLICT: 1,
-      SKIPPED: 1,
+      SKIPPED: 2,
     });
     expect(plan.changes).toMatchObject({
       YEAR_LINKED: 1,
@@ -243,7 +259,7 @@ describe('Academic projection write mode (e2e)', () => {
     expect(plan.reasons).toMatchObject({
       NEW_STUDENT: 1,
       STUDENT_LEGACY_NOT_FOUND: 1,
-      INACTIVE_NOT_LINKED: 1,
+      INACTIVE_NOT_LINKED: 2,
     });
     expect(JSON.stringify(plan)).not.toMatch(/Sintética|11111111/);
 
@@ -272,8 +288,13 @@ describe('Academic projection write mode (e2e)', () => {
       APPLIED: 2,
       PENDING_INTAKE: 1,
       CONFLICT: 1,
-      SKIPPED: 1,
+      SKIPPED: 2,
     });
+    expect(
+      await prisma.course.count({
+        where: { tenantId: TENANT, name: { startsWith: 'TEST-ONLY' } },
+      }),
+    ).toBe(0);
 
     const linked = await prisma.student.findUniqueOrThrow({
       where: { id: student1.id },

@@ -37,6 +37,13 @@ administrador de plataforma puede escribir de una vez las filas pendientes.
 Reglas:
 
 - **Nunca por nombre, curso ni correo** para alumnos (ADR-0025).
+- **El alumno va primero.** Solo una matrícula activa de un alumno vinculado
+  crea su año y su curso. Una fila de un alumno sin vínculo no crea nada:
+  queda `PENDING_INTAKE` si está activa, o `SKIPPED` (`INACTIVE_NOT_LINKED`)
+  si está cerrada; al aceptar desde la bandeja se crean su año y curso. Una
+  matrícula cerrada solo actualiza lo que BL ya tiene. (Corrección del
+  2026-11-18: el plan productivo habría creado el curso de una matrícula de
+  prueba dada de baja.)
 - **No se crea un alumno sin apoderado.** Un alumno nuevo queda
   `PENDING_INTAKE` en la bandeja `GET /academic-intake`. Un operador con
   `manage:students` lo incorpora con

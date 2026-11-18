@@ -11,6 +11,7 @@ import { formatRut } from '../../common/rut/rut.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   AcademicFinancialProjectionWriterService,
+  isActiveRow,
   normalizeNationalId,
   type RowWriteResult,
 } from './academic-financial-projection-writer.service';
@@ -30,14 +31,10 @@ export type AcademicIntakeItem = {
   possibleMatch: { studentId: number; name: string; courseName: string } | null;
 };
 
-function isActive(row: Row) {
-  return row.operation !== 'TOMBSTONE' && row.enrollmentStatus === 'ACTIVE';
-}
-
 /** The active enrollment of the most recent year, if any. */
 function currentRow(rows: Row[]): Row | undefined {
   return rows
-    .filter(isActive)
+    .filter(isActiveRow)
     .sort(
       (a, b) =>
         (b.academicYearStartDate?.getTime() ?? 0) -
@@ -174,17 +171,12 @@ export class AcademicFinancialProjectionIntakeService {
               'Ya existe un alumno con ese RUN en Pagos: vincúlalo en lugar de crear otro.',
             );
           }
-          // The year and course of the current enrollment exist once written.
-          await this.writer.writeRow(tx, tenantId, current);
-          const course = await tx.course.findFirst({
-            where: { tenantId, canonicalCourseId: current.academicCourseId },
-            select: { id: true },
-          });
-          if (!course) {
-            throw new ConflictException(
-              'No se pudo preparar el curso del alumno; revisa el plan de escritura.',
-            );
-          }
+          // The current enrollment's year and course, created if missing.
+          const { courseId } = await this.writer.ensureYearAndCourse(
+            tx,
+            tenantId,
+            current,
+          );
           const firstName = (current.studentFirstName ?? '').trim();
           const lastName = (current.studentLastName ?? '').trim();
           const created = await tx.student.create({
@@ -195,7 +187,7 @@ export class AcademicFinancialProjectionIntakeService {
               firstName,
               lastName,
               name: `${firstName} ${lastName}`,
-              courseId: course.id,
+              courseId,
               guardianId: guardian.id,
               canonicalStudentId: academicStudentId,
             },
