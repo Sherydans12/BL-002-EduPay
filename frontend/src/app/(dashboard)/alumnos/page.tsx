@@ -21,6 +21,7 @@ import {
   ArrowUpRight,
   ShieldCheck,
   CreditCard,
+  UserPlus,
 } from "lucide-react";
 import { StudentFormDialog } from "@/components/student-form-dialog";
 import {
@@ -240,6 +241,14 @@ export default function StudentsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/alumnos/por-incorporar"
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-primary)]/50 bg-[var(--color-primary)]/10 px-4 py-2.5 text-xs font-semibold text-white hover:bg-[var(--color-primary)]/20 transition-all"
+            >
+              <UserPlus className="size-3.5" />
+              Nuevos desde Académico
+            </Link>
+
             <Link
               href="/alumnos/pendientes"
               className="inline-flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-all"

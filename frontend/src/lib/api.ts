@@ -711,6 +711,33 @@ export const studentsApi = {
     ),
 };
 
+// ─── Alumnos nuevos desde Académico (ADR-0027) ───────────────
+export type AcademicIntakeItem = {
+  academicStudentId: string;
+  firstName: string;
+  lastName: string;
+  nationalIdType: "RUN" | "IPE" | null;
+  nationalId: string | null;
+  courseLabel: string;
+  academicYearLabel: string;
+  academicYearStatus: string;
+  /** Alumno de Pagos con el mismo RUN, aún sin vincular: lo decide el operador. */
+  possibleMatch: { studentId: number; name: string; courseName: string } | null;
+};
+
+export type AcademicIntakeAcceptInput =
+  | { guardianId: number }
+  | { existingStudentId: number };
+
+export const academicIntakeApi = {
+  list: () => request<AcademicIntakeItem[]>("/academic-intake"),
+  accept: (academicStudentId: string, input: AcademicIntakeAcceptInput) =>
+    request<{ studentId: number }>(
+      `/academic-intake/${encodeURIComponent(academicStudentId)}/accept`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+};
+
 // ─── Payments ─────────────────────────────────────────────────
 export const paymentsApi = {
   getAll: (params?: Record<string, string>) => {
