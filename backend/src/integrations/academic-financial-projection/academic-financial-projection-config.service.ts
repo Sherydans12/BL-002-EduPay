@@ -21,6 +21,19 @@ export class AcademicFinancialProjectionConfigService {
     );
   }
 
+  /**
+   * Write mode (ADR-0027): consumed events also update BL's years, courses,
+   * students and enrollments. Requires the shadow to be enabled; off unless
+   * explicitly set.
+   */
+  writeEnabled(): boolean {
+    return (
+      this.enabled() &&
+      this.config.get<string>('ACADEMIC_FINANCIAL_PROJECTION_WRITE_ENABLED') ===
+        'true'
+    );
+  }
+
   requireInboundCredentials(): Credential[] {
     this.requireEnabled();
     return this.credentials(

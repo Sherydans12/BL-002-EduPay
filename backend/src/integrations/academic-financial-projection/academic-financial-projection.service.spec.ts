@@ -120,11 +120,20 @@ describe('AcademicFinancialProjectionService', () => {
   };
   const config = {
     enabled: jest.fn(() => true),
+    writeEnabled: jest.fn(() => false),
     requireInboundCredentials: jest.fn(),
+  };
+  const writer = {
+    writeAndMark: jest.fn(async () => ({
+      academicEnrollmentId: enrollment,
+      outcome: 'APPLIED',
+      changes: [],
+    })),
   };
   const service = new AcademicFinancialProjectionService(
     prisma as never,
     config as never,
+    writer as never,
   );
 
   beforeEach(() => {
@@ -172,6 +181,21 @@ describe('AcademicFinancialProjectionService', () => {
     expect(Object.keys(created).join(',')).not.toMatch(
       /email|guardian|payment|charge|rut/i,
     );
+  });
+
+  it('writes into BL tables in the same transaction only with write mode on', async () => {
+    const row = { id: 'shadow-row', academicEnrollmentId: enrollment };
+    projectionUpsert.mockResolvedValue(row);
+
+    await service.consume(event(), canonical);
+    expect(writer.writeAndMark).not.toHaveBeenCalled();
+
+    config.writeEnabled.mockReturnValueOnce(true);
+    consumedFind.mockResolvedValue(null);
+    await expect(service.consume(event(), canonical)).resolves.toEqual({
+      outcome: 'APPLIED',
+    });
+    expect(writer.writeAndMark).toHaveBeenCalledWith(tx, tenant, row);
   });
 
   it('quarantines a v1 event: v1 was never activated', async () => {

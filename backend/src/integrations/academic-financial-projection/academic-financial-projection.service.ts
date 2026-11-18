@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { AcademicFinancialProjectionConfigService } from './academic-financial-projection-config.service';
+import { AcademicFinancialProjectionWriterService } from './academic-financial-projection-writer.service';
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -85,6 +86,7 @@ export class AcademicFinancialProjectionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: AcademicFinancialProjectionConfigService,
+    private readonly writer: AcademicFinancialProjectionWriterService,
   ) {}
 
   async consume(
@@ -300,7 +302,7 @@ export class AcademicFinancialProjectionService {
       });
       return { outcome: 'STALE', reasonCode: 'ENTITY_VERSION_NOT_NEWER' };
     }
-    await tx.academicFinancialProjection.upsert({
+    const row = await tx.academicFinancialProjection.upsert({
       where: {
         tenantId_academicEnrollmentId: {
           tenantId,
@@ -314,6 +316,10 @@ export class AcademicFinancialProjectionService {
         lastEventId: event.eventId,
       }),
     });
+    if (this.config.writeEnabled()) {
+      // Same transaction: the BL records change only if the event is applied.
+      await this.writer.writeAndMark(tx, tenantId, row);
+    }
     await tx.academicFinancialProjectionConsumedEvent.create({
       data: {
         producer: 'ACADEMIC',

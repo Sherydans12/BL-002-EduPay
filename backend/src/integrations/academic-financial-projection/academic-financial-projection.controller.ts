@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Req,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -19,6 +20,8 @@ import {
 import { AcademicFinancialProjectionReconciliationService } from './academic-financial-projection-reconciliation.service';
 import { AcademicFinancialProjectionSnapshotService } from './academic-financial-projection-snapshot.service';
 import { AcademicFinancialProjectionService } from './academic-financial-projection.service';
+import { AcademicFinancialProjectionConfigService } from './academic-financial-projection-config.service';
+import { AcademicFinancialProjectionWriterService } from './academic-financial-projection-writer.service';
 
 @Public()
 @ApiTags('academic-financial-projection-shadow')
@@ -52,6 +55,8 @@ export class AcademicFinancialProjectionShadowAdminController {
     private readonly snapshots: AcademicFinancialProjectionSnapshotService,
     private readonly projection: AcademicFinancialProjectionService,
     private readonly reconciliationReport: AcademicFinancialProjectionReconciliationService,
+    private readonly writer: AcademicFinancialProjectionWriterService,
+    private readonly config: AcademicFinancialProjectionConfigService,
   ) {}
 
   @Post('tenants/:tenantId/snapshots')
@@ -73,6 +78,26 @@ export class AcademicFinancialProjectionShadowAdminController {
     @Param('snapshotId') snapshotId: string,
   ) {
     return this.projection.reconcileSnapshot(tenantId, snapshotId);
+  }
+
+  /**
+   * Write plan (ADR-0027): what writing the shadow into BL would change, by
+   * counts and enrollment ids. Runs the writes in a rolled-back transaction.
+   */
+  @Get('tenants/:tenantId/write-plan')
+  writePlan(@Param('tenantId') tenantId: string) {
+    return this.writer.run(tenantId, { dryRun: true });
+  }
+
+  /** Applies the write plan. Only with the write mode enabled. */
+  @Post('tenants/:tenantId/write-plan/apply')
+  applyWritePlan(@Param('tenantId') tenantId: string) {
+    if (!this.config.writeEnabled()) {
+      throw new ServiceUnavailableException(
+        'Academic Financial Projection write mode is disabled.',
+      );
+    }
+    return this.writer.run(tenantId, { dryRun: false });
   }
 
   /** Read-only v2 reconciliation against the legacy roster (ADR-0025). */

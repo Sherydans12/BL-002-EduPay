@@ -143,6 +143,8 @@ model Course {
   tenantId                   String    @default("colegio-conquistadores")
   tenant                     Tenant    @relation(fields: [tenantId], references: [id])
   name                       String
+  /// Académico Course.id once the projection writer links or creates it.
+  canonicalCourseId          String?   @db.Uuid
   /// Each course belongs to one academic year: "1° Básico A" 2026 and 2027
   /// are different courses (ADR-0025).
   academicYearId             Int
@@ -154,6 +156,7 @@ model Course {
   deletedAt                  DateTime?
 
   @@unique([tenantId, academicYearId, name])
+  @@unique([tenantId, canonicalCourseId])
   @@index([academicYearId])
   @@index([tenantId])
   @@index([tenantId, integrationVersion, integrationId])
@@ -195,6 +198,11 @@ model Student {
    * Derivado en BD para búsqueda sin puntos/guiones
    */
   rutNormalized              String?              @default(dbgenerated()) @map("rut_normalized")
+  /// `RUN` or `IPE` when the student came from Académico; null for legacy rows
+  /// (their `rut` is a RUN).
+  nationalIdType             String?              @db.VarChar(8)
+  /// Académico Student.id once the projection writer links or creates it.
+  canonicalStudentId         String?              @db.Uuid
   name                       String
   firstName                  String?
   lastName                   String?
@@ -216,6 +224,7 @@ model Student {
   deletedAt                  DateTime?
 
   @@unique([tenantId, rut])
+  @@unique([tenantId, canonicalStudentId])
   @@index([tenantId])
   @@index([tenantId, integrationVersion, integrationId])
   @@index([tenantId, integrationCreatedSequence, integrationId])
@@ -528,6 +537,15 @@ model AcademicFinancialProjection {
   academicYearStatus         String?   @db.VarChar(16)
   lastEventId           String?                            @db.Uuid
   lastSnapshotId        String?                            @db.Uuid
+  /// Result of writing this row into BL's tables (write mode, ADR-0027):
+  /// APPLIED, PENDING_INTAKE (new student awaiting a guardian), CONFLICT or
+  /// SKIPPED. Null while the row was only shadowed.
+  writeOutcome          String?                            @db.VarChar(32)
+  writeReasonCode       String?                            @db.VarChar(64)
+  writtenAt             DateTime?
+  /// `version` of the row when it was last written; behind `version` means
+  /// the row changed since and must be written again.
+  writtenVersion        BigInt?
   createdAt             DateTime                           @default(now())
   updatedAt             DateTime                           @updatedAt
 
@@ -539,6 +557,7 @@ model AcademicFinancialProjection {
   @@index([canonicalTenantId, academicEnrollmentId])
   @@index([tenantId, academicYearId, enrollmentStatus])
   @@index([tenantId, operation, sourceUpdatedAt])
+  @@index([tenantId, writeOutcome])
   @@map("academic_financial_projections")
 }
 
