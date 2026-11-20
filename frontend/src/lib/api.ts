@@ -738,6 +738,12 @@ export const academicIntakeApi = {
     ),
 };
 
+// ADR-0028: alumnos, cursos y años del tenant se gestionan en Académico.
+export const academicAuthorityApi = {
+  status: () =>
+    request<{ managedByAcademico: boolean }>("/academic-authority"),
+};
+
 // ─── Payments ─────────────────────────────────────────────────
 export const paymentsApi = {
   getAll: (params?: Record<string, string>) => {

@@ -5,6 +5,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 - **Estilos UI (colores, desplegables, formularios):** [`docs/UI-STYLES.md`](./docs/UI-STYLES.md)
 - **Reglas para agentes / Cursor:** [`AGENTS.md`](./AGENTS.md)
 - **Nuevos desde Académico (bandeja de incorporación):** [`docs/ACADEMIC-INTAKE.md`](./docs/ACADEMIC-INTAKE.md)
+- **Dónde se hace cada cosa (alumnos y cursos en Académico, cobranza en Pagos):** [`docs/ACADEMIC-RECORDS.md`](./docs/ACADEMIC-RECORDS.md)
 
 ## Getting Started
 

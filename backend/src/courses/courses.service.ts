@@ -7,6 +7,7 @@ import { Prisma, StudentStatus } from '@prisma/client';
 import { buildCourseSearchWhere } from '../common/search/flexible-search';
 import { AcademicYearsService } from '../academic-years/academic-years.service';
 import { tenantContext } from '../core/tenant/tenant.context';
+import { AcademicAuthorityService } from '../academic-authority/academic-authority.service';
 
 /** Course.tenantId database default, used when no tenant context exists. */
 const DEFAULT_TENANT_ID = 'colegio-conquistadores';
@@ -16,10 +17,12 @@ export class CoursesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly academicYears: AcademicYearsService,
+    private readonly academicAuthority: AcademicAuthorityService,
   ) {}
 
   /** New courses belong to the ACTIVE academic year (ADR-0025). */
   async create(dto: CreateCourseDto) {
+    await this.academicAuthority.assertManagedLocally('courses');
     const tenantId = tenantContext.getStore()?.tenantId ?? DEFAULT_TENANT_ID;
     const activeYear = await this.academicYears.activeYear(tenantId);
     return this.prisma.course.create({
@@ -133,11 +136,13 @@ export class CoursesService {
   }
 
   async update(id: number, dto: UpdateCourseDto) {
+    await this.academicAuthority.assertManagedLocally('courses');
     await this.findOne(id);
     return this.prisma.course.update({ where: { id }, data: dto });
   }
 
   async remove(id: number) {
+    await this.academicAuthority.assertManagedLocally('courses');
     await this.findOne(id);
     return this.prisma.course.update({
       where: { id },

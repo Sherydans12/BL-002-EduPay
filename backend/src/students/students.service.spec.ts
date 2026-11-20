@@ -1,10 +1,17 @@
 import { StudentsService } from './students.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AcademicYearsService } from '../academic-years/academic-years.service';
+import { AcademicAuthorityService } from '../academic-authority/academic-authority.service';
 
 const activeYearOnly = {
   activeYear: jest.fn().mockResolvedValue({ id: 1, label: '2026' }),
 } as unknown as AcademicYearsService;
+
+/** BL-managed tenant: no Académico authority (ADR-0028). */
+const locallyManaged = {
+  assertManagedLocally: jest.fn().mockResolvedValue(undefined),
+  assertStudentUpdateAllowed: jest.fn().mockResolvedValue(undefined),
+} as unknown as AcademicAuthorityService;
 
 describe('StudentsService structured names', () => {
   const prisma = {
@@ -22,6 +29,7 @@ describe('StudentsService structured names', () => {
   const service = new StudentsService(
     prisma as unknown as PrismaService,
     activeYearOnly,
+    locallyManaged,
   );
 
   beforeEach(() => {
@@ -343,6 +351,7 @@ describe('StudentsService list filters', () => {
   const service = new StudentsService(
     prisma as unknown as PrismaService,
     activeYearOnly,
+    locallyManaged,
   );
 
   beforeEach(() => {

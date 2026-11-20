@@ -15,8 +15,13 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  AcademicAuthorityNotice,
+  useAcademicAuthority,
+} from "@/components/academic-authority";
 
 export default function NameReviewQueuePage() {
+  const academicAuthority = useAcademicAuthority();
   const [queue, setQueue] = useState<PendingStudentReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -114,6 +119,27 @@ export default function NameReviewQueuePage() {
     if (!currentStudent) return [];
     return currentStudent.name.trim().split(/\s+/).filter(Boolean);
   }, [currentStudent]);
+
+  if (academicAuthority === "academico") {
+    return (
+      <div className="space-y-6 max-w-5xl mx-auto p-4 md:p-6">
+        <Link
+          href="/alumnos"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          Volver a Alumnos
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Nombres de alumnos
+        </h1>
+        <AcademicAuthorityNotice>
+          Los nombres se corrigen en Académico, en Personas, y llegan a Pagos
+          automáticamente. Esta revisión ya no se hace aquí.
+        </AcademicAuthorityNotice>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto p-4 md:p-6">
