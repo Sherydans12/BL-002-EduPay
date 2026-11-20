@@ -1,6 +1,24 @@
 # Topología productiva EduPay
 
-## Estado operativo vigente — 2026-11-16 (cobranza por año académico)
+## Estado operativo vigente — 2026-11-20 (proyección Académico → BL en escritura)
+
+Activación verificada 2026-11-18/20; evidencia en
+[projection-write-activation-2026-11-18.md](projection-write-activation-2026-11-18.md)
+y [ADR-0027](../../backend/docs/decisions/ADR-0027-academic-projection-write-mode.md).
+
+| Recurso | Código | Artefacto | Estado |
+|---|---|---|---|
+| BL BACK `km0aljzabdiqtaixj9dsequu` | `5329ca0` | imagen local reconstruida por los redeploy de flags (última verificada `sha256:977bf20c…` antes de cargar la credencial entrante) | Healthy; `RUN_MIGRATIONS=false`; sombra, escritura y credencial entrante activas |
+| BL FRONT `ktgdely86kx0by10p9cb91os` | `081b84c` | imagen local `sha256:c8f60b1b…225ff` | Healthy |
+| PostgreSQL BL `dms5i3e0i5t4kyh7h683mi7v` | — | ledger 39 intentos (31 aplicados, 8 revertidos resueltos, 0 sin resolver); última `20261117120000_academic_projection_write_mode` | Healthy |
+| Académico API (servicio `iobfkpujjoa2kj5urbpnjvzi`) | `1d4498c` | `ghcr.io/sherydans12/edupay-academico@sha256:7625ab22…` | Publicador activo; tarea programada "Auto Send" cada minuto |
+
+Vínculos escritos: 242 alumnos, 12 cursos y 242 matrículas 2026; la matrícula
+de prueba dada de baja quedó omitida. Cuotas y pagos sin cambios por la
+escritura. Recovery points: `20261118T162733Z` (antes de la migración) y
+`20261119T141711Z` (antes de la escritura).
+
+## Historial — 2026-11-16 (cobranza por año académico)
 
 Verificación directa del 2026-11-16; evidencia en
 [billing-by-academic-year-release-2026-11-16.md](billing-by-academic-year-release-2026-11-16.md).
