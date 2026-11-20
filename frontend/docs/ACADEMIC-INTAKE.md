@@ -1,7 +1,7 @@
 # Nuevos desde Académico (bandeja de incorporación)
 
 Pantalla `/alumnos/por-incorporar`, enlazada desde **Alumnos → Nuevos desde
-Académico**. Implementa la bandeja de ADR-0027 del BACK
+Académico**. Para el proceso completo, ver [Dónde se hace cada cosa](ACADEMIC-RECORDS.md). Implementa la bandeja de ADR-0027 del BACK
 (`backend/docs/decisions/ADR-0027-academic-projection-write-mode.md`).
 
 ## Para qué sirve

@@ -22,6 +22,11 @@ import { matchesStudentRow } from "@/lib/flexible-search";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatRut } from "@/lib/rut";
+import {
+  AcademicAuthorityNotice,
+  useAcademicAuthority,
+} from "@/components/academic-authority";
+import { canManageAcademicRecords } from "@/lib/academic-authority";
 
 function rowToStudent(
   row: CourseWithStudents["students"][number],
@@ -59,6 +64,8 @@ export default function CourseStudentsPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const academicAuthority = useAcademicAuthority();
+  const canManageAcademic = canManageAcademicRecords(academicAuthority);
 
   const reloadCourse = useCallback(async () => {
     if (!Number.isFinite(courseId) || courseId < 1) return;
@@ -172,15 +179,19 @@ export default function CourseStudentsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            onClick={openCreateDialog}
-            className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-lg shadow-blue-600/20"
-          >
-            <Plus className="size-3.5" />
-            Inscribir Alumno
-          </Button>
+          {canManageAcademic && (
+            <Button
+              onClick={openCreateDialog}
+              className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-lg shadow-blue-600/20"
+            >
+              <Plus className="size-3.5" />
+              Inscribir Alumno
+            </Button>
+          )}
         </div>
       </div>
+
+      {academicAuthority === "academico" && <AcademicAuthorityNotice />}
 
       {/* Tarjeta de Resumen del Curso */}
       {course && (
@@ -366,14 +377,16 @@ export default function CourseStudentsPage() {
                             Ficha Financiera
                           </Link>
 
-                          <button
-                            type="button"
-                            onClick={() => openEditDialog(s)}
-                            className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-white transition-colors"
-                            title="Editar datos del alumno"
-                          >
-                            <Pencil className="size-3.5 text-blue-400" />
-                          </button>
+                          {canManageAcademic && (
+                            <button
+                              type="button"
+                              onClick={() => openEditDialog(s)}
+                              className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-white transition-colors"
+                              title="Editar datos del alumno"
+                            >
+                              <Pencil className="size-3.5 text-blue-400" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

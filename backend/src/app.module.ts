@@ -34,6 +34,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { HealthModule } from './health/health.module';
 import { AcademicoIntegrationModule } from './integrations/academico/academico-integration.module';
 import { AcademicFinancialProjectionModule } from './integrations/academic-financial-projection/academic-financial-projection.module';
+import { AcademicAuthorityModule } from './academic-authority/academic-authority.module';
 
 @Module({
   controllers: [AppController],
@@ -63,6 +64,7 @@ import { AcademicFinancialProjectionModule } from './integrations/academic-finan
     TenantsModule,
     AcademicoIntegrationModule,
     AcademicFinancialProjectionModule,
+    AcademicAuthorityModule,
   ],
   providers: [
     {

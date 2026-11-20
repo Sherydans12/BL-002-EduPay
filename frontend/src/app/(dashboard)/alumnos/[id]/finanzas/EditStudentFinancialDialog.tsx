@@ -14,6 +14,10 @@ import { Button } from "@/components/ui/button";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
 import { formatRut, sanitizeRutInput, isValidRut } from "@/lib/rut";
 import { studentsApi } from "@/lib/api";
+import {
+  AcademicAuthorityNotice,
+  useAcademicAuthority,
+} from "@/components/academic-authority";
 import type { Student, Course, Guardian, StudentStatus } from "@/lib/api";
 import {
   User,
@@ -60,6 +64,8 @@ export function EditStudentFinancialDialog({
   } = useForm<StudentFormValues>();
 
   const selectedGuardianId = watch("guardianId");
+  // ADR-0028: with Académico as authority only the guardian is edited here.
+  const academicLocked = useAcademicAuthority() !== "local";
 
   useEffect(() => {
     if (!open || !student) return;
@@ -99,6 +105,25 @@ export function EditStudentFinancialDialog({
 
   const onSubmit = async (values: StudentFormValues) => {
     if (!student) return;
+
+    if (academicLocked) {
+      setIsSubmitting(true);
+      try {
+        await studentsApi.update(student.id, {
+          guardianId: Number(values.guardianId),
+        });
+        toast.success("Apoderado del alumno actualizado con éxito");
+        await onSaved();
+        onOpenChange(false);
+      } catch (err: unknown) {
+        toast.error(
+          err instanceof Error ? err.message : "Error al actualizar alumno",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
 
     const formattedRut = formatRut(values.rut);
     if (formattedRut && !isValidRut(formattedRut)) {
@@ -170,6 +195,15 @@ export function EditStudentFinancialDialog({
             </div>
           )}
 
+          {academicLocked && (
+            <div className="mb-4">
+              <AcademicAuthorityNotice>
+                Nombre, RUT, curso y estado se corrigen en Académico. Aquí
+                solo cambias el apoderado.
+              </AcademicAuthorityNotice>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Nombres */}
             <div>
@@ -177,7 +211,11 @@ export function EditStudentFinancialDialog({
                 Nombres *
               </label>
               <input
-                {...register("firstName", { required: "Nombres requeridos" })}
+                {...register("firstName", {
+                  required: academicLocked ? false : "Nombres requeridos",
+                })}
+                readOnly={academicLocked}
+                aria-readonly={academicLocked}
                 placeholder="Ej: Tomás Ignacio"
                 className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
               />
@@ -194,7 +232,11 @@ export function EditStudentFinancialDialog({
                 Apellidos *
               </label>
               <input
-                {...register("lastName", { required: "Apellidos requeridos" })}
+                {...register("lastName", {
+                  required: academicLocked ? false : "Apellidos requeridos",
+                })}
+                readOnly={academicLocked}
+                aria-readonly={academicLocked}
                 placeholder="Ej: Fuentes Castro"
                 className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white focus:border-[var(--color-primary)] outline-none"
               />
@@ -211,7 +253,11 @@ export function EditStudentFinancialDialog({
                 RUT del Alumno *
               </label>
               <input
-                {...register("rut", { required: "RUT requerido" })}
+                {...register("rut", {
+                  required: academicLocked ? false : "RUT requerido",
+                })}
+                readOnly={academicLocked}
+                aria-readonly={academicLocked}
                 placeholder="12.345.678-9"
                 className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs font-mono text-white focus:border-[var(--color-primary)] outline-none"
                 onChange={(e) => {
@@ -237,7 +283,10 @@ export function EditStudentFinancialDialog({
               </label>
               <NativeSelectField>
                 <select
-                  {...register("courseId", { required: "Curso requerido" })}
+                  {...register("courseId", {
+                    required: academicLocked ? false : "Curso requerido",
+                  })}
+                  disabled={academicLocked}
                   className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white outline-none"
                 >
                   {courses.map((c) => (
@@ -286,6 +335,7 @@ export function EditStudentFinancialDialog({
               <NativeSelectField>
                 <select
                   {...register("status")}
+                  disabled={academicLocked}
                   className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-xs text-white outline-none"
                 >
                   <option value="ACTIVE">Activo</option>

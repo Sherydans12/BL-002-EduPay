@@ -14,6 +14,7 @@ import { Prisma, StudentStatus } from '@prisma/client';
 import { buildWorkbook } from '../common/excel/excel.helper';
 import { buildStudentSearchWhere } from '../common/search/flexible-search';
 import { AcademicYearsService } from '../academic-years/academic-years.service';
+import { AcademicAuthorityService } from '../academic-authority/academic-authority.service';
 
 const STUDENT_STATUS_LABELS: Record<StudentStatus, string> = {
   ACTIVE: 'Activo',
@@ -31,6 +32,7 @@ export class StudentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly academicYears: AcademicYearsService,
+    private readonly academicAuthority: AcademicAuthorityService,
   ) {}
 
   /**
@@ -82,6 +84,7 @@ export class StudentsService {
   }
 
   async create(dto: CreateStudentDto) {
+    await this.academicAuthority.assertManagedLocally('students');
     await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
     const activeYear = await this.activeYearForCourse(dto.courseId);
     const name = this.legacyName(dto.firstName, dto.lastName);
@@ -216,6 +219,7 @@ export class StudentsService {
   }
 
   async update(id: number, dto: UpdateStudentDto) {
+    await this.academicAuthority.assertStudentUpdateAllowed(dto);
     const current = await this.findOne(id);
     await this.assertStudentRelationsExist(dto.courseId, dto.guardianId);
     const activeYear =
@@ -273,6 +277,7 @@ export class StudentsService {
   }
 
   async remove(id: number) {
+    await this.academicAuthority.assertManagedLocally('students');
     await this.findOne(id);
     return this.prisma.$transaction(async (tx) => {
       await tx.enrollment.updateMany({
@@ -377,6 +382,7 @@ export class StudentsService {
     dto: ReviewStudentNameDto,
     actor?: { id?: number; email?: string; role?: string },
   ) {
+    await this.academicAuthority.assertManagedLocally('students');
     const student = await this.prisma.student.findFirst({
       where: { id, deletedAt: null },
       select: {

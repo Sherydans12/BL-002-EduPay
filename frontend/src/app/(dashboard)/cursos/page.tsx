@@ -39,6 +39,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCLP } from "@/lib/currency-utils";
+import {
+  AcademicAuthorityNotice,
+  useAcademicAuthority,
+} from "@/components/academic-authority";
+import { canManageAcademicRecords } from "@/lib/academic-authority";
 
 const courseSchema = z.object({
   name: z
@@ -68,6 +73,8 @@ export default function CoursesPage() {
   const [editingCourse, setEditingCourse] = useState<CourseWithStats | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const academicAuthority = useAcademicAuthority();
+  const canManageAcademic = canManageAcademicRecords(academicAuthority);
   const [isExporting, setIsExporting] = useState(false);
 
   const {
@@ -231,15 +238,19 @@ export default function CoursesPage() {
             Exportar Excel
           </Button>
 
-          <Button
-            onClick={openCreateDialog}
-            className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-lg shadow-blue-600/20"
-          >
-            <Plus className="size-3.5" />
-            Nuevo Curso
-          </Button>
+          {canManageAcademic && (
+            <Button
+              onClick={openCreateDialog}
+              className="gap-2 text-xs bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] shadow-lg shadow-blue-600/20"
+            >
+              <Plus className="size-3.5" />
+              Nuevo Curso
+            </Button>
+          )}
         </div>
       </div>
+
+      {academicAuthority === "academico" && <AcademicAuthorityNotice />}
 
       {/* KPIs Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -433,23 +444,27 @@ export default function CoursesPage() {
                               Ver Alumnos
                             </Link>
 
-                            <button
-                              type="button"
-                              onClick={() => openEditDialog(course)}
-                              className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-white transition-colors"
-                              title="Editar curso"
-                            >
-                              <Pencil className="size-3.5 text-blue-400" />
-                            </button>
+                            {canManageAcademic && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDialog(course)}
+                                  className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-white transition-colors"
+                                  title="Editar curso"
+                                >
+                                  <Pencil className="size-3.5 text-blue-400" />
+                                </button>
 
-                            <button
-                              type="button"
-                              onClick={() => setDeleteId(course.id)}
-                              className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-red-500/15 hover:text-red-300 transition-colors"
-                              title="Eliminar curso"
-                            >
-                              <Trash2 className="size-3.5 text-red-400" />
-                            </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteId(course.id)}
+                                  className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-red-500/15 hover:text-red-300 transition-colors"
+                                  title="Eliminar curso"
+                                >
+                                  <Trash2 className="size-3.5 text-red-400" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

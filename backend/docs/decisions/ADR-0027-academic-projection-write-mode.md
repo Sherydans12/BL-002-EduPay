@@ -9,6 +9,9 @@ decisión 2), [ADR-0026](ADR-0026-billing-by-academic-year.md) (cobranza por
 año) y el contrato de proyección v2 (`docs/integration/academic-financial-projection.md`
 en Académico).
 
+El retiro del alta y la edición de alumnos y cursos en Pagos está en
+[ADR-0028](ADR-0028-academic-records-managed-by-academico.md).
+
 ## Contexto
 
 La proyección v2 llega a BL en sombra (`academic_financial_projections`) y
