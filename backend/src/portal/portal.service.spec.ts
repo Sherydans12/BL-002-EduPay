@@ -101,6 +101,10 @@ describe('PortalService', () => {
               dueDate: new Date('2026-01-05T00:00:00.000Z'),
               status: ChargeStatus.PAID,
               concept: { id: 1, name: 'Matrícula' },
+              enrollment: {
+                academicYear: { id: 27, label: '2027' },
+                course: { name: '4° Medio' },
+              },
               payments: [
                 {
                   id: 100,
@@ -139,6 +143,9 @@ describe('PortalService', () => {
       {
         id: 10,
         month: '2026-01',
+        dueDate: '2026-01-05',
+        academicYear: { id: 27, label: '2027' },
+        enrollmentCourse: '4° Medio',
         amount: 50000,
         paidAmount: 50000,
         outstandingAmount: 0,
@@ -156,6 +163,9 @@ describe('PortalService', () => {
       {
         id: 11,
         month: '2020-01',
+        dueDate: '2020-01-05',
+        academicYear: null,
+        enrollmentCourse: null,
         amount: 50000,
         paidAmount: 10000,
         outstandingAmount: 40000,
@@ -166,6 +176,9 @@ describe('PortalService', () => {
       {
         id: 12,
         month: '2099-01',
+        dueDate: '2099-01-05',
+        academicYear: null,
+        enrollmentCourse: null,
         amount: 50000,
         paidAmount: 0,
         outstandingAmount: 50000,

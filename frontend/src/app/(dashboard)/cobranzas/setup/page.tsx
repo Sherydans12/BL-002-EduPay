@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { NativeSelectField } from "@/components/ui/dropdown-chevron";
+import { EnrollmentFeesPanel } from "@/components/enrollment-fees-panel";
 import { toast } from "sonner";
 import { formatCLP, formatNumberCLP, parseCLP } from "@/lib/currency-utils";
 import {
@@ -185,7 +186,7 @@ export default function FinancialSetupRadarPage() {
   const [quickPaymentNotes, setQuickPaymentNotes] = useState("");
   const [quickPaymentSubmitting, setQuickPaymentSubmitting] = useState(false);
 
-  const { control, register, handleSubmit, reset } = useForm<FinancialPlanForm>(
+  const { control, register, handleSubmit, reset, setValue } = useForm<FinancialPlanForm>(
     {
       defaultValues: { charges: [] },
     },
@@ -651,6 +652,8 @@ export default function FinancialSetupRadarPage() {
           </Link>
         </div>
       </div>
+
+      <EnrollmentFeesPanel />
 
       {/* Tarjetas de Estadísticas / KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

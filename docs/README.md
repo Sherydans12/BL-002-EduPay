@@ -31,6 +31,7 @@ BL conserva su acceso administrativo legado.
 5. [Feed heredado BL → Académico](ACADEMICO-INTEGRATION.md) y [contrato shadow Académico → BL](ACADEMIC-FINANCIAL-PROJECTION-SHADOW.md). Son integraciones diferentes; la proyección sigue desactivada y DIE no se publica en BL.
 6. [Testing](TESTING.md), [guía local](../README.md) y los ADR backend en [`backend/docs/decisions`](../backend/docs/decisions).
 7. [ADR-0026: cobranza por año académico](../backend/docs/decisions/ADR-0026-billing-by-academic-year.md): años, cursos por año, matrículas y planes por matrícula.
+8. [Matrícula 2027 y portal](operations/MATRICULA-2027-PORTAL.md): revisión del padrón, emisión en BL-002 y flujo de pago del apoderado.
 
 `README-deploy.md` contiene una guía histórica de Coolify/Docker/cPanel y no
 describe la operación productiva actual. El [root README](../README.md) es la

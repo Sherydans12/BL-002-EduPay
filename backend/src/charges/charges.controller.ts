@@ -7,9 +7,15 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ChargesService } from './charges.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import {
+  IssueEnrollmentFeesDto,
+  PreviewEnrollmentFeesDto,
   SetupFinancialPlanDto,
   UpdateFinancialPlanDto,
 } from './dto/create-charge.dto';
@@ -17,6 +23,20 @@ import {
 @Controller('charges')
 export class ChargesController {
   constructor(private readonly chargesService: ChargesService) {}
+
+  @Post('enrollment-fees/preview')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('manage:payments')
+  previewEnrollmentFees(@Body() input: PreviewEnrollmentFeesDto) {
+    return this.chargesService.issueEnrollmentFees(input);
+  }
+
+  @Post('enrollment-fees/issue')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('manage:payments')
+  issueEnrollmentFees(@Body() input: IssueEnrollmentFeesDto) {
+    return this.chargesService.issueEnrollmentFees(input, input.fingerprint);
+  }
 
   /**
    * Plans belong to an enrollment (student + academic year). Without

@@ -1,8 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import {
   ChargeStatus,
   FinancialSetupStatus,
@@ -15,7 +18,9 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AcademicYearsService } from '../academic-years/academic-years.service';
+import { tenantContext } from '../core/tenant/tenant.context';
 import {
+  PreviewEnrollmentFeesDto,
   FinancialPlanPaymentAllocationDto,
   SetupFinancialPlanDto,
   UpdateFinancialPlanDto,
@@ -38,6 +43,165 @@ export class ChargesService {
     private readonly prisma: PrismaService,
     private readonly academicYears: AcademicYearsService,
   ) {}
+
+  async issueEnrollmentFees(
+    { academicYearId, conceptId, amount, dueDate }: PreviewEnrollmentFeesDto,
+    expectedFingerprint?: string,
+  ) {
+    const tenantId = tenantContext.getStore()?.tenantId;
+    if (!tenantId)
+      throw new ForbiddenException(
+        'Selecciona un colegio para emitir matrículas.',
+      );
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const [year, concepts] = await Promise.all([
+            tx.academicYear.findFirst({
+              where: {
+                tenantId,
+                id: academicYearId,
+                status: { in: ['DRAFT', 'ACTIVE'] },
+              },
+              select: { label: true },
+            }),
+            tx.paymentConcept.findMany({
+              where: { tenantId },
+              select: { id: true, name: true, isActive: true },
+            }),
+          ]);
+          if (!year)
+            throw new NotFoundException(
+              'Año académico no disponible para cobrar.',
+            );
+          const enrollmentConcepts = concepts.filter(({ name }) =>
+            name
+              .normalize('NFD')
+              .replace(/\p{Diacritic}/gu, '')
+              .toLowerCase()
+              .includes('matricula'),
+          );
+          const concept = enrollmentConcepts.find(
+            ({ id, isActive }) => id === conceptId && isActive,
+          );
+          if (!concept) {
+            throw new BadRequestException(
+              'Selecciona un concepto de matrícula activo.',
+            );
+          }
+
+          const roster = await tx.enrollment.findMany({
+            where: {
+              tenantId,
+              academicYearId,
+              status: 'ACTIVE',
+              student: { tenantId, deletedAt: null, status: 'ACTIVE' },
+            },
+            select: {
+              id: true,
+              studentId: true,
+              student: {
+                select: {
+                  guardian: { select: { tenantId: true, deletedAt: true } },
+                },
+              },
+              charges: {
+                where: {
+                  tenantId,
+                  conceptId: { in: enrollmentConcepts.map(({ id }) => id) },
+                  deletedAt: null,
+                  status: { not: 'CANCELLED' },
+                },
+                select: { id: true },
+                take: 1,
+              },
+            },
+            orderBy: { id: 'asc' },
+          });
+          const eligible = roster.filter(
+            ({ student }) =>
+              student.guardian?.tenantId === tenantId &&
+              student.guardian.deletedAt === null,
+          );
+          const toIssue = eligible.filter(
+            ({ charges }) => charges.length === 0,
+          );
+          const fingerprint = createHash('sha256')
+            .update(
+              JSON.stringify({
+                tenantId,
+                academicYearId,
+                conceptId,
+                amount,
+                dueDate,
+                roster: roster.map(({ id, student, charges }) => [
+                  id,
+                  student.guardian?.tenantId,
+                  student.guardian?.deletedAt,
+                  charges[0]?.id,
+                ]),
+              }),
+            )
+            .digest('hex');
+          if (
+            expectedFingerprint &&
+            toIssue.length &&
+            fingerprint !== expectedFingerprint
+          ) {
+            throw new ConflictException(
+              'El padrón o los cargos cambiaron. Revisa una nueva vista previa.',
+            );
+          }
+          if (expectedFingerprint && toIssue.length) {
+            await tx.charge.createMany({
+              data: toIssue.map(({ id, studentId }) => ({
+                tenantId,
+                studentId,
+                enrollmentId: id,
+                conceptId,
+                amount,
+                dueDate: new Date(dueDate),
+              })),
+            });
+            await tx.enrollment.updateMany({
+              where: { tenantId, id: { in: toIssue.map(({ id }) => id) } },
+              data: { financialSetup: 'CONFIGURED' },
+            });
+            if (await this.isActiveYear(tx, tenantId, academicYearId)) {
+              await tx.student.updateMany({
+                where: {
+                  tenantId,
+                  id: { in: toIssue.map(({ studentId }) => studentId) },
+                },
+                data: { financialSetup: 'CONFIGURED' },
+              });
+            }
+          }
+          return {
+            fingerprint,
+            academicYearLabel: year.label,
+            conceptName: concept.name,
+            rosterCount: roster.length,
+            withoutGuardianCount: roster.length - eligible.length,
+            existingCount: eligible.length - toIssue.length,
+            pendingCount: toIssue.length,
+            issuedCount: expectedFingerprint ? toIssue.length : 0,
+          };
+        },
+        { isolationLevel: 'Serializable', timeout: 30_000 },
+      );
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2034'
+      ) {
+        throw new ConflictException(
+          'Hubo otro cambio en el padrón o en los cobros. Revisa una nueva vista previa.',
+        );
+      }
+      throw error;
+    }
+  }
 
   /** Whether the year is the tenant's ACTIVE one (it mirrors into Student). */
   private async isActiveYear(

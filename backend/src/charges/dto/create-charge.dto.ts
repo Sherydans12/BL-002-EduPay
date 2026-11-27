@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   Min,
+  Matches,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -31,6 +32,24 @@ export class FinancialPlanPaymentAllocationDto {
   @IsInt()
   @Min(0)
   chargeIndex?: number | null;
+}
+
+export class PreviewEnrollmentFeesDto extends FinancialPlanChargeDto {
+  @IsInt()
+  @Min(1)
+  academicYearId: number;
+
+  @Min(50)
+  declare amount: number;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  declare dueDate: string;
+}
+
+export class IssueEnrollmentFeesDto extends PreviewEnrollmentFeesDto {
+  @Matches(/^[a-f0-9]{64}$/)
+  fingerprint: string;
 }
 
 export class SetupFinancialPlanDto {
