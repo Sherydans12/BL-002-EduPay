@@ -959,7 +959,39 @@ export const analyticsApi = {
 };
 
 // ─── Charges / Accounts Receivable ───────────────────────────
+export type EnrollmentFeeInput = {
+  academicYearId: number;
+  conceptId: number;
+  amount: number;
+  dueDate: string;
+};
+
+export type EnrollmentFeePreview = {
+  fingerprint: string;
+  academicYearLabel: string;
+  conceptName: string;
+  rosterCount: number;
+  withoutGuardianCount: number;
+  existingCount: number;
+  pendingCount: number;
+  issuedCount: number;
+};
+
+export const academicYearsApi = {
+  getAll: () => request<Array<{ id: number; label: string; status: "DRAFT" | "ACTIVE" | "CLOSED" | "ARCHIVED" }>>("/academic-years"),
+};
+
 export const chargesApi = {
+  previewEnrollmentFees: (data: EnrollmentFeeInput) =>
+    request<EnrollmentFeePreview>("/charges/enrollment-fees/preview", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  issueEnrollmentFees: (data: EnrollmentFeeInput & { fingerprint: string }) =>
+    request<EnrollmentFeePreview>("/charges/enrollment-fees/issue", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   setupFinancialPlan: (studentId: number, data: SetupFinancialPlanDto) =>
     request<{ message: string; count: number }>(`/charges/setup/${studentId}`, {
       method: "POST",

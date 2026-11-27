@@ -83,6 +83,12 @@ export class PortalService {
                 paidAmount: true,
                 dueDate: true,
                 status: true,
+                enrollment: {
+                  select: {
+                    academicYear: { select: { id: true, label: true } },
+                    course: { select: { name: true } },
+                  },
+                },
                 concept: {
                   select: { id: true, name: true },
                 },
@@ -117,6 +123,9 @@ export class PortalService {
         return {
           id: charge.id,
           month: charge.dueDate ? this.toMonth(charge.dueDate) : null,
+          dueDate: charge.dueDate?.toISOString().slice(0, 10) ?? null,
+          academicYear: charge.enrollment?.academicYear ?? null,
+          enrollmentCourse: charge.enrollment?.course.name ?? null,
           amount,
           paidAmount,
           outstandingAmount: Math.max(amount - paidAmount, 0),

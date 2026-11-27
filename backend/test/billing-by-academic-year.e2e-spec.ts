@@ -220,4 +220,96 @@ describe('Billing by academic year (e2e)', () => {
     });
     expect(student2.financialSetup).toBe('PENDING');
   });
+  it('previews and issues a single fee for a draft year without touching 2026', async () => {
+    const email = 'e2e@baselogic.cl';
+    await prisma.user.update({
+      where: { email },
+      data: { tenantId: 'colegio-conquistadores' },
+    });
+    const session = await app.get(AuthService).login(email, 'e2e-secret');
+    const token = { Authorization: `Bearer ${session.access_token}` };
+    const concept = await prisma.paymentConcept.create({
+      data: {
+        tenantId: 'colegio-conquistadores',
+        name: 'Matrícula E2E',
+        defaultAmount: 54000,
+      },
+    });
+    const otherYear = await prisma.academicYear.findFirstOrThrow({
+      where: { tenantId: 'billing-e2e-other' },
+    });
+    const input = {
+      academicYearId: year2027Id,
+      conceptId: concept.id,
+      amount: 54000,
+      dueDate: '2026-12-15',
+    };
+    const previewPath = '/api/charges/enrollment-fees/preview';
+    const issuePath = '/api/charges/enrollment-fees/issue';
+    await api().post(previewPath).send(input).expect(401);
+    await api()
+      .post(previewPath)
+      .set(token)
+      .set('x-tenant-id', 'billing-e2e-other')
+      .send({ ...input, academicYearId: otherYear.id })
+      .expect(404);
+    const prior = await prisma.charge.findMany({
+      where: { studentId: ctx.studentId },
+    });
+    const preview = await api()
+      .post(previewPath)
+      .set(token)
+      .send(input)
+      .expect(201);
+    expect(preview.body.data).toMatchObject({
+      pendingCount: 1,
+      issuedCount: 0,
+      academicYearLabel: '2027',
+    });
+    await api()
+      .post(issuePath)
+      .set(token)
+      .send({
+        ...input,
+        amount: 55000,
+        fingerprint: preview.body.data.fingerprint,
+      })
+      .expect(409);
+    const payload = { ...input, fingerprint: preview.body.data.fingerprint };
+    const issued = await api()
+      .post(issuePath)
+      .set(token)
+      .send(payload)
+      .expect(201);
+    expect(issued.body.data.issuedCount).toBe(1);
+    const replay = await api()
+      .post(issuePath)
+      .set(token)
+      .send(payload)
+      .expect(201);
+    expect(replay.body.data).toMatchObject({
+      issuedCount: 0,
+      existingCount: 1,
+    });
+    const fee = await prisma.charge.findFirstOrThrow({
+      where: { conceptId: concept.id },
+      include: { enrollment: { include: { academicYear: true } } },
+    });
+    expect(fee.enrollment.academicYear).toMatchObject({
+      label: '2027',
+      status: 'DRAFT',
+    });
+    expect(fee.dueDate.toISOString().slice(0, 10)).toBe('2026-12-15');
+    expect(
+      await prisma.charge.findMany({
+        where: { id: { in: prior.map(({ id }) => id) } },
+      }),
+    ).toEqual(expect.arrayContaining(prior));
+    await prisma.user.update({ where: { email }, data: { isActive: false } });
+    try {
+      await api().post(previewPath).set(token).send(input).expect(401);
+    } finally {
+      await prisma.user.update({ where: { email }, data: { isActive: true } });
+    }
+  });
 });
